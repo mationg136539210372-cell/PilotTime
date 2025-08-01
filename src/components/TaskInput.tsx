@@ -365,7 +365,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
                       {formData.impact === 'high' ? (
                         <span> High-impact one-sitting tasks are scheduled as early as possible for maximum priority.</span>
                       ) : (
-                        <span> Regular one-sitting tasks are scheduled on their deadline day (respecting buffer days), or the closest available day.</span>
+                        <span> Low-impact one-sitting tasks are scheduled on their deadline day (respecting buffer days), or the closest available day.</span>
                       )}
                     </div>
                   </div>
