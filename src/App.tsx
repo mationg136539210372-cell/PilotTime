@@ -1972,8 +1972,8 @@ function App() {
                             >
                                 + Add Task
                             </button>
-                            {showTaskInput && (
-                                <TaskInput onAddTask={handleAddTask} onCancel={() => setShowTaskInput(false)} />
+                                    {showTaskInput && (
+          <TaskInput onAddTask={handleAddTask} onCancel={() => setShowTaskInput(false)} userSettings={settings} />
                             )}
                             <TaskList
                                 tasks={tasks}
@@ -1981,6 +1981,7 @@ function App() {
                                 onDeleteTask={handleDeleteTask}
                                 autoRemovedTasks={autoRemovedTasks}
                                 onDismissAutoRemovedTask={handleDismissAutoRemovedTask}
+                                userSettings={settings}
                             />
                         </div>
                     )}

@@ -45,6 +45,102 @@ export const formatTimeForTimer = (seconds: number): string => {
   }
 };
 
+/**
+ * Check if a task's frequency preference conflicts with its deadline
+ * @param task Task to check
+ * @param settings User settings including buffer days and work days
+ * @returns Object indicating if there's a conflict and why
+ */
+export const checkFrequencyDeadlineConflict = (
+  task: Pick<Task, 'deadline' | 'estimatedHours' | 'targetFrequency' | 'deadlineType' | 'minWorkBlock'>,
+  settings: UserSettings
+): { hasConflict: boolean; reason?: string; recommendedFrequency?: string } => {
+  // No conflict for tasks without deadlines
+  if (!task.deadline || task.deadlineType === 'none') {
+    return { hasConflict: false };
+  }
+
+  // No conflict for flexible deadlines (soft deadlines can be adjusted)
+  if (task.deadlineType === 'soft') {
+    return { hasConflict: false };
+  }
+
+  const deadline = new Date(task.deadline);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Calculate available days until deadline (respecting buffer)
+  const bufferDate = new Date(deadline);
+  bufferDate.setDate(bufferDate.getDate() - settings.bufferDays);
+  
+  const timeDiff = bufferDate.getTime() - today.getTime();
+  const totalDaysUntilDeadline = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+  
+  // Count work days until deadline
+  let workDaysCount = 0;
+  const currentDate = new Date(today);
+  
+  while (currentDate <= bufferDate) {
+    const dayOfWeek = currentDate.getDay();
+    if (settings.workDays.includes(dayOfWeek)) {
+      workDaysCount++;
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  // Calculate minimum sessions needed based on task requirements
+  const minSessionHours = (task.minWorkBlock || 30) / 60;
+  const minSessionsNeeded = Math.ceil(task.estimatedHours / Math.max(minSessionHours, settings.dailyAvailableHours));
+  
+  // Determine required frequency based on task preference
+  let requiredDaysBetweenSessions = 1;
+  switch (task.targetFrequency) {
+    case 'weekly':
+      requiredDaysBetweenSessions = 7;
+      break;
+    case '3x-week':
+      requiredDaysBetweenSessions = 2; // Every 2-3 days
+      break;
+    case 'flexible':
+      requiredDaysBetweenSessions = 3; // Every 3-4 days
+      break;
+    case 'daily':
+    default:
+      requiredDaysBetweenSessions = 1;
+      break;
+  }
+
+  // Calculate how many sessions we can fit with the preferred frequency
+  const maxSessionsWithFrequency = Math.floor(workDaysCount / requiredDaysBetweenSessions) + 1;
+  
+  // Check if frequency allows sufficient sessions before deadline
+  if (maxSessionsWithFrequency < minSessionsNeeded) {
+    let recommendedFrequency = 'daily';
+    
+    // Try to find a less restrictive frequency that works
+    const frequencies = [
+      { name: '3x-week', days: 2 },
+      { name: 'daily', days: 1 }
+    ];
+    
+    for (const freq of frequencies) {
+      const sessionsWithThisFreq = Math.floor(workDaysCount / freq.days) + 1;
+      if (sessionsWithThisFreq >= minSessionsNeeded) {
+        recommendedFrequency = freq.name;
+        break;
+      }
+    }
+    
+    return {
+      hasConflict: true,
+      reason: `Your ${task.targetFrequency} frequency only allows ${maxSessionsWithFrequency} sessions, but you need at least ${minSessionsNeeded} sessions to complete this task before the deadline.`,
+      recommendedFrequency
+    };
+  }
+
+  return { hasConflict: false };
+};
+
 export const checkSessionStatus = (session: StudySession, planDate: string): 'scheduled' | 'in_progress' | 'completed' | 'missed' | 'overdue' | 'rescheduled' => {
   const now = new Date();
   const today = getLocalDateString();
@@ -465,7 +561,30 @@ export const generateNewStudyPlan = (
       // Normalize deadline to start of day for comparison with date strings
       const deadlineDateStr = deadline.toISOString().split('T')[0];
       // Include all available days up to and including the deadline day
-      const daysForTask = availableDays.filter(d => d <= deadlineDateStr);
+      let daysForTask = availableDays.filter(d => d <= deadlineDateStr);
+      
+      // Apply frequency preference if enabled and no conflict detected
+      if (task.respectFrequencyForDeadlines !== false && task.targetFrequency) {
+        const conflictCheck = checkFrequencyDeadlineConflict(task, settings);
+        
+        if (!conflictCheck.hasConflict) {
+          // Apply frequency filtering to respect user preference
+          let sessionGap = 1; // Days between sessions
+          if (task.targetFrequency === 'weekly') sessionGap = 7;
+          else if (task.targetFrequency === '3x-week') sessionGap = 2;
+          else if (task.targetFrequency === 'flexible') sessionGap = 3;
+          // daily frequency uses sessionGap = 1 (no filtering needed)
+          
+          if (sessionGap > 1) {
+            // Filter days to respect frequency preference
+            const frequencyFilteredDays: string[] = [];
+            for (let i = 0; i < daysForTask.length; i += sessionGap) {
+              frequencyFilteredDays.push(daysForTask[i]);
+            }
+            daysForTask = frequencyFilteredDays;
+          }
+        }
+      }
       
 
       

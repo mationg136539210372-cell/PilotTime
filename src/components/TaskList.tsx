@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BookOpen, Edit, Trash2, CheckCircle2, X, Info, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
-import { Task } from '../types';
-import { formatTime } from '../utils/scheduling';
+import { Task, UserSettings } from '../types';
+import { formatTime, checkFrequencyDeadlineConflict } from '../utils/scheduling';
 
 interface TaskListProps {
   tasks: Task[];
@@ -9,6 +9,7 @@ interface TaskListProps {
   onDeleteTask: (taskId: string) => void;
   autoRemovedTasks?: string[];
   onDismissAutoRemovedTask?: (taskTitle: string) => void;
+  userSettings: UserSettings;
 }
 
 type EditFormData = Partial<Task> & {
@@ -19,12 +20,13 @@ type EditFormData = Partial<Task> & {
   deadlineType?: 'hard' | 'soft' | 'none';
   schedulingPreference?: 'consistent' | 'opportunistic' | 'intensive';
   targetFrequency?: 'daily' | 'weekly' | '3x-week' | 'flexible';
+  respectFrequencyForDeadlines?: boolean;
   preferredTimeSlots?: ('morning' | 'afternoon' | 'evening')[];
   minWorkBlock?: number;
   isOneTimeTask?: boolean;
 };
 
-const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, autoRemovedTasks = [], onDismissAutoRemovedTask }) => {
+const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, autoRemovedTasks = [], onDismissAutoRemovedTask, userSettings }) => {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<EditFormData>({});
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
@@ -49,6 +51,24 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
   
   // Check if deadline is in the past
   const isDeadlinePast = editFormData.deadline ? editFormData.deadline < today : false;
+
+  // Check for deadline conflict with frequency preference
+  const deadlineConflict = useMemo(() => {
+    if (!editFormData.deadline || editFormData.deadlineType === 'none') {
+      return { hasConflict: false };
+    }
+    
+    const totalHours = (editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60);
+    const taskForCheck = {
+      deadline: editFormData.deadline,
+      estimatedHours: totalHours,
+      targetFrequency: editFormData.targetFrequency,
+      deadlineType: editFormData.deadlineType,
+      minWorkBlock: editFormData.minWorkBlock
+    };
+    
+    return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
+  }, [editFormData.deadline, editFormData.estimatedHours, editFormData.estimatedMinutes, editFormData.targetFrequency, editFormData.deadlineType, editFormData.minWorkBlock, userSettings]);
 
   const getUrgencyColor = (deadline: string): string => {
     const now = new Date();
@@ -108,7 +128,8 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
       taskType: task.taskType || '',
       deadlineType: task.deadlineType || (task.deadline ? 'hard' : 'none'),
       schedulingPreference: task.schedulingPreference || 'consistent',
-      targetFrequency: task.targetFrequency || 'weekly',
+      targetFrequency: task.targetFrequency || 'daily', // Default to daily for all tasks
+      respectFrequencyForDeadlines: task.respectFrequencyForDeadlines !== false, // Default to true
       preferredTimeSlots: task.preferredTimeSlots || [],
       minWorkBlock: task.minWorkBlock || 30,
       isOneTimeTask: task.isOneTimeTask || false,
@@ -404,62 +425,83 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                             </label>
                           </div>
 
-                          {/* No-deadline task preferences */}
-                          {editFormData.deadlineType === 'none' && (
-                            <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Work frequency</label>
-                                <select
-                                  value={editFormData.targetFrequency || ''}
-                                  onChange={(e) => setEditFormData({ ...editFormData, targetFrequency: e.target.value as any })}
-                                  className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
-                                >
-                                  <option value="daily">Daily progress</option>
-                                  <option value="3x-week">Few times per week</option>
-                                  <option value="weekly">Weekly</option>
-                                  <option value="flexible">When I have time</option>
-                                </select>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Preferred time</label>
-                                <div className="flex gap-2">
-                                  {['morning', 'afternoon', 'evening'].map(timeSlot => (
-                                    <label key={timeSlot} className="flex items-center gap-1">
-                                      <input
-                                        type="checkbox"
-                                        checked={(editFormData.preferredTimeSlots || []).includes(timeSlot as any)}
-                                        onChange={(e) => {
-                                          const timeSlots = editFormData.preferredTimeSlots || [];
-                                          if (e.target.checked) {
-                                            setEditFormData({ ...editFormData, preferredTimeSlots: [...timeSlots, timeSlot as any] });
-                                          } else {
-                                            setEditFormData({ ...editFormData, preferredTimeSlots: timeSlots.filter(t => t !== timeSlot) });
-                                          }
-                                        }}
-                                      />
-                                      <span className="capitalize text-xs text-gray-700 dark:text-gray-300">{timeSlot}</span>
-                                    </label>
-                                  ))}
+                          {/* Work frequency preference - now applies to ALL tasks */}
+                          <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Work frequency preference</label>
+                              <select
+                                value={editFormData.targetFrequency || ''}
+                                onChange={(e) => setEditFormData({ ...editFormData, targetFrequency: e.target.value as any })}
+                                className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                              >
+                                <option value="daily">Daily progress (default)</option>
+                                <option value="3x-week">Few times per week</option>
+                                <option value="weekly">Weekly sessions</option>
+                                <option value="flexible">When I have time</option>
+                              </select>
+                              
+                              {/* Show warning if frequency conflicts with deadline */}
+                              {deadlineConflict.hasConflict && (
+                                <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+                                  <div className="flex items-start gap-1">
+                                    <span className="text-amber-600 dark:text-amber-400">⚠️</span>
+                                    <div>
+                                      <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+                                      <div className="mt-1">{deadlineConflict.reason}</div>
+                                      {deadlineConflict.recommendedFrequency && (
+                                        <div className="mt-1">
+                                          <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Minimum session</label>
-                                <select
-                                  value={editFormData.minWorkBlock || 30}
-                                  onChange={(e) => setEditFormData({ ...editFormData, minWorkBlock: parseInt(e.target.value) })}
-                                  className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
-                                >
-                                  <option value={15}>15 minutes</option>
-                                  <option value={30}>30 minutes</option>
-                                  <option value={45}>45 minutes</option>
-                                  <option value={60}>1 hour</option>
-                                  <option value={90}>1.5 hours</option>
-                                </select>
-                              </div>
+                              )}
                             </div>
-                          )}
+
+                            {/* Additional preferences for no-deadline tasks */}
+                            {editFormData.deadlineType === 'none' && (
+                              <>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Preferred time</label>
+                                  <div className="flex gap-2">
+                                    {['morning', 'afternoon', 'evening'].map(timeSlot => (
+                                      <label key={timeSlot} className="flex items-center gap-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={(editFormData.preferredTimeSlots || []).includes(timeSlot as any)}
+                                          onChange={(e) => {
+                                            const timeSlots = editFormData.preferredTimeSlots || [];
+                                            if (e.target.checked) {
+                                              setEditFormData({ ...editFormData, preferredTimeSlots: [...timeSlots, timeSlot as any] });
+                                            } else {
+                                              setEditFormData({ ...editFormData, preferredTimeSlots: timeSlots.filter(t => t !== timeSlot) });
+                                            }
+                                          }}
+                                        />
+                                        <span className="capitalize text-xs text-gray-700 dark:text-gray-300">{timeSlot}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Minimum session</label>
+                                  <select
+                                    value={editFormData.minWorkBlock || 30}
+                                    onChange={(e) => setEditFormData({ ...editFormData, minWorkBlock: parseInt(e.target.value) })}
+                                    className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                                  >
+                                    <option value={15}>15 minutes</option>
+                                    <option value={30}>30 minutes</option>
+                                    <option value={45}>45 minutes</option>
+                                    <option value={60}>1 hour</option>
+                                    <option value={90}>1.5 hours</option>
+                                  </select>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

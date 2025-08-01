@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { Task } from '../types';
+import { Task, UserSettings } from '../types';
+import { checkFrequencyDeadlineConflict } from '../utils/scheduling';
 
 interface TaskInputProps {
   onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   onCancel?: () => void;
+  userSettings: UserSettings;
 }
 
 
@@ -94,7 +96,7 @@ const TASK_TYPE_MAP: Record<string, keyof typeof EST_HELPER_CONFIG> = {
   Communicating: 'Administrative', // treat as Administrative for now
 };
 
-const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
+const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings }) => {
   const [showEstimationHelper, setShowEstimationHelper] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -109,7 +111,8 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
     // New fields for deadline flexibility
     deadlineType: 'hard' as 'hard' | 'soft' | 'none',
     schedulingPreference: 'consistent' as 'consistent' | 'opportunistic' | 'intensive',
-    targetFrequency: 'weekly' as 'daily' | 'weekly' | '3x-week' | 'flexible',
+    targetFrequency: 'daily' as 'daily' | 'weekly' | '3x-week' | 'flexible', // Default to daily for all tasks
+    respectFrequencyForDeadlines: true, // Default to respecting frequency preference
     preferredTimeSlots: [] as ('morning' | 'afternoon' | 'evening')[],
     minWorkBlock: 30, // Default 30 minutes
     isOneTimeTask: false, // New field for one-time tasks
@@ -184,6 +187,23 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
   
   // Handle category custom
   const showCustomCategory = formData.category === 'Custom...';
+
+  // Check for deadline conflict with frequency preference
+  const deadlineConflict = useMemo(() => {
+    if (!formData.deadline || formData.deadlineType === 'none') {
+      return { hasConflict: false };
+    }
+    
+    const taskForCheck = {
+      deadline: formData.deadline,
+      estimatedHours: convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes),
+      targetFrequency: formData.targetFrequency,
+      deadlineType: formData.deadlineType,
+      minWorkBlock: formData.minWorkBlock
+    };
+    
+    return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
+  }, [formData.deadline, formData.estimatedHours, formData.estimatedMinutes, formData.targetFrequency, formData.deadlineType, formData.minWorkBlock, userSettings]);
 
   // Enhanced validation with better error messages
   const isTitleValid = formData.title.trim().length > 0;
@@ -269,6 +289,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
       deadlineType: formData.deadline ? formData.deadlineType : 'none',
       schedulingPreference: formData.schedulingPreference,
       targetFrequency: formData.targetFrequency,
+      respectFrequencyForDeadlines: formData.respectFrequencyForDeadlines,
       preferredTimeSlots: formData.preferredTimeSlots,
       minWorkBlock: formData.minWorkBlock,
       isOneTimeTask: formData.isOneTimeTask,
@@ -285,7 +306,8 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
       taskType: '',
       deadlineType: 'hard',
       schedulingPreference: 'consistent',
-      targetFrequency: 'weekly',
+      targetFrequency: 'daily', // Reset to daily default
+      respectFrequencyForDeadlines: true,
       preferredTimeSlots: [],
       minWorkBlock: 30,
       isOneTimeTask: false,
@@ -444,62 +466,83 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
                     </label>
                   </div>
 
-                  {/* No-deadline task preferences */}
-                  {formData.deadlineType === 'none' && (
-                    <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Work frequency</label>
-                        <select
-                          value={formData.targetFrequency}
-                          onChange={e => setFormData(f => ({ ...f, targetFrequency: e.target.value as any }))}
-                          className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
-                        >
-                          <option value="daily">Daily progress</option>
-                          <option value="3x-week">Few times per week</option>
-                          <option value="weekly">Weekly</option>
-                          <option value="flexible">When I have time</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Preferred time</label>
-                        <div className="flex gap-2">
-                          {['morning', 'afternoon', 'evening'].map(timeSlot => (
-                            <label key={timeSlot} className="flex items-center gap-1">
-                              <input
-                                type="checkbox"
-                                checked={formData.preferredTimeSlots.includes(timeSlot as any)}
-                                onChange={e => {
-                                  const timeSlots = formData.preferredTimeSlots;
-                                  if (e.target.checked) {
-                                    setFormData(f => ({ ...f, preferredTimeSlots: [...timeSlots, timeSlot as any] }));
-                                  } else {
-                                    setFormData(f => ({ ...f, preferredTimeSlots: timeSlots.filter(t => t !== timeSlot) }));
-                                  }
-                                }}
-                              />
-                              <span className="capitalize text-xs text-gray-700 dark:text-gray-300">{timeSlot}</span>
-                            </label>
-                          ))}
+                  {/* Work frequency preference - now applies to ALL tasks */}
+                  <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Work frequency preference</label>
+                      <select
+                        value={formData.targetFrequency}
+                        onChange={e => setFormData(f => ({ ...f, targetFrequency: e.target.value as any }))}
+                        className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                      >
+                        <option value="daily">Daily progress (default)</option>
+                        <option value="3x-week">Few times per week</option>
+                        <option value="weekly">Weekly sessions</option>
+                        <option value="flexible">When I have time</option>
+                      </select>
+                      
+                      {/* Show warning if frequency conflicts with deadline */}
+                      {deadlineConflict.hasConflict && (
+                        <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+                          <div className="flex items-start gap-1">
+                            <span className="text-amber-600 dark:text-amber-400">⚠️</span>
+                            <div>
+                              <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+                              <div className="mt-1">{deadlineConflict.reason}</div>
+                              {deadlineConflict.recommendedFrequency && (
+                                <div className="mt-1">
+                                  <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Minimum session</label>
-                        <select
-                          value={formData.minWorkBlock}
-                          onChange={e => setFormData(f => ({ ...f, minWorkBlock: parseInt(e.target.value) }))}
-                          className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
-                        >
-                          <option value={15}>15 minutes</option>
-                          <option value={30}>30 minutes</option>
-                          <option value={45}>45 minutes</option>
-                          <option value={60}>1 hour</option>
-                          <option value={90}>1.5 hours</option>
-                        </select>
-                      </div>
+                      )}
                     </div>
-                  )}
+
+                    {/* Additional preferences for no-deadline tasks */}
+                    {formData.deadlineType === 'none' && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Preferred time</label>
+                          <div className="flex gap-2">
+                            {['morning', 'afternoon', 'evening'].map(timeSlot => (
+                              <label key={timeSlot} className="flex items-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={formData.preferredTimeSlots.includes(timeSlot as any)}
+                                  onChange={e => {
+                                    const timeSlots = formData.preferredTimeSlots;
+                                    if (e.target.checked) {
+                                      setFormData(f => ({ ...f, preferredTimeSlots: [...timeSlots, timeSlot as any] }));
+                                    } else {
+                                      setFormData(f => ({ ...f, preferredTimeSlots: timeSlots.filter(t => t !== timeSlot) }));
+                                    }
+                                  }}
+                                />
+                                <span className="capitalize text-xs text-gray-700 dark:text-gray-300">{timeSlot}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Minimum session</label>
+                          <select
+                            value={formData.minWorkBlock}
+                            onChange={e => setFormData(f => ({ ...f, minWorkBlock: parseInt(e.target.value) }))}
+                            className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                          >
+                            <option value={15}>15 minutes</option>
+                            <option value={30}>30 minutes</option>
+                            <option value={45}>45 minutes</option>
+                            <option value={60}>1 hour</option>
+                            <option value={90}>1.5 hours</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

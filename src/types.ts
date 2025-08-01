@@ -14,7 +14,8 @@ export interface Task {
   // New properties for deadline flexibility
   deadlineType?: 'hard' | 'soft' | 'none'; // Type of deadline
   schedulingPreference?: 'consistent' | 'opportunistic' | 'intensive'; // How to schedule no-deadline tasks
-  targetFrequency?: 'daily' | 'weekly' | '3x-week' | 'flexible'; // Frequency preference for no-deadline tasks
+  targetFrequency?: 'daily' | 'weekly' | '3x-week' | 'flexible'; // Frequency preference for ALL tasks
+  respectFrequencyForDeadlines?: boolean; // User choice to override frequency for urgent tasks
   preferredTimeSlots?: ('morning' | 'afternoon' | 'evening')[]; // Preferred time slots
   minWorkBlock?: number; // Minimum meaningful work session in minutes
   isOneTimeTask?: boolean; // Task should be completed in one sitting, not divided into sessions
