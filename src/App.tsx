@@ -1731,29 +1731,29 @@ function App() {
                 </div>
 
                 <div className="min-h-screen relative">
-                {/* Glassmorphic Header */}
-                <header className="sticky-header w-full flex items-center justify-between px-4 sm:px-6 py-4 backdrop-blur-md bg-white/10 dark:bg-black/10 border-b border-white/20 dark:border-white/10">
-                    <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <span className="text-white font-bold text-lg">⚡</span>
+                {/* Enhanced Glassmorphic Header */}
+                <header className="sticky-header w-full flex items-center justify-between px-4 sm:px-6 py-6 backdrop-blur-xl bg-gradient-to-r from-white/80 via-blue-50/70 to-indigo-50/70 dark:from-gray-900/90 dark:via-blue-900/30 dark:to-indigo-900/30 shadow-xl shadow-blue-500/5 dark:shadow-blue-900/10 border-b border-gradient-to-r from-blue-200/20 via-indigo-200/20 to-purple-200/20 dark:from-blue-800/20 dark:via-indigo-800/20 dark:to-purple-800/20">
+                    <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
+                            <span className="text-white font-bold text-xl drop-shadow-sm">⚡</span>
                         </div>
-                        <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">TimePilot</div>
+                        <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
                     </div>
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-4">
                         <button
-                            className={`flex items-center rounded-2xl p-3 backdrop-blur-md transition-all duration-300 z-50 ${
+                            className={`flex items-center rounded-2xl p-3 backdrop-blur-lg transition-all duration-300 z-50 border-2 ${
                               hasUnscheduled ?
-                                notificationPriority === 'critical' ? 'bg-red-500/20 border border-red-300/50 shadow-lg shadow-red-500/25 animate-pulse' :
-                                notificationPriority === 'high' ? 'bg-orange-500/20 border border-orange-300/50 shadow-lg shadow-orange-500/25 animate-bounce' :
-                                'bg-yellow-500/20 border border-yellow-300/50 shadow-lg shadow-yellow-500/25'
-                              : 'bg-white/10 border border-white/20'
+                                notificationPriority === 'critical' ? 'bg-red-500/15 border-red-400/40 shadow-xl shadow-red-500/20 animate-pulse hover:bg-red-500/25' :
+                                notificationPriority === 'high' ? 'bg-orange-500/15 border-orange-400/40 shadow-xl shadow-orange-500/20 animate-bounce hover:bg-orange-500/25' :
+                                'bg-yellow-500/15 border-yellow-400/40 shadow-xl shadow-yellow-500/20 hover:bg-yellow-500/25'
+                              : 'bg-white/15 border-white/30 dark:bg-gray-800/20 dark:border-gray-600/30'
                             } ${
                               hasUnscheduled ?
                                 notificationPriority === 'critical' ? 'text-red-600 dark:text-red-400' :
                                 notificationPriority === 'high' ? 'text-orange-600 dark:text-orange-400' :
                                 'text-yellow-600 dark:text-yellow-400'
-                              : 'text-gray-400'
-                            } ${hasUnscheduled ? 'hover:scale-105' : 'opacity-60 pointer-events-none cursor-not-allowed'}`}
+                              : 'text-gray-500 dark:text-gray-400'
+                            } ${hasUnscheduled ? 'hover:scale-105 hover:shadow-2xl' : 'opacity-50 pointer-events-none cursor-not-allowed'}`}
                             title={showSuggestionsPanel ? 'Hide Study Plan Optimization' :
                               hasUnscheduled ?
                                 `Show Study Plan Optimization (${unscheduledTasks.length} task${unscheduledTasks.length > 1 ? 's' : ''} need attention)` :
@@ -1770,10 +1770,10 @@ function App() {
                             : 'none'} />
                         </button>
                         <button
-                            className={`relative p-3 backdrop-blur-md border rounded-2xl transition-all duration-300 hover:scale-105 ${
+                            className={`relative p-3 backdrop-blur-lg border-2 rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-xl ${
                                 gamificationData.recentUnlocks.length > 0
-                                    ? 'bg-yellow-500/20 border-yellow-300/50 shadow-lg shadow-yellow-500/25 text-yellow-600 dark:text-yellow-400 animate-pulse'
-                                    : 'bg-white/10 dark:bg-black/10 border-white/20 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-white/20 dark:hover:bg-white/5'
+                                    ? 'bg-yellow-500/15 border-yellow-400/40 shadow-xl shadow-yellow-500/20 text-yellow-600 dark:text-yellow-400 animate-pulse hover:bg-yellow-500/25'
+                                    : 'bg-white/15 dark:bg-gray-800/20 border-white/30 dark:border-gray-600/30 text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30'
                             }`}
                             onClick={() => setShowGamificationPanel(!showGamificationPanel)}
                             title={`Progress & Achievements${gamificationData.recentUnlocks.length > 0 ? ' (New!)' : ''}`}
@@ -1784,14 +1784,14 @@ function App() {
                             )}
                         </button>
                         <button
-                            className="p-3 backdrop-blur-md bg-white/10 dark:bg-black/10 border border-white/20 dark:border-white/10 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/20 dark:hover:bg-white/5 transition-all duration-300 hover:scale-105"
+                            className="p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
                             onClick={() => setShowHelpModal(true)}
                             title="Help & FAQ"
                         >
                             <HelpCircle size={20} />
                         </button>
                         <button
-                            className="lg:hidden p-3 backdrop-blur-md bg-white/10 dark:bg-black/10 border border-white/20 dark:border-white/10 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/20 dark:hover:bg-white/5 transition-all duration-300 hover:scale-105"
+                            className="lg:hidden p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                         >
                             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -1799,8 +1799,8 @@ function App() {
                     </div>
                 </header>
 
-                {/* Navigation */}
-                <nav className="sticky-nav backdrop-blur-xl bg-gradient-to-r from-white/95 via-blue-50/95 to-indigo-50/95 dark:from-gray-900/95 dark:via-blue-900/20 dark:to-indigo-900/20 border-b border-gradient-to-r from-blue-200/30 via-indigo-200/30 to-purple-200/30 dark:from-blue-800/30 dark:via-indigo-800/30 dark:to-purple-800/30 shadow-lg shadow-blue-500/10 dark:shadow-blue-900/20">
+                {/* Enhanced Navigation */}
+                <nav className="sticky-nav backdrop-blur-xl bg-gradient-to-r from-white/90 via-blue-50/85 to-indigo-50/85 dark:from-gray-900/95 dark:via-blue-900/25 dark:to-indigo-900/25 shadow-2xl shadow-blue-500/8 dark:shadow-blue-900/15 border-b border-gradient-to-r from-blue-200/15 via-indigo-200/15 to-purple-200/15 dark:from-blue-800/15 dark:via-indigo-800/15 dark:to-purple-800/15">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         {/* Desktop Navigation */}
                         <div className="hidden lg:flex items-center justify-center space-x-1 py-4">
