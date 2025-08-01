@@ -1732,7 +1732,7 @@ function App() {
 
                 <div className="min-h-screen relative">
                 {/* Glassmorphic Header */}
-                <header className="w-full flex items-center justify-between px-4 sm:px-6 py-4 backdrop-blur-md bg-white/10 dark:bg-black/10 border-b border-white/20 dark:border-white/10 z-40 sticky top-0">
+                <header className="sticky-header w-full flex items-center justify-between px-4 sm:px-6 py-4 backdrop-blur-md bg-white/10 dark:bg-black/10 border-b border-white/20 dark:border-white/10">
                     <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
                             <span className="text-white font-bold text-lg">⚡</span>
@@ -1800,7 +1800,7 @@ function App() {
                 </header>
 
                 {/* Navigation */}
-                <nav className="sticky top-[88px] z-30 backdrop-blur-xl bg-gradient-to-r from-white/95 via-blue-50/95 to-indigo-50/95 dark:from-gray-900/95 dark:via-blue-900/20 dark:to-indigo-900/20 border-b border-gradient-to-r from-blue-200/30 via-indigo-200/30 to-purple-200/30 dark:from-blue-800/30 dark:via-indigo-800/30 dark:to-purple-800/30 shadow-lg shadow-blue-500/10 dark:shadow-blue-900/20">
+                <nav className="sticky-nav backdrop-blur-xl bg-gradient-to-r from-white/95 via-blue-50/95 to-indigo-50/95 dark:from-gray-900/95 dark:via-blue-900/20 dark:to-indigo-900/20 border-b border-gradient-to-r from-blue-200/30 via-indigo-200/30 to-purple-200/30 dark:from-blue-800/30 dark:via-indigo-800/30 dark:to-purple-800/30 shadow-lg shadow-blue-500/10 dark:shadow-blue-900/20">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         {/* Desktop Navigation */}
                         <div className="hidden lg:flex items-center justify-center space-x-1 py-4">
