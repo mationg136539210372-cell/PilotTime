@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Clock, AlertTriangle, Calendar, Zap, Sun } from 'lucide-react';
-import { UserSettings, StudyPlan, UserPersonalization } from '../types';
+import { UserSettings, StudyPlan } from '../types';
 import { checkSessionStatus } from '../utils/scheduling';
 
 interface SettingsProps {
   settings: UserSettings;
   onUpdateSettings: (newSettings: UserSettings) => void;
-  personalization: UserPersonalization;
+  darkMode: boolean;
   onToggleDarkMode: () => void;
   onRestartTutorial?: () => void;
   hasTasks?: boolean;
@@ -18,7 +18,7 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ 
   settings, 
   onUpdateSettings, 
-  personalization, 
+  darkMode, 
   onToggleDarkMode, 
   onRestartTutorial, 
   hasTasks = true, 
@@ -26,8 +26,6 @@ const Settings: React.FC<SettingsProps> = ({
   studyPlans = [],
   canChangeSetting = () => true
 }) => {
-  // Derive dark mode state from personalization theme
-  const darkMode = personalization.theme.colorScheme === 'dark';
   const [dailyAvailableHours, setDailyAvailableHours] = useState(settings.dailyAvailableHours);
   const [workDays, setWorkDays] = useState<number[]>(settings.workDays || [0, 1, 2, 3, 4, 5, 6]);
   const [bufferDays, setBufferDays] = useState(settings.bufferDays);

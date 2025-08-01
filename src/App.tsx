@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { UserPersonalization, PersonalizationSuggestion, UserActivity } from './types-personalization';
 import { generateNewStudyPlan, getUnscheduledMinutesForTasks, getLocalDateString, redistributeAfterTaskDeletion, redistributeMissedSessionsWithFeedback, checkCommitmentConflicts, redistributeMissedSessionsEnhanced } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { RedistributionOptions } from './types';
@@ -15,13 +14,6 @@ import {
   updateStudyStreak,
   calculateLevel
 } from './utils/gamification';
-import {
-  DEFAULT_PERSONALIZATION,
-  generatePersonalizationSuggestions,
-  analyzeUserActivity,
-  applyThemeSettings,
-  getPersonalizationClasses
-} from './utils/personalization';
 
 import Dashboard from './components/Dashboard';
 import TaskInput from './components/TaskInput';
@@ -34,7 +26,6 @@ import FixedCommitmentInput from './components/FixedCommitmentInput';
 import FixedCommitmentEdit from './components/FixedCommitmentEdit';
 import GamificationPanel from './components/GamificationPanel';
 import AchievementNotification, { MotivationalToast } from './components/AchievementNotification';
-import PersonalizationPanel from './components/PersonalizationPanel';
 import SuggestionsPanel from './components/SuggestionsPanel';
 import InteractiveTutorial from './components/InteractiveTutorial';
 import TutorialButton from './components/TutorialButton';
@@ -127,7 +118,7 @@ function App() {
         currentTaskId: null
     });
 
-    // Dark mode is now handled by personalization theme system
+    // Dark mode state management
 
     const [showTaskInput, setShowTaskInput] = useState(false);
     const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
@@ -186,59 +177,27 @@ function App() {
         type: 'encouragement' | 'celebration' | 'tip' | 'reminder';
     } | null>(null);
 
-    // Personalization state
-    const [showPersonalizationPanel, setShowPersonalizationPanel] = useState(false);
-    const [personalization, setPersonalization] = useState<UserPersonalization>(() => {
-        const saved = localStorage.getItem('timepilot-personalization');
-        return saved ? JSON.parse(saved) : DEFAULT_PERSONALIZATION;
+    // Dark mode state
+    const [darkMode, setDarkMode] = useState(() => {
+        const saved = localStorage.getItem('timepilot-darkmode');
+        return saved ? JSON.parse(saved) : false;
     });
-    const [userActivity, setUserActivity] = useState<UserActivity>(() => {
-        const saved = localStorage.getItem('timepilot-activity');
-        if (saved) {
-            return JSON.parse(saved);
-        }
-        return {
-            mostUsedTabs: {},
-            mostUsedTimes: {},
-            preferredSessionLength: 60,
-            studyPatterns: {
-                morningPerson: false,
-                nightOwl: false,
-                weekendStudier: false,
-                consistentSchedule: false
-            },
-            usageStats: {
-                totalLogins: 0,
-                averageSessionTime: 0,
-                favoriteFeatures: [],
-                strugglingAreas: []
-            }
-        };
-    });
-
-
-    // Dark mode persistence is now handled by personalization system
 
     // Persist gamification data
     useEffect(() => {
         localStorage.setItem('timepilot-gamification', JSON.stringify(gamificationData));
     }, [gamificationData]);
 
-    // Persist personalization data and apply theme
+    // Persist dark mode
     useEffect(() => {
-        localStorage.setItem('timepilot-personalization', JSON.stringify(personalization));
-        localStorage.setItem('timepilot-activity', JSON.stringify(userActivity));
-    }, [personalization, userActivity]);
-
-    // Apply theme settings whenever personalization theme changes
-    useEffect(() => {
-        applyThemeSettings(personalization.theme);
-    }, [personalization.theme]);
-
-    // Apply theme settings on initial load
-    useEffect(() => {
-        applyThemeSettings(personalization.theme);
-    }, []);
+        localStorage.setItem('timepilot-darkmode', JSON.stringify(darkMode));
+        // Apply dark mode to document
+        if (darkMode) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }, [darkMode]);
 
     // Update gamification when study data changes
     const updateGamificationData = (updatedStudyPlans?: StudyPlan[], updatedTasks?: Task[]) => {
@@ -303,31 +262,15 @@ function App() {
         }
     };
 
-    // Update personalization settings
-    const updatePersonalization = (newSettings: Partial<UserPersonalization>) => {
-        setPersonalization(prev => ({
-            ...prev,
-            ...newSettings,
-            theme: { ...prev.theme, ...(newSettings.theme || {}) },
-            layout: { ...prev.layout, ...(newSettings.layout || {}) },
-            preferences: { ...prev.preferences, ...(newSettings.preferences || {}) },
-            customization: { ...prev.customization, ...(newSettings.customization || {}) }
-        }));
-    };
-
-    // Track user activity
-    const trackUserActivity = (tab: string, duration: number = 1000) => {
-        const newActivity = analyzeUserActivity(userActivity, {
-            tab,
-            duration,
-            time: new Date()
-        });
-        setUserActivity(newActivity);
+    // Simple tab tracking for analytics (if needed)
+    const trackTabUsage = (tab: string) => {
+        // Simple logging - can be extended for analytics if needed
+        console.log(`Tab switched to: ${tab}`);
     };
 
     // Track tab changes
     useEffect(() => {
-        trackUserActivity(activeTab);
+        trackTabUsage(activeTab);
     }, [activeTab]);
 
 
@@ -1681,13 +1624,7 @@ function App() {
     };
 
     const handleToggleDarkMode = () => {
-        setPersonalization(prev => ({
-            ...prev,
-            theme: {
-                ...prev.theme,
-                colorScheme: prev.theme.colorScheme === 'dark' ? 'light' : 'dark'
-            }
-        }));
+        setDarkMode(prev => !prev);
     };
 
     const handleSkipMissedSession = (planDate: string, sessionNumber: number, taskId: string) => {
@@ -1784,13 +1721,13 @@ function App() {
 
     return (
         <ErrorBoundary>
-            <div className={`${getPersonalizationClasses(personalization)} personalization-active`}>
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
                 {/* Animated background with particles */}
                 <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute inset-0 bg-gradient-to-br from-violet-50 via-pink-50 to-cyan-50 dark:from-slate-900 dark:via-purple-900/20 dark:to-slate-900"></div>
-                    <div className="absolute top-0 left-1/4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-                    <div className="absolute top-0 right-1/4 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-                    <div className="absolute -bottom-8 left-1/3 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-blue-900/20 dark:to-slate-900"></div>
+                    <div className="absolute top-0 left-1/4 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+                    <div className="absolute top-0 right-1/4 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+                    <div className="absolute -bottom-8 left-1/3 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
                 </div>
 
                 <div className="min-h-screen relative">
@@ -1863,11 +1800,11 @@ function App() {
                 </header>
 
                 {/* Navigation */}
-                <nav className="backdrop-blur-md bg-white/90 dark:bg-gray-900/90 border-b border-gray-200/50 dark:border-gray-700/50">
+                <nav className="sticky top-[88px] z-30 backdrop-blur-xl bg-gradient-to-r from-white/95 via-blue-50/95 to-indigo-50/95 dark:from-gray-900/95 dark:via-blue-900/20 dark:to-indigo-900/20 border-b border-gradient-to-r from-blue-200/30 via-indigo-200/30 to-purple-200/30 dark:from-blue-800/30 dark:via-indigo-800/30 dark:to-purple-800/30 shadow-lg shadow-blue-500/10 dark:shadow-blue-900/20">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         {/* Desktop Navigation */}
-                        <div className="hidden lg:flex items-center justify-center space-x-1 py-3">
-                            <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-full p-1">
+                        <div className="hidden lg:flex items-center justify-center space-x-1 py-4">
+                            <div className="flex items-center bg-gradient-to-r from-blue-100/80 via-indigo-100/80 to-purple-100/80 dark:from-gray-800/80 dark:via-blue-900/40 dark:to-indigo-900/40 rounded-2xl p-1.5 shadow-inner border border-blue-200/50 dark:border-blue-800/50">
                                 {tabs.map((tab) => (
                                     <button
                                         key={tab.id}
@@ -1875,16 +1812,19 @@ function App() {
                                             setActiveTab(tab.id as typeof activeTab);
                                             setMobileMenuOpen(false);
                                         }}
-                                        className={`flex items-center justify-center px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 relative ${
+                                        className={`flex items-center justify-center px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 relative group ${
                                             activeTab === tab.id
-                                                ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25'
-                                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
+                                                ? 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 text-white shadow-lg shadow-blue-500/30 transform scale-105'
+                                                : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/80 dark:hover:bg-gray-700/60 hover:shadow-md hover:scale-102'
                                         } ${showInteractiveTutorial && highlightedTab === tab.id ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}
                                         title={tab.label}
                                     >
-                                        <tab.icon size={18} />
+                                        <tab.icon size={18} className={activeTab === tab.id ? 'drop-shadow-sm' : 'group-hover:scale-110 transition-transform'} />
                                         {activeTab === tab.id && (
-                                            <span className="ml-2 hidden sm:inline">{tab.label}</span>
+                                            <span className="ml-2.5 hidden sm:inline drop-shadow-sm">{tab.label}</span>
+                                        )}
+                                        {activeTab !== tab.id && (
+                                            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-400/0 via-indigo-400/0 to-purple-400/0 group-hover:from-blue-400/10 group-hover:via-indigo-400/10 group-hover:to-purple-400/10 transition-all duration-300"></div>
                                         )}
                                     </button>
                                 ))}
@@ -1894,7 +1834,7 @@ function App() {
                         {/* Mobile Navigation */}
                         <div className={`lg:hidden ${mobileMenuOpen ? 'block' : 'hidden'}`}>
                             <div className="py-4">
-                                <div className="flex flex-wrap items-center justify-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-2xl p-2">
+                                <div className="flex flex-wrap items-center justify-center gap-2 bg-gradient-to-r from-blue-100/80 via-indigo-100/80 to-purple-100/80 dark:from-gray-800/80 dark:via-blue-900/40 dark:to-indigo-900/40 rounded-2xl p-3 shadow-inner border border-blue-200/50 dark:border-blue-800/50">
                                     {tabs.map((tab) => (
                                         <button
                                             key={tab.id}
@@ -1902,14 +1842,14 @@ function App() {
                                                 setActiveTab(tab.id as typeof activeTab);
                                                 setMobileMenuOpen(false);
                                             }}
-                                            className={`flex items-center justify-center px-3 py-2 rounded-xl text-xs font-medium transition-all duration-300 ${
+                                            className={`flex items-center justify-center px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 group ${
                                                 activeTab === tab.id
-                                                    ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/25'
-                                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
+                                                    ? 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 text-white shadow-lg shadow-blue-500/30 transform scale-105'
+                                                    : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/80 dark:hover:bg-gray-700/60 hover:shadow-md hover:scale-102'
                                             } ${showInteractiveTutorial && highlightedTab === tab.id ? 'ring-2 ring-yellow-400 animate-pulse' : ''}`}
                                         >
-                                            <tab.icon size={16} />
-                                            <span className="ml-1">{tab.label}</span>
+                                            <tab.icon size={16} className={activeTab === tab.id ? 'drop-shadow-sm' : 'group-hover:scale-110 transition-transform'} />
+                                            <span className={`ml-1.5 ${activeTab === tab.id ? 'drop-shadow-sm' : ''}`}>{tab.label}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -2206,8 +2146,8 @@ function App() {
                             <Settings
                                 settings={settings}
                                 onUpdateSettings={handleUpdateSettings}
-                                personalization={personalization}
-                                onToggleDarkMode={handleToggleDarkMode}
+                                                        darkMode={darkMode}
+                        onToggleDarkMode={handleToggleDarkMode}
                                 onRestartTutorial={handleRestartTutorial}
                                 hasTasks={tasks.length > 0}
                                 highlightStudyPlanMode={highlightStudyPlanMode}
@@ -2715,22 +2655,7 @@ function App() {
                     />
                 )}
 
-                {/* Personalization Panel */}
-                {showPersonalizationPanel && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <PersonalizationPanel
-                            currentSettings={personalization}
-                            suggestions={generatePersonalizationSuggestions(
-                                userActivity,
-                                personalization,
-                                { tasks, studyPlans }
-                            )}
-                            onUpdateSettings={updatePersonalization}
-                            onClose={() => setShowPersonalizationPanel(false)}
-                            userName="Student"
-                        />
-                    </div>
-                )}
+
             </div>
         </div>
         </ErrorBoundary>

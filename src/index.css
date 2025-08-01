@@ -57,6 +57,15 @@
   animation-delay: 4s;
 }
 
+/* Enhanced navbar styles */
+.hover\:scale-102:hover {
+  transform: scale(1.02);
+}
+
+.scale-105 {
+  transform: scale(1.05);
+}
+
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
