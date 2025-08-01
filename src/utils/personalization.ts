@@ -11,7 +11,7 @@ import { StudyPlan, Task, UserSettings } from '../types';
 // Default personalization settings
 export const DEFAULT_PERSONALIZATION: UserPersonalization = {
   theme: {
-    colorScheme: 'auto',
+    colorScheme: 'light',
     accentColor: 'purple',
     backgroundStyle: 'gradient',
     borderRadius: 'rounded',

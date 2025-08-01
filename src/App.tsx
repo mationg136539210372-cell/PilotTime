@@ -127,11 +127,7 @@ function App() {
         currentTaskId: null
     });
 
-    // Dark mode state
-    const [darkMode, setDarkMode] = useState(() => {
-        const saved = localStorage.getItem('timepilot-darkMode');
-        return saved ? JSON.parse(saved) : false;
-    });
+    // Dark mode is now handled by personalization theme system
 
     const [showTaskInput, setShowTaskInput] = useState(false);
     const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
@@ -221,9 +217,7 @@ function App() {
     });
 
 
-    useEffect(() => {
-        localStorage.setItem('timepilot-darkMode', JSON.stringify(darkMode));
-    }, [darkMode]);
+    // Dark mode persistence is now handled by personalization system
 
     // Persist gamification data
     useEffect(() => {
@@ -1687,7 +1681,13 @@ function App() {
     };
 
     const handleToggleDarkMode = () => {
-        setDarkMode((prev: boolean) => !prev);
+        setPersonalization(prev => ({
+            ...prev,
+            theme: {
+                ...prev.theme,
+                colorScheme: prev.theme.colorScheme === 'dark' ? 'light' : 'dark'
+            }
+        }));
     };
 
     const handleSkipMissedSession = (planDate: string, sessionNumber: number, taskId: string) => {
@@ -1784,7 +1784,7 @@ function App() {
 
     return (
         <ErrorBoundary>
-            <div className={`${darkMode ? 'dark' : ''} ${getPersonalizationClasses(personalization)} personalization-active`}>
+            <div className={`${getPersonalizationClasses(personalization)} personalization-active`}>
                 {/* Animated background with particles */}
                 <div className="fixed inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute inset-0 bg-gradient-to-br from-violet-50 via-pink-50 to-cyan-50 dark:from-slate-900 dark:via-purple-900/20 dark:to-slate-900"></div>
@@ -2206,7 +2206,7 @@ function App() {
                             <Settings
                                 settings={settings}
                                 onUpdateSettings={handleUpdateSettings}
-                                darkMode={darkMode}
+                                personalization={personalization}
                                 onToggleDarkMode={handleToggleDarkMode}
                                 onRestartTutorial={handleRestartTutorial}
                                 hasTasks={tasks.length > 0}
