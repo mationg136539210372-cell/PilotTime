@@ -356,7 +356,21 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
                 />
                 <span className="text-sm text-gray-700 dark:text-gray-200">Complete this task in one sitting (don't divide into sessions)</span>
               </label>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Check this for short tasks or tasks that need to be done all at once</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Check this for short tasks or tasks that need to be done all at once
+                {formData.isOneTimeTask && formData.deadline && (
+                  <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
+                    <div className="text-xs text-blue-700 dark:text-blue-300">
+                      <strong>📅 Scheduling Note:</strong>
+                      {formData.impact === 'high' ? (
+                        <span> High-impact one-sitting tasks are scheduled as early as possible for maximum priority.</span>
+                      ) : (
+                        <span> Regular one-sitting tasks are scheduled closer to their deadline to respect your timing preference.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Task Timeline Toggle Button */}
@@ -916,7 +930,13 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
                       <li>Low impact + flexible/no deadline (neither urgent nor important)</li>
                     </ol>
                   </div>
-                  <p className="text-sm"><strong>One-time tasks</strong> maintain their importance level but are scheduled as single, uninterrupted sessions.</p>
+                  <div className="text-sm">
+                    <strong>One-time tasks</strong> maintain their importance level but are scheduled as single, uninterrupted sessions:
+                    <ul className="list-disc list-inside mt-1 ml-2 space-y-1">
+                      <li><strong>High-impact one-sitting tasks:</strong> Scheduled as early as possible for maximum priority</li>
+                      <li><strong>Regular one-sitting tasks:</strong> Scheduled closer to their deadline to respect your timing preference</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
 

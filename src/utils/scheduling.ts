@@ -106,6 +106,9 @@ const optimizeSessionDistribution = (task: Task, totalHours: number, daysForTask
   const maxSessionLength = Math.min(4, settings.dailyAvailableHours); // Cap at 4 hours or daily limit
 
   // For one-time tasks, return a single session with all hours
+  // Note: Scheduling timing is handled in the distribution loop:
+  // - High-impact one-sitting tasks: scheduled early (maximum priority)
+  // - Regular one-sitting tasks: scheduled closer to deadline (respect user timing)
   if (task.isOneTimeTask) {
     return [totalHours];
   }
@@ -913,7 +916,16 @@ export const generateNewStudyPlan = (
         const sessionLengths = optimizeSessionDistribution(task, task.estimatedHours, daysForTask, settings);
 
         for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
-          const date = daysForTask[i];
+          let dayIndex = i;
+          
+          // For non-important one-sitting tasks, prefer scheduling closer to deadline
+          if (task.isOneTimeTask && !task.importance && sessionLengths.length === 1) {
+            // Try to schedule in the latter half of available days (60% through timeline)
+            const preferredStartIndex = Math.floor(daysForTask.length * 0.6);
+            dayIndex = Math.min(preferredStartIndex + i, daysForTask.length - 1);
+          }
+          
+          const date = daysForTask[dayIndex];
           const dayPlan = studyPlans.find(p => p.date === date)!;
           const availableHours = dailyRemainingHours[date];
           const thisSessionLength = Math.min(sessionLengths[i], availableHours);
