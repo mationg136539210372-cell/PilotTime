@@ -121,6 +121,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   const [showTimePresets, setShowTimePresets] = useState(false);
   const [showTaskTimeline, setShowTaskTimeline] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showImportanceHelpModal, setShowImportanceHelpModal] = useState(false);
   const [estBase, setEstBase] = useState(formData.estimatedHours || '1');
   // Remove estAdjusted state, use only local let estAdjusted
   const estimationHelperRef = useRef<HTMLDivElement>(null);
@@ -652,7 +653,17 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
         </div>
         {/* Impact */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">How much will this impact your goals?<span className="text-red-500">*</span></label>
+          <div className="flex items-center gap-2 mb-1">
+            <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">How much will this impact your goals?<span className="text-red-500">*</span></label>
+            <button
+              type="button"
+              onClick={() => setShowImportanceHelpModal(true)}
+              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+              title="Learn how importance affects scheduling"
+            >
+              <HelpCircle size={16} />
+            </button>
+          </div>
           <div className="flex flex-col md:flex-row gap-4 mt-2">
             <label className="flex items-center gap-2 text-base font-normal text-gray-700 dark:text-gray-100">
               <input
@@ -987,6 +998,221 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                 <p className="text-blue-800 dark:text-blue-200">
                   <strong>Tip:</strong> Use high impact for tasks that significantly affect your goals, and low impact for routine or optional tasks. The app will automatically prioritize your schedule!
                 </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Importance Help Modal */}
+      {showImportanceHelpModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-gray-800 dark:text-white">How Task Importance Affects Scheduling</h3>
+              <button
+                onClick={() => setShowImportanceHelpModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-6 text-sm text-gray-600 dark:text-gray-300">
+              {/* Overview */}
+              <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
+                <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">🎯 Quick Summary</h4>
+                <p className="text-blue-700 dark:text-blue-300">
+                  Task importance determines scheduling priority. <strong>High impact tasks</strong> are always scheduled first, 
+                  while <strong>low impact tasks</strong> fill remaining time slots and may be postponed if your schedule becomes tight.
+                </p>
+              </div>
+
+              {/* Scheduling Priority System */}
+              <div>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">📊 Scheduling Priority Order</h4>
+                <div className="space-y-3">
+                  <div className="bg-red-50 dark:bg-red-900/30 p-3 rounded-lg border-l-4 border-red-500">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-red-600 dark:text-red-400 font-bold">1st Priority:</span>
+                      <span className="font-semibold">High Impact + Hard Deadline</span>
+                    </div>
+                    <p className="text-sm">Urgent AND important - scheduled immediately with maximum priority</p>
+                  </div>
+                  
+                  <div className="bg-orange-50 dark:bg-orange-900/30 p-3 rounded-lg border-l-4 border-orange-500">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-orange-600 dark:text-orange-400 font-bold">2nd Priority:</span>
+                      <span className="font-semibold">High Impact + Flexible/No Deadline</span>
+                    </div>
+                    <p className="text-sm">Important but not urgent - scheduled early to prevent becoming urgent</p>
+                  </div>
+                  
+                  <div className="bg-yellow-50 dark:bg-yellow-900/30 p-3 rounded-lg border-l-4 border-yellow-500">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-yellow-600 dark:text-yellow-400 font-bold">3rd Priority:</span>
+                      <span className="font-semibold">Low Impact + Hard Deadline</span>
+                    </div>
+                    <p className="text-sm">Urgent but not important - scheduled when high-priority tasks allow</p>
+                  </div>
+                  
+                  <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border-l-4 border-gray-400">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-gray-600 dark:text-gray-400 font-bold">4th Priority:</span>
+                      <span className="font-semibold">Low Impact + Flexible/No Deadline</span>
+                    </div>
+                    <p className="text-sm">Neither urgent nor important - fills available time, easily postponed</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* How Settings Affect Scheduling */}
+              <div>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">⚙️ How Your Settings Interact with Importance</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg">
+                      <h5 className="font-medium text-green-800 dark:text-green-200 mb-1">Buffer Days</h5>
+                      <p className="text-sm">High impact tasks get extra buffer time before deadlines. Low impact tasks may use minimal buffer if schedule is tight.</p>
+                    </div>
+                    
+                    <div className="bg-purple-50 dark:bg-purple-900/30 p-3 rounded-lg">
+                      <h5 className="font-medium text-purple-800 dark:text-purple-200 mb-1">Daily Hours</h5>
+                      <p className="text-sm">High impact tasks get first claim on your daily available hours. Low impact tasks fill remaining time.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-lg">
+                      <h5 className="font-medium text-indigo-800 dark:text-indigo-200 mb-1">Study Plan Mode</h5>
+                      <p className="text-sm"><strong>Eisenhower:</strong> Strict importance-based priority<br/>
+                      <strong>Balanced:</strong> Considers both importance and deadlines<br/>
+                      <strong>Even:</strong> More equal distribution</p>
+                    </div>
+                    
+                    <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-lg">
+                      <h5 className="font-medium text-teal-800 dark:text-teal-200 mb-1">Frequency Preferences</h5>
+                      <p className="text-sm">High impact tasks maintain consistent frequency even with tight schedules. Low impact tasks may have reduced frequency.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* One-Time Tasks */}
+              <div>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">⏱️ One-Time Tasks & Importance</h4>
+                <div className="space-y-3">
+                  <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-lg">
+                    <h5 className="font-medium text-amber-800 dark:text-amber-200 mb-2">High Impact One-Time Tasks</h5>
+                    <ul className="text-sm space-y-1">
+                      <li>• Scheduled as early as possible for maximum priority</li>
+                      <li>• Get the best available time slots</li>
+                      <li>• Protected from being moved or interrupted</li>
+                      <li>• Example: Important presentation, critical exam</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg">
+                    <h5 className="font-medium text-gray-800 dark:text-gray-200 mb-2">Low Impact One-Time Tasks</h5>
+                    <ul className="text-sm space-y-1">
+                      <li>• Scheduled on deadline day (respecting buffer days)</li>
+                      <li>• May be moved to accommodate higher priority tasks</li>
+                      <li>• Placed in less optimal time slots if needed</li>
+                      <li>• Example: Routine administrative tasks, optional activities</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Examples */}
+              <div>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">💡 Real-World Examples</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <h5 className="font-medium text-red-600 dark:text-red-400 mb-2">🔥 High Impact Tasks</h5>
+                    <ul className="text-sm space-y-1 list-disc list-inside">
+                      <li>Final exam preparation</li>
+                      <li>Job interview preparation</li>
+                      <li>Critical project deliverables</li>
+                      <li>Important presentations</li>
+                      <li>Thesis/dissertation work</li>
+                      <li>Professional certification exams</li>
+                      <li>Client deliverables with consequences</li>
+                    </ul>
+                  </div>
+                  
+                  <div>
+                    <h5 className="font-medium text-gray-600 dark:text-gray-400 mb-2">📝 Low Impact Tasks</h5>
+                    <ul className="text-sm space-y-1 list-disc list-inside">
+                      <li>Regular homework assignments</li>
+                      <li>Routine reading</li>
+                      <li>Optional skill development</li>
+                      <li>Administrative tasks</li>
+                      <li>Personal hobby projects</li>
+                      <li>Extra credit work</li>
+                      <li>Nice-to-have learning</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Do's and Don'ts */}
+              <div>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">✅❌ Do's and Don'ts</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg">
+                    <h5 className="font-medium text-green-800 dark:text-green-200 mb-2 flex items-center gap-2">
+                      <span>✅</span> Do
+                    </h5>
+                    <ul className="text-sm space-y-2">
+                      <li>• Mark tasks as high impact if failure significantly affects your goals</li>
+                      <li>• Consider long-term consequences, not just immediate effort</li>
+                      <li>• Use high impact for tasks with cascading effects</li>
+                      <li>• Be honest about what truly matters to your success</li>
+                      <li>• Mark career-defining or grade-critical tasks as high impact</li>
+                      <li>• Consider high impact for tasks that unlock future opportunities</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="bg-red-50 dark:bg-red-900/30 p-4 rounded-lg">
+                    <h5 className="font-medium text-red-800 dark:text-red-200 mb-2 flex items-center gap-2">
+                      <span>❌</span> Don't
+                    </h5>
+                    <ul className="text-sm space-y-2">
+                      <li>• Mark everything as high impact (dilutes the system)</li>
+                      <li>• Base importance solely on difficulty or time required</li>
+                      <li>• Use high impact for tasks you simply prefer to do first</li>
+                      <li>• Confuse urgency with importance</li>
+                      <li>• Mark routine/repeatable tasks as high impact</li>
+                      <li>• Let emotions override objective importance assessment</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warning Scenarios */}
+              <div className="bg-yellow-50 dark:bg-yellow-900/30 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">⚠️ What Happens When Schedule Gets Tight</h4>
+                <div className="space-y-2 text-sm">
+                  <p><strong>High Impact Tasks:</strong> Always protected and scheduled, even if it means working longer hours or rearranging other commitments.</p>
+                  <p><strong>Low Impact Tasks:</strong> May be postponed, have reduced session frequency, or be moved to less optimal time slots to make room for high-priority items.</p>
+                  <p><strong>System Notifications:</strong> You'll receive warnings when low-priority tasks with deadlines can't be scheduled due to high-priority task conflicts.</p>
+                </div>
+              </div>
+
+              {/* Quick Decision Guide */}
+              <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-lg">
+                <h4 className="font-semibold text-indigo-800 dark:text-indigo-200 mb-3">🤔 Quick Decision Guide</h4>
+                <div className="text-sm">
+                  <p className="mb-2"><strong>Ask yourself:</strong></p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>Would failing this task significantly impact my grades, career, or major goals?</li>
+                    <li>Are there serious consequences if this isn't done well or on time?</li>
+                    <li>Does this task unlock or block other important opportunities?</li>
+                    <li>Would I rather sacrifice other tasks to ensure this one succeeds?</li>
+                  </ul>
+                  <p className="mt-3 font-medium">If you answered "yes" to most questions, choose <span className="text-red-600 dark:text-red-400">High Impact</span>. Otherwise, <span className="text-gray-600 dark:text-gray-400">Low Impact</span> is appropriate.</p>
+                </div>
               </div>
             </div>
           </div>
