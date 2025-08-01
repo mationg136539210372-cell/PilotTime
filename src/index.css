@@ -2,37 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Enhanced sticky navigation */
+/* Enhanced navigation - stays in place, not sticky */
 .sticky-nav {
-  position: sticky;
-  top: 88px;
+  position: static;
   z-index: 40;
   will-change: transform;
-  /* Ensure smooth scrolling behavior */
-  transition: all 0.2s ease-out;
+  /* Smooth aesthetic transitions */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Seamless border integration */
+  border-image: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent) 1;
 }
 
-/* Ensure proper stacking context */
+/* Enhanced header - stays in place, not sticky */
 .sticky-header {
-  position: sticky;
-  top: 0;
+  position: static;
   z-index: 50;
   will-change: transform;
-  /* Ensure smooth scrolling behavior */
-  transition: all 0.2s ease-out;
+  /* Smooth aesthetic transitions */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Seamless border integration */
+  border-image: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent) 1;
 }
 
-/* Ensure sticky elements work on all browsers */
+/* Ensure elements work on all browsers with enhanced aesthetics */
 .sticky-nav,
 .sticky-header {
-  -webkit-position: sticky;
-  position: sticky;
+  -webkit-position: static;
+  position: static;
+  /* Enhanced backdrop filter for better glass effect */
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
 }
 
-/* Responsive adjustments for mobile */
-@media (max-width: 768px) {
-  .sticky-nav {
-    top: 80px; /* Slightly smaller top offset for mobile */
+/* Smooth header-nav transition */
+.sticky-header + .sticky-nav {
+  /* Remove any gap between header and nav */
+  margin-top: -1px;
+  /* Create seamless visual flow */
+  background-blend-mode: overlay;
+}
+
+/* Enhanced glassmorphism effects */
+.sticky-header::before,
+.sticky-nav::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Dark mode glassmorphism */
+.dark .sticky-header::before,
+.dark .sticky-nav::before {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+
+/* Subtle animation on load */
+.sticky-header,
+.sticky-nav {
+  animation: fadeInDown 0.6s ease-out;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
