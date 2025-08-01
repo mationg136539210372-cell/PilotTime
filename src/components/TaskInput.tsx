@@ -365,7 +365,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
                       {formData.impact === 'high' ? (
                         <span> High-impact one-sitting tasks are scheduled as early as possible for maximum priority.</span>
                       ) : (
-                        <span> Regular one-sitting tasks are scheduled closer to their deadline to respect your timing preference.</span>
+                        <span> Regular one-sitting tasks are scheduled on their deadline day (respecting buffer days), or the closest available day.</span>
                       )}
                     </div>
                   </div>
@@ -934,7 +934,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel }) => {
                     <strong>One-time tasks</strong> maintain their importance level but are scheduled as single, uninterrupted sessions:
                     <ul className="list-disc list-inside mt-1 ml-2 space-y-1">
                       <li><strong>High-impact one-sitting tasks:</strong> Scheduled as early as possible for maximum priority</li>
-                      <li><strong>Regular one-sitting tasks:</strong> Scheduled closer to their deadline to respect your timing preference</li>
+                      <li><strong>Regular one-sitting tasks:</strong> Scheduled on their deadline day (respecting buffer days), or the closest available day</li>
                     </ul>
                   </div>
                 </div>

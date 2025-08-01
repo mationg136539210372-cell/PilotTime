@@ -108,7 +108,7 @@ const optimizeSessionDistribution = (task: Task, totalHours: number, daysForTask
   // For one-time tasks, return a single session with all hours
   // Note: Scheduling timing is handled in the distribution loop:
   // - High-impact one-sitting tasks: scheduled early (maximum priority)
-  // - Regular one-sitting tasks: scheduled closer to deadline (respect user timing)
+  // - Regular one-sitting tasks: scheduled on deadline day (respecting buffer), or closest available day
   if (task.isOneTimeTask) {
     return [totalHours];
   }
@@ -918,11 +918,36 @@ export const generateNewStudyPlan = (
         for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
           let dayIndex = i;
           
-          // For non-important one-sitting tasks, prefer scheduling closer to deadline
+          // For non-important one-sitting tasks, prefer scheduling on the actual deadline day (respecting buffer)
           if (task.isOneTimeTask && !task.importance && sessionLengths.length === 1) {
-            // Try to schedule in the latter half of available days (60% through timeline)
-            const preferredStartIndex = Math.floor(daysForTask.length * 0.6);
-            dayIndex = Math.min(preferredStartIndex + i, daysForTask.length - 1);
+            // Calculate the effective deadline (respecting buffer days)
+            const effectiveDeadline = new Date(task.deadline);
+            if (settings.bufferDays > 0) {
+              effectiveDeadline.setDate(effectiveDeadline.getDate() - settings.bufferDays);
+            }
+            const effectiveDeadlineStr = effectiveDeadline.toISOString().split('T')[0];
+            
+            // First priority: Schedule on the effective deadline day itself (last available day)
+            const effectiveDeadlineIndex = daysForTask.indexOf(effectiveDeadlineStr);
+            
+            if (effectiveDeadlineIndex !== -1) {
+              // Effective deadline day is available, use it
+              dayIndex = effectiveDeadlineIndex;
+            } else {
+              // Fallback: Find the closest available day to the effective deadline
+              const effectiveDeadlineTime = effectiveDeadline.getTime();
+              let closestIndex = daysForTask.length - 1; // Start with the last available day
+              let minDistance = Math.abs(new Date(daysForTask[closestIndex]).getTime() - effectiveDeadlineTime);
+              
+              for (let j = 0; j < daysForTask.length - 1; j++) {
+                const distance = Math.abs(new Date(daysForTask[j]).getTime() - effectiveDeadlineTime);
+                if (distance < minDistance) {
+                  minDistance = distance;
+                  closestIndex = j;
+                }
+              }
+              dayIndex = closestIndex;
+            }
           }
           
           const date = daysForTask[dayIndex];
