@@ -1366,6 +1366,8 @@ function App() {
                                 if (!wasHandled) {
                                     checkAndCompleteTask(session.taskId, updatedPlans);
                                 }
+                              // Update gamification data after session completion
+                                updateGamificationData(updatedPlans);
                             }, 0);
                             
                             return updatedSession;
