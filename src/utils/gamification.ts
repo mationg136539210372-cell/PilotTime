@@ -225,7 +225,7 @@ export function updateUserStats(
   tasks: Task[]
 ): UserStats {
   const completedSessions = studyPlans.flatMap(plan => 
-    plan.plannedTasks.filter(session => session.status === 'completed')
+    plan.plannedTasks.filter(session => session.status === 'completed' || session.done)
   );
   
   const completedTasks = tasks.filter(task => task.status === 'completed');
@@ -447,13 +447,13 @@ export function updateStudyStreak(
   // Check if user studied today
   const todayPlan = studyPlans.find(plan => plan.date === today);
   const hasStudiedToday = todayPlan?.plannedTasks.some(session => 
-    session.status === 'completed'
+    session.status === 'completed' || session.done
   ) || false;
   
   // Check if user studied yesterday
   const yesterdayPlan = studyPlans.find(plan => plan.date === yesterday);
   const hasStudiedYesterday = yesterdayPlan?.plannedTasks.some(session => 
-    session.status === 'completed'
+    session.status === 'completed' || session.done
   ) || false;
 
   let newStreak = { ...currentStreak };
