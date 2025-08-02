@@ -323,6 +323,64 @@ function findNextAvailableTimeSlot(
   return null; // No available slot
 }
 
+// Helper function to validate that sessions don't overlap with each other or commitments
+function validateSessionTimes(
+  sessions: StudySession[],
+  commitments: FixedCommitment[],
+  date: string
+): boolean {
+  const timeToMinutes = (timeStr: string): number => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Create a list of all busy intervals
+  const busyIntervals: Array<{ start: number; end: number; source: string }> = [];
+
+  // Add commitment intervals
+  commitments.forEach(commitment => {
+    let appliesToDate = false;
+    if (commitment.recurring) {
+      appliesToDate = commitment.daysOfWeek.includes(new Date(date).getDay());
+    } else {
+      appliesToDate = commitment.specificDates?.includes(date) || false;
+    }
+
+    if (appliesToDate && !commitment.deletedOccurrences?.includes(date)) {
+      busyIntervals.push({
+        start: timeToMinutes(commitment.startTime),
+        end: timeToMinutes(commitment.endTime),
+        source: `commitment-${commitment.title}`
+      });
+    }
+  });
+
+  // Add session intervals
+  sessions.forEach((session, index) => {
+    if (session.startTime && session.endTime) {
+      busyIntervals.push({
+        start: timeToMinutes(session.startTime),
+        end: timeToMinutes(session.endTime),
+        source: `session-${index}`
+      });
+    }
+  });
+
+  // Check for overlaps
+  busyIntervals.sort((a, b) => a.start - b.start);
+  for (let i = 0; i < busyIntervals.length - 1; i++) {
+    const current = busyIntervals[i];
+    const next = busyIntervals[i + 1];
+    
+    if (current.end > next.start) {
+      console.warn(`Overlap detected on ${date}: ${current.source} (${current.start}-${current.end}) overlaps with ${next.source} (${next.start}-${next.end})`);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export const generateNewStudyPlan = (
   tasks: Task[],
   settings: UserSettings,
@@ -572,7 +630,10 @@ export const generateNewStudyPlan = (
           let sessionGap = 1; // Days between sessions
           if (task.targetFrequency === 'weekly') sessionGap = 7;
           else if (task.targetFrequency === '3x-week') sessionGap = 2;
-          else if (task.targetFrequency === 'flexible') sessionGap = 3;
+          else if (task.targetFrequency === 'flexible') {
+            // For flexible tasks, adapt the gap based on available time and task urgency
+            sessionGap = task.importance ? 2 : 3; // More frequent for important tasks
+          }
           // daily frequency uses sessionGap = 1 (no filtering needed)
           
           if (sessionGap > 1) {
@@ -765,6 +826,11 @@ export const generateNewStudyPlan = (
           session.endTime = '';
         }
       }
+
+      // Validate that no sessions overlap on this day
+      if (!validateSessionTimes(plan.plannedTasks, commitmentsForDay, plan.date)) {
+        console.error(`Session overlap detected on ${plan.date} - some sessions may be incorrectly scheduled`);
+      }
     }
     
     // REDISTRIBUTE MISSED SESSIONS
@@ -847,10 +913,15 @@ export const generateNewStudyPlan = (
         let sessionGap = 1; // Days between sessions
         if (task.targetFrequency === 'weekly') sessionGap = 7;
         else if (task.targetFrequency === '3x-week') sessionGap = 2;
-        else if (task.targetFrequency === 'flexible') sessionGap = 3;
+        else if (task.targetFrequency === 'flexible') {
+          // For flexible tasks, adapt the gap based on available time and task urgency
+          // Start with smaller gaps and increase if needed
+          sessionGap = task.importance ? 2 : 3; // More frequent for important tasks
+        }
 
         let sessionNumber = 1;
         let dayIndex = 0;
+        let failedAttempts = 0; // Track failed scheduling attempts
 
         while (remainingHours > 0 && dayIndex < availableDays.length) {
           const currentDate = availableDays[dayIndex];
@@ -870,24 +941,49 @@ export const generateNewStudyPlan = (
                 Math.max(minSessionHours, Math.min(2, remainingHours)) // Max 2 hours per session
               );
 
-              // Create the session
-              const startTimeHour = 9 + (usedHours % 8); // Spread sessions across day
-              const endTimeHour = startTimeHour + sessionHours;
+              // Find proper time slot using the existing function to avoid conflicts
+              const commitmentsForDay = fixedCommitments.filter(commitment => {
+                if (commitment.recurring) {
+                  return commitment.daysOfWeek.includes(new Date(currentDate).getDay());
+                } else {
+                  return commitment.specificDates?.includes(currentDate) || false;
+                }
+              });
 
-              const session: StudySession = {
-                taskId: task.id,
-                scheduledTime: currentDate,
-                startTime: `${Math.floor(startTimeHour).toString().padStart(2, '0')}:${((startTimeHour % 1) * 60).toString().padStart(2, '0')}`,
-                endTime: `${Math.floor(endTimeHour).toString().padStart(2, '0')}:${((endTimeHour % 1) * 60).toString().padStart(2, '0')}`,
-                allocatedHours: sessionHours,
-                sessionNumber,
-                isFlexible: true // Mark as flexible for easy rescheduling
-              };
+              const slot = findNextAvailableTimeSlot(
+                sessionHours,
+                plan.plannedTasks, // existing sessions on this day
+                commitmentsForDay,
+                settings.studyWindowStartHour || 6,
+                settings.studyWindowEndHour || 23,
+                settings.bufferTimeBetweenSessions || 0,
+                currentDate
+              );
 
-              plan.plannedTasks.push(session);
-              plan.totalStudyHours += sessionHours;
-              remainingHours -= sessionHours;
-              sessionNumber++;
+              if (slot) {
+                const session: StudySession = {
+                  taskId: task.id,
+                  scheduledTime: currentDate,
+                  startTime: slot.start,
+                  endTime: slot.end,
+                  allocatedHours: sessionHours,
+                  sessionNumber,
+                  isFlexible: true // Mark as flexible for easy rescheduling
+                };
+
+                plan.plannedTasks.push(session);
+                plan.totalStudyHours += sessionHours;
+                remainingHours -= sessionHours;
+                sessionNumber++;
+                failedAttempts = 0; // Reset failed attempts on successful scheduling
+              } else {
+                // No available slot on this day
+                failedAttempts++;
+                // For flexible tasks, try more frequently if we're having trouble scheduling
+                if (task.targetFrequency === 'flexible' && failedAttempts > 2) {
+                  sessionGap = 1; // Fall back to daily attempts
+                }
+              }
 
               // Apply session gap for next scheduling
               dayIndex += sessionGap;
