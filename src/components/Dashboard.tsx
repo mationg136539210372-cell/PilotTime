@@ -58,7 +58,14 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
   const completedTasks = tasks.filter(task => task.status === 'completed');
   const pendingTasks = tasks.filter(task => task.status === 'pending');
   const totalEstimatedHours = pendingTasks.reduce((sum, task) => sum + task.estimatedHours, 0);
-  const completedHours = completedTasks.reduce((sum, task) => sum + task.estimatedHours, 0);
+  
+  // Calculate completed hours from actual done sessions (including those from completed tasks)
+  const completedHours = filteredPlans.reduce((planSum, plan) => 
+    planSum + plan.plannedTasks
+      .filter(session => session.done || session.status === 'completed')
+      .reduce((sessionSum, session) => sessionSum + (session.actualHours || session.allocatedHours), 0), 
+    0
+  );
 
   // Urgent tasks for all pending tasks
   const urgentTasks = pendingTasks
@@ -79,20 +86,29 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
   const todayDayOfWeek = todayDate.getDay();
   const isTodayWorkDay = workDays.includes(todayDayOfWeek);
 
-  // --- Session Analytics ---
-  let doneCount = 0, skippedCount = 0, totalSessions = 0;
+  // --- Enhanced Session Analytics ---
+  let doneCount = 0, skippedCount = 0, totalSessions = 0, plannedHours = 0, actualStudyHours = 0;
+  const completedTaskIds = new Set(completedTasks.map(task => task.id));
+  
   filteredPlans.forEach(plan => {
     plan.plannedTasks.forEach(session => {
       totalSessions++;
-      // Only count completed and skipped sessions for positive metrics
-      if (session.status === 'completed' || session.done) {
+      plannedHours += session.allocatedHours;
+      
+      // Count sessions as done if they're marked done OR if their task is completed
+      if (session.status === 'completed' || session.done || completedTaskIds.has(session.taskId)) {
         doneCount++;
+        actualStudyHours += session.actualHours || session.allocatedHours;
       } else if (session.status === 'skipped') {
         skippedCount++;
       }
     });
   });
 
+  // Calculate completion rate and efficiency
+  const completionRate = totalSessions > 0 ? Math.round((doneCount / totalSessions) * 100) : 0;
+  const efficiency = plannedHours > 0 ? Math.round((actualStudyHours / plannedHours) * 100) : 0;
+  
   // Focus on positive metrics instead of missed sessions
   const hasCompletedSessions = doneCount > 0;
 
@@ -114,14 +130,14 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
     {
       title: 'Study Hours',
       value: formatTime(totalEstimatedHours),
-      subtitle: `${formatTime(completedHours)} completed`,
+      subtitle: `${formatTime(completedHours)} actually studied`,
       icon: Clock,
       color: 'bg-purple-500'
     },
     {
-      title: 'Daily Goal',
-      value: `${dailyAvailableHours}h`,
-      subtitle: todaysPlan ? `${formatTime(todaysPlan.totalStudyHours)} planned today` : 'No plan for today',
+      title: 'Session Rate',
+      value: `${completionRate}%`,
+      subtitle: `${doneCount}/${totalSessions} sessions completed`,
       icon: TrendingUp,
       color: 'bg-green-500'
     },
@@ -190,13 +206,55 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
         </div>
       </div>
 
+      {/* Session Analytics Details */}
+      {totalSessions > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center">
+            <CheckCircle2 className="mr-2 text-green-500" size={20} />
+            Session Progress Analysis
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{doneCount}</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Completed Sessions</div>
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                {formatTime(actualStudyHours)} studied
+              </div>
+            </div>
+            
+            <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{completionRate}%</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Completion Rate</div>
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                {totalSessions - doneCount - skippedCount} pending
+              </div>
+            </div>
+            
+            <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{efficiency}%</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Study Efficiency</div>
+              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                {formatTime(plannedHours)} planned
+              </div>
+            </div>
+          </div>
+          
+          {skippedCount > 0 && (
+            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+              <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                <strong>{skippedCount}</strong> sessions were skipped. Consider adjusting your schedule if this pattern continues.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
           {(() => {
-        const completedTasks = tasks.filter(task => task.status === 'completed');
-        const completedHours = completedTasks.reduce((sum, task) => sum + task.estimatedHours, 0);
-        const totalEstimatedHours = tasks.reduce((sum, task) => sum + task.estimatedHours, 0);
+        const totalAllEstimatedHours = tasks.reduce((sum, task) => sum + task.estimatedHours, 0);
         
         const taskCompletionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
-        const hoursCompletionRate = (totalEstimatedHours) > 0 ? Math.round((completedHours / (totalEstimatedHours)) * 100) : 0;
+        const hoursCompletionRate = (totalAllEstimatedHours) > 0 ? Math.round((completedHours / (totalAllEstimatedHours)) * 100) : 0;
         const avgProgress = Math.round((taskCompletionRate + hoursCompletionRate) / 2);
 
         let quote, author, emoji;
