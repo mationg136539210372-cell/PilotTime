@@ -1721,7 +1721,7 @@ function App() {
 
     return (
         <ErrorBoundary>
-            <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+                            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 overflow-x-hidden">
                 {/* Animated background with particles */}
                 <div className="fixed inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-blue-900/20 dark:to-slate-900"></div>
@@ -1791,7 +1791,11 @@ function App() {
                             <HelpCircle size={20} />
                         </button>
                         <button
-                            className="lg:hidden p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                            className={`lg:hidden p-3 backdrop-blur-lg border-2 rounded-2xl text-gray-600 dark:text-gray-300 transition-all duration-300 hover:scale-105 hover:shadow-xl ${
+                                mobileMenuOpen 
+                                    ? 'bg-blue-500/20 dark:bg-blue-600/25 border-blue-400/50 dark:border-blue-500/50 text-blue-700 dark:text-blue-300' 
+                                    : 'bg-white/15 dark:bg-gray-800/20 border-white/30 dark:border-gray-600/30 hover:bg-white/25 dark:hover:bg-gray-700/30'
+                            }`}
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                         >
                             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -1834,7 +1838,7 @@ function App() {
                         {/* Mobile Navigation */}
                         <div className={`lg:hidden ${mobileMenuOpen ? 'block' : 'hidden'}`}>
                             <div className="py-4">
-                                <div className="flex flex-wrap items-center justify-center gap-2 bg-gradient-to-r from-blue-100/80 via-indigo-100/80 to-purple-100/80 dark:from-gray-800/80 dark:via-blue-900/40 dark:to-indigo-900/40 rounded-2xl p-3 shadow-inner border border-blue-200/50 dark:border-blue-800/50">
+                                <div className="flex flex-wrap items-center justify-center gap-2 bg-gradient-to-r from-blue-100/80 via-indigo-100/80 to-purple-100/80 dark:from-gray-800/80 dark:via-blue-900/40 dark:to-indigo-900/40 rounded-2xl p-3 shadow-inner border border-blue-200/50 dark:border-blue-800/50 max-w-full overflow-x-auto">
                                     {tabs.map((tab) => (
                                         <button
                                             key={tab.id}
@@ -1842,7 +1846,7 @@ function App() {
                                                 setActiveTab(tab.id as typeof activeTab);
                                                 setMobileMenuOpen(false);
                                             }}
-                                            className={`flex items-center justify-center px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 group ${
+                                            className={`flex items-center justify-center px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 group min-w-max ${
                                                 activeTab === tab.id
                                                     ? 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 text-white shadow-lg shadow-blue-500/30 transform scale-105'
                                                     : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white/80 dark:hover:bg-gray-700/60 hover:shadow-md hover:scale-102'
@@ -1859,7 +1863,7 @@ function App() {
                 </nav>
 
                 {/* Main Content */}
-                <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 relative">
+                <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 relative overflow-x-auto">
                     {/* Toggle Suggestions Panel Button */}
                     {/* Suggestions Panel */}
                     {showSuggestionsPanel && hasUnscheduled && (
