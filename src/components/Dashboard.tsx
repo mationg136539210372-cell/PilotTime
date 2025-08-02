@@ -206,50 +206,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
         </div>
       </div>
 
-      {/* Session Analytics Details */}
-      {totalSessions > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center">
-            <CheckCircle2 className="mr-2 text-green-500" size={20} />
-            Session Progress Analysis
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{doneCount}</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Completed Sessions</div>
-              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                {formatTime(actualStudyHours)} studied
-              </div>
-            </div>
-            
-            <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{completionRate}%</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Completion Rate</div>
-              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                {totalSessions - doneCount - skippedCount} pending
-              </div>
-            </div>
-            
-            <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{efficiency}%</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Study Efficiency</div>
-              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                {formatTime(plannedHours)} planned
-              </div>
-            </div>
-          </div>
-          
-          {skippedCount > 0 && (
-            <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-              <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                <strong>{skippedCount}</strong> sessions were skipped. Consider adjusting your schedule if this pattern continues.
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
           {(() => {
         const totalAllEstimatedHours = tasks.reduce((sum, task) => sum + task.estimatedHours, 0);
         
