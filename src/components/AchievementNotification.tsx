@@ -90,7 +90,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
       <div className={`
         bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 ${colors.border} 
         ${colors.glow} dark:shadow-none overflow-hidden max-w-sm relative
-        animate-pulse-glow
+        animate-glow
       `}>
         {/* Animated background */}
         <div className={`absolute inset-0 bg-gradient-to-r ${colors.bg} opacity-10 animate-pulse`}></div>
