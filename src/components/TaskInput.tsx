@@ -414,6 +414,55 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
               )}
             </div>
 
+            {/* Work Frequency Preference */}
+            {!formData.isOneTimeTask && (
+              <div className="mt-4">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                  How often would you like to work on this?
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'daily', label: '📅 Daily progress', desc: 'Work a bit each day' },
+                    { value: '3x-week', label: '🗓️ Few times per week', desc: 'Every 2-3 days' },
+                    { value: 'weekly', label: '📆 Weekly sessions', desc: 'Once per week' },
+                    { value: 'flexible', label: '⏰ When I have time', desc: 'Flexible scheduling' }
+                  ].map(option => (
+                    <label key={option.value} className={`flex flex-col p-3 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-white dark:hover:bg-gray-700 cursor-pointer transition-colors ${
+                      formData.targetFrequency === option.value ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600' : ''
+                    }`}>
+                      <input
+                        type="radio"
+                        name="targetFrequency"
+                        value={option.value}
+                        checked={formData.targetFrequency === option.value}
+                        onChange={() => setFormData(f => ({ ...f, targetFrequency: option.value as any }))}
+                        className="sr-only"
+                      />
+                      <div className="text-sm font-medium text-gray-800 dark:text-white">{option.label}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">{option.desc}</div>
+                    </label>
+                  ))}
+                </div>
+                {/* Show warning if frequency conflicts with deadline */}
+                {deadlineConflict.hasConflict && (
+                  <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+                    <div className="flex items-start gap-1">
+                      <span className="text-amber-600 dark:text-amber-400">⚠️</span>
+                      <div>
+                        <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+                        <div className="mt-1">{deadlineConflict.reason}</div>
+                        {deadlineConflict.recommendedFrequency && (
+                          <div className="mt-1">
+                            <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Task Timeline Toggle Button */}
             <div className="mt-4">
               <button
