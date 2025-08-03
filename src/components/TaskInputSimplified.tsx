@@ -323,6 +323,38 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
             </div>
           </div>
 
+          {/* Work Frequency Preference */}
+          {!formData.isOneTimeTask && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                How often would you like to work on this?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'daily', label: '📅 Daily progress', desc: 'Work a bit each day' },
+                  { value: '3x-week', label: '🗓️ Few times per week', desc: 'Every 2-3 days' },
+                  { value: 'weekly', label: '📆 Weekly sessions', desc: 'Once per week' },
+                  { value: 'flexible', label: '⏰ When I have time', desc: 'Flexible scheduling' }
+                ].map(option => (
+                  <label key={option.value} className={`flex flex-col p-3 border border-white/30 dark:border-white/20 rounded-xl hover:bg-white/50 dark:hover:bg-black/30 cursor-pointer transition-colors ${
+                    formData.targetFrequency === option.value ? 'bg-violet-50 dark:bg-violet-900/20 border-violet-300 dark:border-violet-600' : ''
+                  }`}>
+                    <input
+                      type="radio"
+                      name="targetFrequency"
+                      value={option.value}
+                      checked={formData.targetFrequency === option.value}
+                      onChange={() => setFormData(f => ({ ...f, targetFrequency: option.value as any }))}
+                      className="sr-only"
+                    />
+                    <div className="text-sm font-medium text-gray-800 dark:text-white">{option.label}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{option.desc}</div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Advanced Timeline Options */}
           <div>
             <button
