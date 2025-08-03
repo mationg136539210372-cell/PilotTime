@@ -404,19 +404,14 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
               </label>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Check this for short tasks or tasks that need to be done all at once
-                {formData.isOneTimeTask && formData.deadline && (
-                  <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
-                    <div className="text-xs text-blue-700 dark:text-blue-300">
-                      <strong>📅 Scheduling Note:</strong>
-                      {formData.impact === 'high' ? (
-                        <span> High-impact one-sitting tasks are scheduled as early as possible for maximum priority.</span>
-                      ) : (
-                        <span> Low-impact one-sitting tasks are scheduled on their deadline day (respecting buffer days), or the closest available day.</span>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
+              {formData.isOneTimeTask && (
+                <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">
+                    💡 One-sitting tasks will be scheduled as single blocks. Work frequency settings won't apply.
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Task Timeline Toggle Button */}
