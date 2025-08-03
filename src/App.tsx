@@ -848,11 +848,43 @@ function App() {
     };
 
     const handleUpdateFixedCommitment = (commitmentId: string, updates: Partial<FixedCommitment>) => {
+        // Get the original commitment before updates
+        const originalCommitment = fixedCommitments.find(c => c.id === commitmentId);
+
         // First, update the commitment
         let updatedCommitments = fixedCommitments.map(commitment =>
             commitment.id === commitmentId ? { ...commitment, ...updates } : commitment
         );
-        
+
+        // If updating a one-time commitment, first restore any previously overridden recurring commitments
+        if (originalCommitment && !originalCommitment.recurring && originalCommitment.specificDates) {
+            // Restore dates that were previously overridden but are no longer conflicting
+            updatedCommitments = updatedCommitments.map(commitment => {
+                if (!commitment.recurring || !commitment.deletedOccurrences) {
+                    return commitment;
+                }
+
+                // Find dates that were overridden by the original one-time commitment
+                const previouslyOverriddenDates = originalCommitment.specificDates?.filter(date => {
+                    const dayOfWeek = new Date(date).getDay();
+                    return commitment.daysOfWeek.includes(dayOfWeek) &&
+                           commitment.deletedOccurrences?.includes(date);
+                }) || [];
+
+                // Remove these dates from deletedOccurrences (they will be re-added later if still conflicting)
+                if (previouslyOverriddenDates.length > 0) {
+                    return {
+                        ...commitment,
+                        deletedOccurrences: commitment.deletedOccurrences.filter(date =>
+                            !previouslyOverriddenDates.includes(date)
+                        )
+                    };
+                }
+
+                return commitment;
+            });
+        }
+
         // Handle override logic for commitments
         const updatedCommitment = updatedCommitments.find(c => c.id === commitmentId);
         if (updatedCommitment) {
