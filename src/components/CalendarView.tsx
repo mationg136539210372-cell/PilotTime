@@ -827,13 +827,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
       {/* Legends */}
       <div className="mb-4 flex flex-wrap gap-4">
-        {/* Task Category Legends */}
-        {taskCategories.map(category => (
+        {/* Task Category Legends - Only show default categories that exist in tasks */}
+        {taskCategories.filter(category => defaultCategories.includes(category)).map(category => (
           <div key={category} className="flex items-center space-x-2">
             <span style={{ background: categoryColorMap[category], width: 16, height: 16, borderRadius: '50%', display: 'inline-block', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}></span>
             <span className="text-sm text-gray-700 font-medium dark:text-gray-300 capitalize">{category}</span>
         </div>
         ))}
+        {/* Show uncategorized legend only if there are custom/uncategorized tasks */}
+        {(taskCategories.some(category => !defaultCategories.includes(category)) || tasks.some(task => !task.category)) && (
+          <div className="flex items-center space-x-2">
+            <span style={{ background: colorSettings.uncategorizedTaskColor, width: 16, height: 16, borderRadius: '50%', display: 'inline-block', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}></span>
+            <span className="text-sm text-gray-700 font-medium dark:text-gray-300">Uncategorized</span>
+          </div>
+        )}
         {/* Default Category Legends (for categories not yet used) */}
         {['Academics', 'Personal', 'Learning', 'Home', 'Finance', 'Organization', 'Work', 'Health'].filter(category => !taskCategories.includes(category)).map(category => {
           let color = '#64748b'; // Default gray
