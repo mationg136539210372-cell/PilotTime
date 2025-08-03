@@ -17,6 +17,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [animationsActive, setAnimationsActive] = useState(true);
 
   useEffect(() => {
     // Entrance animation
