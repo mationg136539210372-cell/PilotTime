@@ -17,7 +17,7 @@ import {
 } from './utils/gamification';
 
 import Dashboard from './components/Dashboard';
-import TaskInput from './components/TaskInput';
+import TaskInput from './components/TaskInputSimplified';
 import TaskList from './components/TaskList';
 import StudyPlanView from './components/StudyPlanView';
 import StudyTimer from './components/StudyTimer';
@@ -2432,7 +2432,7 @@ function App() {
                                                         <strong className="text-purple-600 dark:text-purple-400">Session Settings:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
                                                             <li>• <strong>Minimum Session Length:</strong> Shortest study session (prevents tiny sessions)</li>
-                                                            <li>��� <strong>Buffer Time:</strong> Rest time between back-to-back sessions</li>
+                                                            <li>• <strong>Buffer Time:</strong> Rest time between back-to-back sessions</li>
                                                         </ul>
                                                     </div>
                                                     <div>
