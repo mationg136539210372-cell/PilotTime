@@ -34,6 +34,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
   }, [autoHide, duration]);
 
   const handleDismiss = () => {
+    setAnimationsActive(false); // Stop all animations immediately
     setIsLeaving(true);
     setTimeout(() => {
       onDismiss();
