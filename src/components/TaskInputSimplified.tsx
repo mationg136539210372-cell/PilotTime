@@ -277,6 +277,13 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                 Complete this task in one sitting (don't divide into sessions)
               </span>
             </label>
+            {formData.isOneTimeTask && (
+              <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  💡 One-sitting tasks will be scheduled as single blocks. Work frequency settings won't apply.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Task Impact */}
