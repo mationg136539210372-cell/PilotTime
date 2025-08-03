@@ -769,7 +769,42 @@ function App() {
     };
 
     const handleDeleteFixedCommitment = (commitmentId: string) => {
-        const updatedCommitments = fixedCommitments.filter(commitment => commitment.id !== commitmentId);
+        // Find the commitment being deleted
+        const commitmentToDelete = fixedCommitments.find(c => c.id === commitmentId);
+
+        // Remove the commitment from the array
+        let updatedCommitments = fixedCommitments.filter(commitment => commitment.id !== commitmentId);
+
+        // If deleting a one-time commitment, restore any overridden recurring commitments
+        if (commitmentToDelete && !commitmentToDelete.recurring && commitmentToDelete.specificDates) {
+            // Find recurring commitments that may have been overridden by this one-time commitment
+            updatedCommitments = updatedCommitments.map(commitment => {
+                if (!commitment.recurring || !commitment.deletedOccurrences) {
+                    return commitment; // Skip non-recurring or commitments without deleted occurrences
+                }
+
+                // Check if this recurring commitment has any dates that were overridden by the deleted one-time commitment
+                const deletedDatesToRestore = commitmentToDelete.specificDates?.filter(date => {
+                    const dayOfWeek = new Date(date).getDay();
+                    // Check if the date matches this recurring commitment's schedule and is in deletedOccurrences
+                    return commitment.daysOfWeek.includes(dayOfWeek) &&
+                           commitment.deletedOccurrences?.includes(date);
+                }) || [];
+
+                // If there are dates to restore, remove them from deletedOccurrences
+                if (deletedDatesToRestore.length > 0) {
+                    return {
+                        ...commitment,
+                        deletedOccurrences: commitment.deletedOccurrences.filter(date =>
+                            !deletedDatesToRestore.includes(date)
+                        )
+                    };
+                }
+
+                return commitment;
+            });
+        }
+
         setFixedCommitments(updatedCommitments);
         
         // Regenerate study plan with updated commitments
