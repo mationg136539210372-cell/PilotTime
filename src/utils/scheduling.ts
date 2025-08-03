@@ -599,26 +599,56 @@ export const generateNewStudyPlan = (
         
         const combinedSessions: StudySession[] = [];
         
-        // Combine sessions for each task
+        // Combine sessions for each task - only if they are truly adjacent
         Object.entries(sessionsByTask).forEach(([taskId, sessions]) => {
           if (sessions.length > 1) {
             // Sort sessions by start time
             sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
-            
-            // Combine all sessions into one
-            const firstSession = sessions[0];
-            const lastSession = sessions[sessions.length - 1];
-            const totalHours = sessions.reduce((sum, session) => sum + session.allocatedHours, 0);
-            
-            const combinedSession: StudySession = {
-              ...firstSession,
-              startTime: firstSession.startTime,
-              endTime: lastSession.endTime,
-              allocatedHours: totalHours,
-              sessionNumber: 1 // Combined session gets number 1
-            };
-            
-            combinedSessions.push(combinedSession);
+
+            // Group adjacent sessions together
+            let currentGroup: StudySession[] = [sessions[0]];
+            const sessionGroups: StudySession[][] = [];
+
+            for (let i = 1; i < sessions.length; i++) {
+              const currentSession = sessions[i];
+              const lastInGroup = currentGroup[currentGroup.length - 1];
+
+              // Check if sessions are adjacent (current starts when last ends)
+              if (currentSession.startTime === lastInGroup.endTime) {
+                currentGroup.push(currentSession);
+              } else {
+                // Not adjacent, start a new group
+                sessionGroups.push(currentGroup);
+                currentGroup = [currentSession];
+              }
+            }
+            // Add the last group
+            sessionGroups.push(currentGroup);
+
+            // Combine each group of adjacent sessions
+            sessionGroups.forEach((group, groupIndex) => {
+              if (group.length > 1) {
+                const firstSession = group[0];
+                const lastSession = group[group.length - 1];
+                const totalHours = group.reduce((sum, session) => sum + session.allocatedHours, 0);
+
+                const combinedSession: StudySession = {
+                  ...firstSession,
+                  startTime: firstSession.startTime,
+                  endTime: lastSession.endTime,
+                  allocatedHours: totalHours,
+                  sessionNumber: groupIndex + 1
+                };
+
+                combinedSessions.push(combinedSession);
+              } else {
+                // Single session in group, keep as is but update session number
+                combinedSessions.push({
+                  ...group[0],
+                  sessionNumber: groupIndex + 1
+                });
+              }
+            });
           } else {
             // Single session, keep as is
             combinedSessions.push(sessions[0]);
