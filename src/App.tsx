@@ -1874,18 +1874,11 @@ function App() {
                             : 'none'} />
                         </button>
                         <button
-                            className={`relative p-3 backdrop-blur-lg border-2 rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-xl ${
-                                gamificationData.recentUnlocks.length > 0
-                                    ? 'bg-yellow-500/15 border-yellow-400/40 shadow-xl shadow-yellow-500/20 text-yellow-600 dark:text-yellow-400 animate-pulse hover:bg-yellow-500/25'
-                                    : 'bg-white/15 dark:bg-gray-800/20 border-white/30 dark:border-gray-600/30 text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30'
-                            }`}
+                            className="relative p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
                             onClick={() => setShowGamificationPanel(!showGamificationPanel)}
-                            title={`Progress & Achievements${gamificationData.recentUnlocks.length > 0 ? ' (New!)' : ''}`}
+                            title="Progress & Achievements"
                         >
                             <Trophy size={20} />
-                            {gamificationData.recentUnlocks.length > 0 && (
-                                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>
-                            )}
                         </button>
                         <button
                             className="p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
