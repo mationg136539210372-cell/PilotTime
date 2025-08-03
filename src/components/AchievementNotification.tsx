@@ -141,7 +141,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 
           {/* Achievement Details */}
           <div className="flex items-center space-x-4">
-            <div className="text-4xl animate-bounce">
+            <div className={`text-4xl ${animationsActive ? 'animate-bounce' : ''}`}>
               {achievement.icon}
             </div>
             
