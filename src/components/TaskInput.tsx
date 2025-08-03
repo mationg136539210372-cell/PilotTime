@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Task, UserSettings } from '../types';
 import { checkFrequencyDeadlineConflict } from '../utils/scheduling';
+import TimeEstimationModal from './TimeEstimationModal';
 
 interface TaskInputProps {
   onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
@@ -122,6 +123,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   const [showTaskTimeline, setShowTaskTimeline] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showImportanceHelpModal, setShowImportanceHelpModal] = useState(false);
+  const [showTimeEstimationModal, setShowTimeEstimationModal] = useState(false);
   const [estBase, setEstBase] = useState(formData.estimatedHours || '1');
   // Remove estAdjusted state, use only local let estAdjusted
   const estimationHelperRef = useRef<HTMLDivElement>(null);
@@ -129,6 +131,27 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   // Estimation Helper state
   const [estComplexity, setEstComplexity] = useState('');
   const [estFactors, setEstFactors] = useState<string[]>([]);
+
+  // Auto-detect deadline type based on whether deadline is set
+  useEffect(() => {
+    if (formData.deadline && formData.deadline.trim() !== '') {
+      // User set a deadline - keep current deadlineType or default to 'hard'
+      if (formData.deadlineType === 'none') {
+        setFormData(f => ({ ...f, deadlineType: 'hard' }));
+      }
+    } else {
+      // No deadline set - automatically set to 'none'
+      setFormData(f => ({ ...f, deadlineType: 'none' }));
+    }
+  }, [formData.deadline]);
+
+  // Reset conflicting options when one-sitting task is toggled
+  useEffect(() => {
+    if (formData.isOneTimeTask) {
+      // One-sitting tasks don't need frequency preferences
+      setFormData(f => ({ ...f, targetFrequency: 'daily' }));
+    }
+  }, [formData.isOneTimeTask]);
 
   // When task type changes, reset helper state
   useEffect(() => {
@@ -381,20 +404,64 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
               </label>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Check this for short tasks or tasks that need to be done all at once
-                {formData.isOneTimeTask && formData.deadline && (
-                  <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
-                    <div className="text-xs text-blue-700 dark:text-blue-300">
-                      <strong>📅 Scheduling Note:</strong>
-                      {formData.impact === 'high' ? (
-                        <span> High-impact one-sitting tasks are scheduled as early as possible for maximum priority.</span>
-                      ) : (
-                        <span> Low-impact one-sitting tasks are scheduled on their deadline day (respecting buffer days), or the closest available day.</span>
-                      )}
+              </div>
+              {formData.isOneTimeTask && (
+                <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
+                  <div className="text-xs text-blue-700 dark:text-blue-300">
+                    💡 One-sitting tasks will be scheduled as single blocks. Work frequency settings won't apply.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Work Frequency Preference */}
+            {!formData.isOneTimeTask && (
+              <div className="mt-4">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                  How often would you like to work on this?
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'daily', label: '📅 Daily progress', desc: 'Work a bit each day' },
+                    { value: '3x-week', label: '🗓️ Few times per week', desc: 'Every 2-3 days' },
+                    { value: 'weekly', label: '📆 Weekly sessions', desc: 'Once per week' },
+                    { value: 'flexible', label: '⏰ When I have time', desc: 'Flexible scheduling' }
+                  ].map(option => (
+                    <label key={option.value} className={`flex flex-col p-3 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-white dark:hover:bg-gray-700 cursor-pointer transition-colors ${
+                      formData.targetFrequency === option.value ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600' : ''
+                    }`}>
+                      <input
+                        type="radio"
+                        name="targetFrequency"
+                        value={option.value}
+                        checked={formData.targetFrequency === option.value}
+                        onChange={() => setFormData(f => ({ ...f, targetFrequency: option.value as any }))}
+                        className="sr-only"
+                      />
+                      <div className="text-sm font-medium text-gray-800 dark:text-white">{option.label}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">{option.desc}</div>
+                    </label>
+                  ))}
+                </div>
+                {/* Show warning if frequency conflicts with deadline */}
+                {deadlineConflict.hasConflict && (
+                  <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+                    <div className="flex items-start gap-1">
+                      <span className="text-amber-600 dark:text-amber-400">⚠️</span>
+                      <div>
+                        <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+                        <div className="mt-1">{deadlineConflict.reason}</div>
+                        {deadlineConflict.recommendedFrequency && (
+                          <div className="mt-1">
+                            <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
             {/* Task Timeline Toggle Button */}
             <div className="mt-4">
@@ -404,7 +471,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                 className="flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors"
               >
                 {showTaskTimeline ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                Advanced Timeline Options
+                Advanced Options
               </button>
 
               {/* Task Timeline Section - Collapsible */}
@@ -744,107 +811,24 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Modifiers (contextual)</label>
                 </div>
               )}
-              {/* Estimation Helper (contextual, placeholder for now) */}
-              {showEstimationHelper && (
-                <div ref={estimationHelperRef} className="mt-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 max-w-lg mx-auto">
-                  <div className="font-semibold text-gray-800 dark:text-white mb-2">Estimation Helper</div>
-                  {formData.taskType && (
-                    <div className="mb-2 text-blue-700 dark:text-blue-300 font-semibold">Task Type: {formData.taskType}</div>
-                  )}
-                  {formData.taskType ? (
-                    <>
-                      <div className="mb-2 text-sm text-gray-700 dark:text-gray-200">
-                        Enter your best guess for how long this task would take if it were straightforward. This helps us personalize your final estimate.
-                      </div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Base estimate:</label>
-                        <div className="flex gap-1 items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={estBase}
-                            onChange={e => setEstBase(e.target.value)}
-                            className="w-16 border rounded px-2 py-1 text-base bg-white dark:bg-gray-800 dark:text-white"
-                            placeholder="0"
-                          />
-                          <span className="text-gray-600 dark:text-gray-300 text-sm">h</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="59"
-                            value="0"
-                            className="w-16 border rounded px-2 py-1 text-base bg-white dark:bg-gray-800 dark:text-white"
-                            placeholder="0"
-                            disabled
-                          />
-                          <span className="text-gray-600 dark:text-gray-300 text-sm">m</span>
-                        </div>
-                      </div>
-                      {/* Complexity radios */}
-                      <div className="mb-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Complexity:</label>
-                        <div className="flex flex-col gap-1">
-                          {estConfig.complexity.map(opt => (
-                            <label key={opt.key} className="flex items-center gap-2">
-                              <input
-                                type="radio"
-                                name="est-complexity"
-                                value={opt.key}
-                                checked={estComplexity === opt.key}
-                                onChange={() => setEstComplexity(opt.key)}
-                              />
-                              <span>{opt.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Factors checkboxes */}
-                      <div className="mb-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Factors:</label>
-                        <div className="flex flex-col gap-1">
-                          {estConfig.factors.map(factor => (
-                            <label key={factor.key} className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={estFactors.includes(factor.key)}
-                                onChange={() => setEstFactors(f => f.includes(factor.key) ? f.filter(k => k !== factor.key) : [...f, factor.key])}
-                              />
-                              <span>{factor.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="mb-2 font-medium text-gray-800 dark:text-white">Adjusted estimate: {Number(estAdjusted).toFixed(1)} hours</div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          type="button"
-                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
-                          onClick={() => {
-                            const { hours, minutes } = convertFromDecimalHours(estAdjusted);
-                            setFormData(f => ({ 
-                              ...f, 
-                              estimatedHours: hours, 
-                              estimatedMinutes: minutes 
-                            }));
-                            setShowEstimationHelper(false);
-                          }}
-                        >
-                          Use This
-                        </button>
-                        <button
-                          type="button"
-                          className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                          onClick={() => setShowEstimationHelper(false)}
-                        >
-                          Keep Original
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-gray-600 dark:text-gray-300 italic">Select a task type to use the estimation helper.</div>
-                  )}
-                </div>
-              )}
+              {/* Enhanced Estimation Helper */}
+              <EnhancedEstimationHelper
+                taskType={formData.taskType || ''}
+                category={formData.category || ''}
+                initialEstimate={convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes)}
+                onEstimateUpdate={(hours) => {
+                  const { hours: h, minutes: m } = convertFromDecimalHours(hours);
+                  setFormData(f => ({
+                    ...f,
+                    estimatedHours: h.toString(),
+                    estimatedMinutes: m.toString()
+                  }));
+                  setShowEstimationHelper(false);
+                }}
+                onClose={() => setShowEstimationHelper(false)}
+                deadline={formData.deadline}
+                isVisible={showEstimationHelper}
+              />
             </div>
           )}
           </div>

@@ -525,19 +525,45 @@ export const generateNewStudyPlan = (
           
           if (sessionLength >= minSessionLength) {
             const roundedSessionLength = Math.round(sessionLength * 60) / 60;
-            dayPlan.plannedTasks.push({
-              taskId: task.id,
-              scheduledTime: `${date}`,
-              startTime: '',
-              endTime: '',
-              allocatedHours: roundedSessionLength,
-              sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
-              isFlexible: true,
-              status: 'scheduled'
+
+            // Find available time slot for this session to prevent overlaps
+            const commitmentsForDay = fixedCommitments.filter(commitment => {
+              if (commitment.recurring) {
+                return commitment.daysOfWeek.includes(new Date(date).getDay());
+              } else {
+                return commitment.specificDates?.includes(date) || false;
+              }
             });
-            dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
-            dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
-            distributedThisRound = Math.round((distributedThisRound + roundedSessionLength) * 60) / 60;
+
+            const timeSlot = findNextAvailableTimeSlot(
+              roundedSessionLength,
+              dayPlan.plannedTasks,
+              commitmentsForDay,
+              settings.studyWindowStartHour || 6,
+              settings.studyWindowEndHour || 23,
+              settings.bufferTimeBetweenSessions || 0,
+              date
+            );
+
+            // Only add the session if we found a valid time slot
+            if (timeSlot) {
+              dayPlan.plannedTasks.push({
+                taskId: task.id,
+                scheduledTime: `${date}`,
+                startTime: timeSlot.start,
+                endTime: timeSlot.end,
+                allocatedHours: roundedSessionLength,
+                sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
+                isFlexible: true,
+                status: 'scheduled'
+              });
+              dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
+              dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
+              distributedThisRound = Math.round((distributedThisRound + roundedSessionLength) * 60) / 60;
+            } else {
+              // No available time slot found, skip this distribution
+              console.log(`No available time slot found for ${roundedSessionLength} hours on ${date}`);
+            }
           }
         }
         
@@ -573,26 +599,56 @@ export const generateNewStudyPlan = (
         
         const combinedSessions: StudySession[] = [];
         
-        // Combine sessions for each task
+        // Combine sessions for each task - only if they are truly adjacent
         Object.entries(sessionsByTask).forEach(([taskId, sessions]) => {
           if (sessions.length > 1) {
             // Sort sessions by start time
             sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
-            
-            // Combine all sessions into one
-            const firstSession = sessions[0];
-            const lastSession = sessions[sessions.length - 1];
-            const totalHours = sessions.reduce((sum, session) => sum + session.allocatedHours, 0);
-            
-            const combinedSession: StudySession = {
-              ...firstSession,
-              startTime: firstSession.startTime,
-              endTime: lastSession.endTime,
-              allocatedHours: totalHours,
-              sessionNumber: 1 // Combined session gets number 1
-            };
-            
-            combinedSessions.push(combinedSession);
+
+            // Group adjacent sessions together
+            let currentGroup: StudySession[] = [sessions[0]];
+            const sessionGroups: StudySession[][] = [];
+
+            for (let i = 1; i < sessions.length; i++) {
+              const currentSession = sessions[i];
+              const lastInGroup = currentGroup[currentGroup.length - 1];
+
+              // Check if sessions are adjacent (current starts when last ends)
+              if (currentSession.startTime === lastInGroup.endTime) {
+                currentGroup.push(currentSession);
+              } else {
+                // Not adjacent, start a new group
+                sessionGroups.push(currentGroup);
+                currentGroup = [currentSession];
+              }
+            }
+            // Add the last group
+            sessionGroups.push(currentGroup);
+
+            // Combine each group of adjacent sessions
+            sessionGroups.forEach((group, groupIndex) => {
+              if (group.length > 1) {
+                const firstSession = group[0];
+                const lastSession = group[group.length - 1];
+                const totalHours = group.reduce((sum, session) => sum + session.allocatedHours, 0);
+
+                const combinedSession: StudySession = {
+                  ...firstSession,
+                  startTime: firstSession.startTime,
+                  endTime: lastSession.endTime,
+                  allocatedHours: totalHours,
+                  sessionNumber: groupIndex + 1
+                };
+
+                combinedSessions.push(combinedSession);
+              } else {
+                // Single session in group, keep as is but update session number
+                combinedSessions.push({
+                  ...group[0],
+                  sessionNumber: groupIndex + 1
+                });
+              }
+            });
           } else {
             // Single session, keep as is
             combinedSessions.push(sessions[0]);
@@ -704,6 +760,13 @@ export const generateNewStudyPlan = (
     // Combine sessions of the same task on the same day
     combineSessionsOnSameDay(studyPlans);
     
+    // Validate scheduling for conflicts after all redistribution and combining
+    studyPlans.forEach(plan => {
+      if (!validateSessionTimes(plan.plannedTasks, fixedCommitments, plan.date)) {
+        console.warn(`Scheduling conflicts detected on ${plan.date} after redistribution. Some sessions may overlap.`);
+      }
+    });
+
     // Final pass: handle any remaining unscheduled hours and create suggestions
     const suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> = [];
     let taskScheduledHours: { [taskId: string]: number } = {};

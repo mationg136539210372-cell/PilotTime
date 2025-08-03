@@ -4,6 +4,7 @@ import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerStat
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
 import { generateNewStudyPlan, getUnscheduledMinutesForTasks, getLocalDateString, redistributeAfterTaskDeletion, redistributeMissedSessionsWithFeedback, checkCommitmentConflicts, redistributeMissedSessionsEnhanced } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
+import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import { RedistributionOptions } from './types';
 import {
   ACHIEVEMENTS,
@@ -16,7 +17,7 @@ import {
 } from './utils/gamification';
 
 import Dashboard from './components/Dashboard';
-import TaskInput from './components/TaskInput';
+import TaskInput from './components/TaskInputSimplified';
 import TaskList from './components/TaskList';
 import StudyPlanView from './components/StudyPlanView';
 import StudyTimer from './components/StudyTimer';
@@ -769,7 +770,42 @@ function App() {
     };
 
     const handleDeleteFixedCommitment = (commitmentId: string) => {
-        const updatedCommitments = fixedCommitments.filter(commitment => commitment.id !== commitmentId);
+        // Find the commitment being deleted
+        const commitmentToDelete = fixedCommitments.find(c => c.id === commitmentId);
+
+        // Remove the commitment from the array
+        let updatedCommitments = fixedCommitments.filter(commitment => commitment.id !== commitmentId);
+
+        // If deleting a one-time commitment, restore any overridden recurring commitments
+        if (commitmentToDelete && !commitmentToDelete.recurring && commitmentToDelete.specificDates) {
+            // Find recurring commitments that may have been overridden by this one-time commitment
+            updatedCommitments = updatedCommitments.map(commitment => {
+                if (!commitment.recurring || !commitment.deletedOccurrences) {
+                    return commitment; // Skip non-recurring or commitments without deleted occurrences
+                }
+
+                // Check if this recurring commitment has any dates that were overridden by the deleted one-time commitment
+                const deletedDatesToRestore = commitmentToDelete.specificDates?.filter(date => {
+                    const dayOfWeek = new Date(date).getDay();
+                    // Check if the date matches this recurring commitment's schedule and is in deletedOccurrences
+                    return commitment.daysOfWeek.includes(dayOfWeek) &&
+                           commitment.deletedOccurrences?.includes(date);
+                }) || [];
+
+                // If there are dates to restore, remove them from deletedOccurrences
+                if (deletedDatesToRestore.length > 0) {
+                    return {
+                        ...commitment,
+                        deletedOccurrences: commitment.deletedOccurrences.filter(date =>
+                            !deletedDatesToRestore.includes(date)
+                        )
+                    };
+                }
+
+                return commitment;
+            });
+        }
+
         setFixedCommitments(updatedCommitments);
         
         // Regenerate study plan with updated commitments
@@ -813,11 +849,43 @@ function App() {
     };
 
     const handleUpdateFixedCommitment = (commitmentId: string, updates: Partial<FixedCommitment>) => {
+        // Get the original commitment before updates
+        const originalCommitment = fixedCommitments.find(c => c.id === commitmentId);
+
         // First, update the commitment
         let updatedCommitments = fixedCommitments.map(commitment =>
             commitment.id === commitmentId ? { ...commitment, ...updates } : commitment
         );
-        
+
+        // If updating a one-time commitment, first restore any previously overridden recurring commitments
+        if (originalCommitment && !originalCommitment.recurring && originalCommitment.specificDates) {
+            // Restore dates that were previously overridden but are no longer conflicting
+            updatedCommitments = updatedCommitments.map(commitment => {
+                if (!commitment.recurring || !commitment.deletedOccurrences) {
+                    return commitment;
+                }
+
+                // Find dates that were overridden by the original one-time commitment
+                const previouslyOverriddenDates = originalCommitment.specificDates?.filter(date => {
+                    const dayOfWeek = new Date(date).getDay();
+                    return commitment.daysOfWeek.includes(dayOfWeek) &&
+                           commitment.deletedOccurrences?.includes(date);
+                }) || [];
+
+                // Remove these dates from deletedOccurrences (they will be re-added later if still conflicting)
+                if (previouslyOverriddenDates.length > 0) {
+                    return {
+                        ...commitment,
+                        deletedOccurrences: commitment.deletedOccurrences.filter(date =>
+                            !previouslyOverriddenDates.includes(date)
+                        )
+                    };
+                }
+
+                return commitment;
+            });
+        }
+
         // Handle override logic for commitments
         const updatedCommitment = updatedCommitments.find(c => c.id === commitmentId);
         if (updatedCommitment) {
@@ -1164,6 +1232,41 @@ function App() {
         // Convert seconds to hours for calculation
         const hoursSpent = timeSpent / 3600;
 
+        // Record estimation data for learning
+        const completedTask = tasks.find(t => t.id === taskId);
+        if (completedTask && lastTimedSession) {
+            const session = studyPlans
+                .find(p => p.date === lastTimedSession.planDate)
+                ?.plannedTasks.find(s => s.taskId === taskId && s.sessionNumber === lastTimedSession.sessionNumber);
+
+            if (session) {
+                // Track estimation accuracy for this session
+                enhancedEstimationTracker.recordTaskCompletion(
+                    session.allocatedHours,
+                    hoursSpent,
+                    {
+                        taskType: completedTask.category || 'Other',
+                        category: completedTask.category || 'Other',
+                        complexity: 'medium', // TODO: Store complexity when task is created
+                        timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening',
+                        dayOfWeek: new Date().getDay(),
+                        isWeekend: [0, 6].includes(new Date().getDay()),
+                        currentWorkload: 'medium', // TODO: Calculate based on schedule density
+                        energyLevel: 'medium', // TODO: Allow user to rate this
+                        hasDeadlinePressure: completedTask.deadline ? new Date(completedTask.deadline).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 : false,
+                        isNewDomain: false, // TODO: Track this
+                        requiresCreativity: false, // TODO: Track this
+                        requiresResearch: false, // TODO: Track this
+                        requiresCollaboration: false, // TODO: Track this
+                        involvesTechnology: false, // TODO: Track this
+                        similarTasksCompleted: 0, // TODO: Calculate this
+                        recentAccuracy: 0.85, // TODO: Calculate this
+                        availableTimeSlot: session.allocatedHours
+                    }
+                );
+            }
+        }
+
         // Update the task's estimated hours based on actual time spent
         setTasks(prevTasks =>
             prevTasks.map(task => {
@@ -1225,7 +1328,6 @@ function App() {
         }
 
         // Clear current task if it's completed
-        const completedTask = tasks.find(task => task.id === taskId);
         if (completedTask && (completedTask.estimatedHours - hoursSpent) <= 0) {
             setCurrentTask(null);
         }

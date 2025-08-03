@@ -17,6 +17,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [animationsActive, setAnimationsActive] = useState(true);
 
   useEffect(() => {
     // Entrance animation
@@ -33,6 +34,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
   }, [autoHide, duration]);
 
   const handleDismiss = () => {
+    setAnimationsActive(false); // Stop all animations immediately
     setIsLeaving(true);
     setTimeout(() => {
       onDismiss();
@@ -88,16 +90,16 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
         : 'translate-x-full opacity-0 scale-95'
     }`}>
       <div className={`
-        bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 ${colors.border} 
+        bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 ${colors.border}
         ${colors.glow} dark:shadow-none overflow-hidden max-w-sm relative
-        animate-pulse-glow
+        ${animationsActive ? 'animate-glow' : ''}
       `}>
         {/* Animated background */}
-        <div className={`absolute inset-0 bg-gradient-to-r ${colors.bg} opacity-10 animate-pulse`}></div>
-        
+        <div className={`absolute inset-0 bg-gradient-to-r ${colors.bg} opacity-10 ${animationsActive ? 'animate-pulse' : ''}`}></div>
+
         {/* Sparkle effects */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(6)].map((_, i) => (
+          {animationsActive && [...Array(6)].map((_, i) => (
             <Sparkles
               key={i}
               size={12}
@@ -139,7 +141,7 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
 
           {/* Achievement Details */}
           <div className="flex items-center space-x-4">
-            <div className="text-4xl animate-bounce">
+            <div className={`text-4xl ${animationsActive ? 'animate-bounce' : ''}`}>
               {achievement.icon}
             </div>
             
