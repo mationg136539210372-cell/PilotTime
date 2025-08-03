@@ -745,107 +745,24 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Modifiers (contextual)</label>
                 </div>
               )}
-              {/* Estimation Helper (contextual, placeholder for now) */}
-              {showEstimationHelper && (
-                <div ref={estimationHelperRef} className="mt-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 max-w-lg mx-auto">
-                  <div className="font-semibold text-gray-800 dark:text-white mb-2">Estimation Helper</div>
-                  {formData.taskType && (
-                    <div className="mb-2 text-blue-700 dark:text-blue-300 font-semibold">Task Type: {formData.taskType}</div>
-                  )}
-                  {formData.taskType ? (
-                    <>
-                      <div className="mb-2 text-sm text-gray-700 dark:text-gray-200">
-                        Enter your best guess for how long this task would take if it were straightforward. This helps us personalize your final estimate.
-                      </div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Base estimate:</label>
-                        <div className="flex gap-1 items-center">
-                          <input
-                            type="number"
-                            min="0"
-                            value={estBase}
-                            onChange={e => setEstBase(e.target.value)}
-                            className="w-16 border rounded px-2 py-1 text-base bg-white dark:bg-gray-800 dark:text-white"
-                            placeholder="0"
-                          />
-                          <span className="text-gray-600 dark:text-gray-300 text-sm">h</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="59"
-                            value="0"
-                            className="w-16 border rounded px-2 py-1 text-base bg-white dark:bg-gray-800 dark:text-white"
-                            placeholder="0"
-                            disabled
-                          />
-                          <span className="text-gray-600 dark:text-gray-300 text-sm">m</span>
-                        </div>
-                      </div>
-                      {/* Complexity radios */}
-                      <div className="mb-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Complexity:</label>
-                        <div className="flex flex-col gap-1">
-                          {estConfig.complexity.map(opt => (
-                            <label key={opt.key} className="flex items-center gap-2">
-                              <input
-                                type="radio"
-                                name="est-complexity"
-                                value={opt.key}
-                                checked={estComplexity === opt.key}
-                                onChange={() => setEstComplexity(opt.key)}
-                              />
-                              <span>{opt.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Factors checkboxes */}
-                      <div className="mb-2">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Factors:</label>
-                        <div className="flex flex-col gap-1">
-                          {estConfig.factors.map(factor => (
-                            <label key={factor.key} className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={estFactors.includes(factor.key)}
-                                onChange={() => setEstFactors(f => f.includes(factor.key) ? f.filter(k => k !== factor.key) : [...f, factor.key])}
-                              />
-                              <span>{factor.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="mb-2 font-medium text-gray-800 dark:text-white">Adjusted estimate: {Number(estAdjusted).toFixed(1)} hours</div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          type="button"
-                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
-                          onClick={() => {
-                            const { hours, minutes } = convertFromDecimalHours(estAdjusted);
-                            setFormData(f => ({ 
-                              ...f, 
-                              estimatedHours: hours, 
-                              estimatedMinutes: minutes 
-                            }));
-                            setShowEstimationHelper(false);
-                          }}
-                        >
-                          Use This
-                        </button>
-                        <button
-                          type="button"
-                          className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-                          onClick={() => setShowEstimationHelper(false)}
-                        >
-                          Keep Original
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-gray-600 dark:text-gray-300 italic">Select a task type to use the estimation helper.</div>
-                  )}
-                </div>
-              )}
+              {/* Enhanced Estimation Helper */}
+              <EnhancedEstimationHelper
+                taskType={formData.taskType || ''}
+                category={formData.category || ''}
+                initialEstimate={convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes)}
+                onEstimateUpdate={(hours) => {
+                  const { hours: h, minutes: m } = convertFromDecimalHours(hours);
+                  setFormData(f => ({
+                    ...f,
+                    estimatedHours: h.toString(),
+                    estimatedMinutes: m.toString()
+                  }));
+                  setShowEstimationHelper(false);
+                }}
+                onClose={() => setShowEstimationHelper(false)}
+                deadline={formData.deadline}
+                isVisible={showEstimationHelper}
+              />
             </div>
           )}
           </div>
