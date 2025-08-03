@@ -173,19 +173,33 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Task Title */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
-              Task Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.title}
-              onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
-              className="w-full px-4 py-3 backdrop-blur-sm bg-white/70 dark:bg-black/20 border border-white/30 dark:border-white/20 rounded-xl text-base focus:ring-2 focus:ring-violet-500 focus:border-transparent dark:text-white transition-all duration-300"
-              placeholder="e.g., Write project report"
-            />
+          {/* Task Title & Description - Compact Layout */}
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
+                Task Title <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.title}
+                onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
+                className="w-full px-4 py-3 backdrop-blur-sm bg-white/70 dark:bg-black/20 border border-white/30 dark:border-white/20 rounded-xl text-base focus:ring-2 focus:ring-violet-500 focus:border-transparent dark:text-white transition-all duration-300"
+                placeholder="e.g., Write project report"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                Description <span className="text-gray-400">(Optional)</span>
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
+                className="w-full px-3 py-2 backdrop-blur-sm bg-white/70 dark:bg-black/20 border border-white/30 dark:border-white/20 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent dark:text-white transition-all duration-300 resize-none"
+                placeholder="Add any additional details..."
+                rows={2}
+              />
+            </div>
           </div>
 
           {/* Category */}
