@@ -1328,7 +1328,6 @@ function App() {
         }
 
         // Clear current task if it's completed
-        const completedTask = tasks.find(task => task.id === taskId);
         if (completedTask && (completedTask.estimatedHours - hoursSpent) <= 0) {
             setCurrentTask(null);
         }
@@ -2433,7 +2432,7 @@ function App() {
                                                         <strong className="text-purple-600 dark:text-purple-400">Session Settings:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
                                                             <li>• <strong>Minimum Session Length:</strong> Shortest study session (prevents tiny sessions)</li>
-                                                            <li>• <strong>Buffer Time:</strong> Rest time between back-to-back sessions</li>
+                                                            <li>��� <strong>Buffer Time:</strong> Rest time between back-to-back sessions</li>
                                                         </ul>
                                                     </div>
                                                     <div>
