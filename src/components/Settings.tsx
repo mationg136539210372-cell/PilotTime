@@ -544,6 +544,12 @@ const Settings: React.FC<SettingsProps> = ({
                 <div><strong>Even Distribution:</strong> All tasks spread equally across available time</div>
                 <div><strong>Balanced Priority:</strong> Important tasks get priority but are evenly distributed within their tier</div>
               </div>
+              <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-3 border-blue-400">
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  <strong>Note:</strong> Only the "Evenly Distributed" mode accounts for task frequency preferences.
+                  Switching to other modes will prioritize tasks based on importance/urgency instead of frequency settings.
+                </p>
+              </div>
             </div>
           </div>
         </div>

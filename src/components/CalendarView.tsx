@@ -57,7 +57,7 @@ const CATEGORY_COLORS = [
   '#a21caf', // Purple
   '#14b8a6', // Teal
 ];
-const DEFAULT_UNCATEGORIZED_TASK_COLOR = '#d97706'; // Light brown for uncategorized tasks
+const DEFAULT_UNCATEGORIZED_TASK_COLOR = '#9ca3af'; // Light gray for uncategorized tasks
 
 
 
@@ -431,12 +431,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
   });
   
-  // Also add any custom categories from tasks that aren't in the default list
+  // Map any custom categories from tasks that aren't in the default list to uncategorized color
   taskCategories.forEach((category) => {
     if (!defaultCategories.includes(category)) {
-      // Use palette for unknown categories
-      const idx = Object.keys(categoryColorMap).length;
-      categoryColorMap[category] = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+      // Use uncategorized color for unknown categories instead of creating new legend entries
+      categoryColorMap[category] = colorSettings.uncategorizedTaskColor;
     }
   });
 
@@ -828,8 +827,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
       {/* Legends */}
       <div className="mb-4 flex flex-wrap gap-4">
-        {/* Task Category Legends */}
-        {taskCategories.map(category => (
+        {/* Task Category Legends - Only show default categories that exist in tasks */}
+        {taskCategories.filter(category => defaultCategories.includes(category)).map(category => (
           <div key={category} className="flex items-center space-x-2">
             <span style={{ background: categoryColorMap[category], width: 16, height: 16, borderRadius: '50%', display: 'inline-block', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}></span>
             <span className="text-sm text-gray-700 font-medium dark:text-gray-300 capitalize">{category}</span>
@@ -876,6 +875,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           <span style={{ background: colorSettings.commitmentColor, width: 16, height: 16, borderRadius: '50%', display: 'inline-block', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}></span>
           <span className="text-sm text-gray-700 font-medium dark:text-gray-300">Commitments</span>
         </div>
+        {/* Show uncategorized legend only if there are custom/uncategorized tasks - positioned next to commitments */}
+        {(taskCategories.some(category => !defaultCategories.includes(category)) || tasks.some(task => !task.category)) && (
+          <div className="flex items-center space-x-2">
+            <span style={{ background: colorSettings.uncategorizedTaskColor, width: 16, height: 16, borderRadius: '50%', display: 'inline-block', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}></span>
+            <span className="text-sm text-gray-700 font-medium dark:text-gray-300">Uncategorized</span>
+          </div>
+        )}
       </div>
       <div
         style={{

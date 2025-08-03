@@ -46,6 +46,28 @@ export const formatTimeForTimer = (seconds: number): string => {
 };
 
 /**
+ * Check if a commitment applies to a specific date
+ * @param commitment The commitment to check
+ * @param date The date string to check (YYYY-MM-DD format)
+ * @returns true if the commitment applies to the given date
+ */
+export const doesCommitmentApplyToDate = (commitment: FixedCommitment, date: string): boolean => {
+  // Check if this occurrence was deleted
+  if (commitment.deletedOccurrences?.includes(date)) {
+    return false;
+  }
+
+  // Check if commitment applies to this date
+  if (commitment.recurring) {
+    // For recurring commitments, check if the day of week matches
+    return commitment.daysOfWeek.includes(new Date(date).getDay());
+  } else {
+    // For non-recurring commitments, check if the specific date matches
+    return commitment.specificDates?.includes(date) || false;
+  }
+};
+
+/**
  * Check if a task's frequency preference conflicts with its deadline
  * @param task Task to check
  * @param settings User settings including buffer days and work days
