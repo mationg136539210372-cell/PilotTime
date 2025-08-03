@@ -95,11 +95,11 @@ const AchievementNotification: React.FC<AchievementNotificationProps> = ({
         ${animationsActive ? 'animate-glow' : ''}
       `}>
         {/* Animated background */}
-        <div className={`absolute inset-0 bg-gradient-to-r ${colors.bg} opacity-10 animate-pulse`}></div>
-        
+        <div className={`absolute inset-0 bg-gradient-to-r ${colors.bg} opacity-10 ${animationsActive ? 'animate-pulse' : ''}`}></div>
+
         {/* Sparkle effects */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(6)].map((_, i) => (
+          {animationsActive && [...Array(6)].map((_, i) => (
             <Sparkles
               key={i}
               size={12}
