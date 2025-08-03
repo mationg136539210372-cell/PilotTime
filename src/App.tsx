@@ -1232,6 +1232,41 @@ function App() {
         // Convert seconds to hours for calculation
         const hoursSpent = timeSpent / 3600;
 
+        // Record estimation data for learning
+        const completedTask = tasks.find(t => t.id === taskId);
+        if (completedTask && lastTimedSession) {
+            const session = studyPlans
+                .find(p => p.date === lastTimedSession.planDate)
+                ?.plannedTasks.find(s => s.taskId === taskId && s.sessionNumber === lastTimedSession.sessionNumber);
+
+            if (session) {
+                // Track estimation accuracy for this session
+                enhancedEstimationTracker.recordTaskCompletion(
+                    session.allocatedHours,
+                    hoursSpent,
+                    {
+                        taskType: completedTask.category || 'Other',
+                        category: completedTask.category || 'Other',
+                        complexity: 'medium', // TODO: Store complexity when task is created
+                        timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening',
+                        dayOfWeek: new Date().getDay(),
+                        isWeekend: [0, 6].includes(new Date().getDay()),
+                        currentWorkload: 'medium', // TODO: Calculate based on schedule density
+                        energyLevel: 'medium', // TODO: Allow user to rate this
+                        hasDeadlinePressure: completedTask.deadline ? new Date(completedTask.deadline).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000 : false,
+                        isNewDomain: false, // TODO: Track this
+                        requiresCreativity: false, // TODO: Track this
+                        requiresResearch: false, // TODO: Track this
+                        requiresCollaboration: false, // TODO: Track this
+                        involvesTechnology: false, // TODO: Track this
+                        similarTasksCompleted: 0, // TODO: Calculate this
+                        recentAccuracy: 0.85, // TODO: Calculate this
+                        availableTimeSlot: session.allocatedHours
+                    }
+                );
+            }
+        }
+
         // Update the task's estimated hours based on actual time spent
         setTasks(prevTasks =>
             prevTasks.map(task => {
