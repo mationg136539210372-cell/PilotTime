@@ -4,6 +4,7 @@ import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerStat
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
 import { generateNewStudyPlan, getUnscheduledMinutesForTasks, getLocalDateString, redistributeAfterTaskDeletion, redistributeMissedSessionsWithFeedback, checkCommitmentConflicts, redistributeMissedSessionsEnhanced } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
+import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import { RedistributionOptions } from './types';
 import {
   ACHIEVEMENTS,
