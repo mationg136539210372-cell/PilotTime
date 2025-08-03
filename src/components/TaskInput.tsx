@@ -132,6 +132,27 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   const [estComplexity, setEstComplexity] = useState('');
   const [estFactors, setEstFactors] = useState<string[]>([]);
 
+  // Auto-detect deadline type based on whether deadline is set
+  useEffect(() => {
+    if (formData.deadline && formData.deadline.trim() !== '') {
+      // User set a deadline - keep current deadlineType or default to 'hard'
+      if (formData.deadlineType === 'none') {
+        setFormData(f => ({ ...f, deadlineType: 'hard' }));
+      }
+    } else {
+      // No deadline set - automatically set to 'none'
+      setFormData(f => ({ ...f, deadlineType: 'none' }));
+    }
+  }, [formData.deadline]);
+
+  // Reset conflicting options when one-sitting task is toggled
+  useEffect(() => {
+    if (formData.isOneTimeTask) {
+      // One-sitting tasks don't need frequency preferences
+      setFormData(f => ({ ...f, targetFrequency: 'daily' }));
+    }
+  }, [formData.isOneTimeTask]);
+
   // When task type changes, reset helper state
   useEffect(() => {
     setEstComplexity('');
