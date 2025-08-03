@@ -363,50 +363,58 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
               className="flex items-center gap-2 text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 text-sm font-medium transition-colors"
             >
               {showTaskTimeline ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              Advanced Timeline Options
+              Advanced Options
             </button>
 
             {showTaskTimeline && (
               <div className="mt-3 p-4 bg-white/30 dark:bg-black/20 rounded-xl border border-white/20 dark:border-white/10">
-                {/* Deadline Type */}
-                <div className="space-y-2 mb-4">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Deadline Type</label>
+                {/* Deadline Type - Only show if deadline is set */}
+                {formData.deadline && formData.deadline.trim() !== '' && (
+                  <div className="space-y-2 mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Deadline Type</label>
+                    <div className="space-y-2">
+                      {[
+                        { value: 'hard', label: 'Hard deadline (must finish by date)' },
+                        { value: 'soft', label: 'Flexible target date' }
+                      ].map(option => (
+                        <label key={option.value} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="deadlineType"
+                            value={option.value}
+                            checked={formData.deadlineType === option.value}
+                            onChange={() => setFormData(f => ({ ...f, deadlineType: option.value as any }))}
+                            className="text-violet-600"
+                          />
+                          <span className="text-sm text-gray-700 dark:text-gray-200">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scheduling Preference */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Scheduling Style</label>
                   <div className="space-y-2">
                     {[
-                      { value: 'hard', label: 'Hard deadline (must finish by date)' },
-                      { value: 'soft', label: 'Flexible target date' },
-                      { value: 'none', label: 'No deadline (work when time allows)' }
+                      { value: 'consistent', label: 'Consistent sessions (recommended)' },
+                      { value: 'opportunistic', label: 'Fill available time slots' },
+                      { value: 'intensive', label: 'Intensive bursts when possible' }
                     ].map(option => (
                       <label key={option.value} className="flex items-center gap-2">
                         <input
                           type="radio"
-                          name="deadlineType"
+                          name="schedulingPreference"
                           value={option.value}
-                          checked={formData.deadlineType === option.value}
-                          onChange={() => setFormData(f => ({ ...f, deadlineType: option.value as any }))}
+                          checked={formData.schedulingPreference === option.value}
+                          onChange={() => setFormData(f => ({ ...f, schedulingPreference: option.value as any }))}
                           className="text-violet-600"
                         />
                         <span className="text-sm text-gray-700 dark:text-gray-200">{option.label}</span>
                       </label>
                     ))}
                   </div>
-                </div>
-
-                {/* Work Frequency */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                    Work frequency preference
-                  </label>
-                  <select
-                    value={formData.targetFrequency}
-                    onChange={e => setFormData(f => ({ ...f, targetFrequency: e.target.value as any }))}
-                    className="w-full px-2 py-1 border border-white/30 dark:border-white/20 rounded text-sm bg-white/70 dark:bg-black/20 dark:text-white"
-                  >
-                    <option value="daily">Daily progress (default)</option>
-                    <option value="3x-week">Few times per week</option>
-                    <option value="weekly">Weekly sessions</option>
-                    <option value="flexible">When I have time</option>
-                  </select>
                 </div>
               </div>
             )}
