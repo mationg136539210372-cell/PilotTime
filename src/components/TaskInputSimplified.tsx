@@ -202,53 +202,51 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
             </div>
           </div>
 
-          {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-              Category <span className="text-gray-400">(Optional)</span>
-            </label>
-            <select
-              value={formData.category}
-              onChange={e => setFormData(f => ({ ...f, category: e.target.value, customCategory: '' }))}
-              className="w-full border border-white/30 dark:border-white/20 rounded-xl px-3 py-2 text-base bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-            >
-              <option value="">Select category...</option>
-              {['Academics', 'Org', 'Work', 'Personal', 'Health', 'Learning', 'Finance', 'Home', 'Custom...'].map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-            {showCustomCategory && (
-              <input
-                type="text"
-                value={formData.customCategory}
-                onChange={e => setFormData(f => ({ ...f, customCategory: e.target.value }))}
-                className="w-full border border-white/30 dark:border-white/20 rounded-xl px-3 py-2 mt-2 text-base bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                placeholder="Enter custom category"
-              />
-            )}
-          </div>
-
-          {/* Deadline */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
-              Deadline <span className="text-gray-400">(Optional)</span>
-            </label>
-            <input
-              type="date"
-              min={today}
-              value={formData.deadline}
-              onChange={e => setFormData(f => ({ ...f, deadline: e.target.value }))}
-              className="w-full px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-base focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white/70 dark:bg-black/20 dark:text-white"
-              placeholder="Select deadline (optional)"
-            />
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Leave empty for flexible tasks, or set a deadline for time-sensitive work
+          {/* Category & Deadline - Two Column Layout */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                Category <span className="text-gray-400">(Optional)</span>
+              </label>
+              <select
+                value={formData.category}
+                onChange={e => setFormData(f => ({ ...f, category: e.target.value, customCategory: '' }))}
+                className="w-full border border-white/30 dark:border-white/20 rounded-xl px-3 py-2 text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+              >
+                <option value="">Select category...</option>
+                {['Academics', 'Org', 'Work', 'Personal', 'Health', 'Learning', 'Finance', 'Home', 'Custom...'].map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              {showCustomCategory && (
+                <input
+                  type="text"
+                  value={formData.customCategory}
+                  onChange={e => setFormData(f => ({ ...f, customCategory: e.target.value }))}
+                  className="w-full border border-white/30 dark:border-white/20 rounded-xl px-3 py-2 mt-2 text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  placeholder="Enter custom category"
+                />
+              )}
             </div>
-            {!isDeadlineValid && formData.deadline && (
-              <div className="text-red-600 text-xs mt-1">
-                Deadline cannot be in the past. Please select today or a future date.
-              </div>
-            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                Deadline <span className="text-gray-400">(Optional)</span>
+              </label>
+              <input
+                type="date"
+                min={today}
+                value={formData.deadline}
+                onChange={e => setFormData(f => ({ ...f, deadline: e.target.value }))}
+                className="w-full px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white/70 dark:bg-black/20 dark:text-white"
+                placeholder="Select deadline (optional)"
+              />
+              {!isDeadlineValid && formData.deadline && (
+                <div className="text-red-600 text-xs mt-1">
+                  Deadline cannot be in the past. Please select today or a future date.
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Time Estimation - Simplified Display */}
