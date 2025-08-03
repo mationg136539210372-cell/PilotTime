@@ -760,6 +760,13 @@ export const generateNewStudyPlan = (
     // Combine sessions of the same task on the same day
     combineSessionsOnSameDay(studyPlans);
     
+    // Validate scheduling for conflicts after all redistribution and combining
+    studyPlans.forEach(plan => {
+      if (!validateSessionTimes(plan.plannedTasks, fixedCommitments, plan.date)) {
+        console.warn(`Scheduling conflicts detected on ${plan.date} after redistribution. Some sessions may overlap.`);
+      }
+    });
+
     // Final pass: handle any remaining unscheduled hours and create suggestions
     const suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> = [];
     let taskScheduledHours: { [taskId: string]: number } = {};
