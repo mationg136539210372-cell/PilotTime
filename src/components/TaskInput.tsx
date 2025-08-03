@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Task, UserSettings } from '../types';
 import { checkFrequencyDeadlineConflict } from '../utils/scheduling';
-import EnhancedEstimationHelper from './EnhancedEstimationHelper';
+import TimeEstimationModal from './TimeEstimationModal';
 
 interface TaskInputProps {
   onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
