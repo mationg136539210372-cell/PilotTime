@@ -302,8 +302,16 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
 
           {/* Task Impact */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
               Task Importance <span className="text-red-500">*</span>
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(true)}
+                className="text-gray-400 hover:text-violet-600 transition-colors"
+                title="Help & Information"
+              >
+                <HelpCircle size={14} />
+              </button>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center gap-3 p-3 border border-white/30 dark:border-white/20 rounded-xl hover:bg-white/50 dark:hover:bg-black/30 cursor-pointer transition-colors">
