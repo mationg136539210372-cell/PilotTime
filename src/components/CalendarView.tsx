@@ -431,12 +431,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
   });
   
-  // Also add any custom categories from tasks that aren't in the default list
+  // Map any custom categories from tasks that aren't in the default list to uncategorized color
   taskCategories.forEach((category) => {
     if (!defaultCategories.includes(category)) {
-      // Use palette for unknown categories
-      const idx = Object.keys(categoryColorMap).length;
-      categoryColorMap[category] = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+      // Use uncategorized color for unknown categories instead of creating new legend entries
+      categoryColorMap[category] = colorSettings.uncategorizedTaskColor;
     }
   });
 
