@@ -57,7 +57,7 @@ const CATEGORY_COLORS = [
   '#a21caf', // Purple
   '#14b8a6', // Teal
 ];
-const DEFAULT_UNCATEGORIZED_TASK_COLOR = '#d97706'; // Light brown for uncategorized tasks
+const DEFAULT_UNCATEGORIZED_TASK_COLOR = '#9ca3af'; // Light gray for uncategorized tasks
 
 
 
