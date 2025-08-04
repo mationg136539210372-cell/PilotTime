@@ -687,7 +687,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             <div className="text-6xl mb-4">🎉</div>
             <h3 className="text-xl font-semibold text-gray-800 mb-2 dark:text-white">No Work Today!</h3>
             <p className="text-gray-600 dark:text-gray-300 mb-4">
-              It's your day off! Time to relax, recharge, and maybe catch up on some Netflix. ����
+              It's your day off! Time to relax, recharge, and maybe catch up on some Netflix. 🎮
             </p>
             <div className="bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900 rounded-lg p-4">
               <p className="text-sm text-gray-700 dark:text-gray-200">
