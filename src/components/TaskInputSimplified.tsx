@@ -34,7 +34,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const [showTimeEstimationModal, setShowTimeEstimationModal] = useState(false);
   const [showTaskTimeline, setShowTaskTimeline] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
-
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const today = new Date().toISOString().split('T')[0];
 
   // Auto-detect deadline type based on whether deadline is set
@@ -107,8 +107,11 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   };
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isFormValid) return;
+  e.preventDefault();
+  if (!isFormValid) {
+    setShowValidationErrors(true);
+    return;
+  }
     
     const category = showCustomCategory ? formData.customCategory : formData.category;
     const decimalHours = convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
@@ -132,7 +135,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       maxSessionLength: formData.deadlineType === 'none' ? formData.maxSessionLength : undefined,
       isOneTimeTask: formData.isOneTimeTask,
     });
-    
+    setShowValidationErrors(false);
     // Reset form
     setFormData({
       title: '',
@@ -506,7 +509,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
           </div>
 
           {/* Validation Feedback */}
-          {!isFormValid && (
+          {!isFormValid && showValidationErrors && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-2 dark:bg-red-900/20 dark:border-red-700">
               <div className="text-red-800 dark:text-red-200 font-medium mb-2">Please fill in the required fields:</div>
               <ul className="text-red-700 dark:text-red-300 text-sm space-y-1">
