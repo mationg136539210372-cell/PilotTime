@@ -31,6 +31,7 @@ interface StudyTimerProps {
   onTimerStop: () => void;
   onTimerReset: () => void;
   onTimerSpeedUp: () => void;
+  onTimerUpdateTime: (newTimeInSeconds: number) => void;
   // New props for completion flow
   onContinueWithNextSession?: () => void;
   onTakeBreak?: () => void;
@@ -40,19 +41,20 @@ interface StudyTimerProps {
   tasks?: Task[];
 }
 
-const StudyTimer: React.FC<StudyTimerProps> = ({ 
-  currentTask, 
-  currentSession, 
-  onTimerComplete, 
-  planDate, 
-  sessionNumber, 
-  onMarkSessionDone, 
-  timer, 
-  onTimerStart, 
-  onTimerPause, 
-  onTimerStop, 
-  onTimerReset, 
+const StudyTimer: React.FC<StudyTimerProps> = ({
+  currentTask,
+  currentSession,
+  onTimerComplete,
+  planDate,
+  sessionNumber,
+  onMarkSessionDone,
+  timer,
+  onTimerStart,
+  onTimerPause,
+  onTimerStop,
+  onTimerReset,
   onTimerSpeedUp,
+  onTimerUpdateTime,
   onContinueWithNextSession,
   onTakeBreak,
   onReviewCompletedWork,
@@ -65,6 +67,8 @@ const StudyTimer: React.FC<StudyTimerProps> = ({
     taskTitle: string;
     sessionNumber: number;
   } | null>(null);
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [customTimeInput, setCustomTimeInput] = useState('');
 
   const handleStart = () => {
     onTimerStart();
@@ -127,6 +131,59 @@ const StudyTimer: React.FC<StudyTimerProps> = ({
     }
   };
 
+  const handleTimerClick = () => {
+    if (!timer.isRunning) {
+      setIsEditingTime(true);
+      setCustomTimeInput(formatCustomTimeInput(timer.currentTime));
+    }
+  };
+
+  const handleTimeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCustomTimeInput(e.target.value);
+  };
+
+  const handleTimeInputSubmit = () => {
+    const newTimeInSeconds = parseCustomTimeInput(customTimeInput);
+    if (newTimeInSeconds > 0) {
+      // Update the timer current time without affecting total time (session duration)
+      onTimerUpdateTime(newTimeInSeconds);
+    }
+    setIsEditingTime(false);
+    setCustomTimeInput('');
+  };
+
+  const handleTimeInputCancel = () => {
+    setIsEditingTime(false);
+    setCustomTimeInput('');
+  };
+
+  // Format seconds to MM:SS or HH:MM:SS for input
+  const formatCustomTimeInput = (seconds: number): string => {
+    const totalSeconds = Math.max(0, Math.round(seconds));
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+
+    if (h > 0) {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    } else {
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+  };
+
+  // Parse input like "25:30" or "1:25:30" to seconds
+  const parseCustomTimeInput = (input: string): number => {
+    const parts = input.split(':').map(p => parseInt(p) || 0);
+    if (parts.length === 2) {
+      // MM:SS format
+      return parts[0] * 60 + parts[1];
+    } else if (parts.length === 3) {
+      // HH:MM:SS format
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    return 0;
+  };
+
   return (
     <div className="space-y-6">
       {/* Task Info */}
@@ -150,12 +207,59 @@ const StudyTimer: React.FC<StudyTimerProps> = ({
       <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 dark:bg-gray-900 dark:shadow-gray-900">
         <div className="text-center">
           <div className="mb-6">
-            <div className="text-4xl sm:text-6xl lg:text-8xl font-bold text-gray-800 dark:text-white mb-2">
-              {formatTimeForTimerWithSeconds(timer.currentTime)}
-            </div>
-            <div className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-              {timer.isRunning ? 'Time Remaining' : 'Paused'}
-            </div>
+            {isEditingTime ? (
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  value={customTimeInput}
+                  onChange={handleTimeInputChange}
+                  placeholder="MM:SS or HH:MM:SS"
+                  className="text-2xl sm:text-3xl font-bold text-center bg-gray-50 dark:bg-gray-800 border-2 border-blue-300 dark:border-blue-600 rounded-lg px-4 py-2 text-gray-800 dark:text-white focus:outline-none focus:border-blue-500 w-full max-w-xs mx-auto"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleTimeInputSubmit();
+                    if (e.key === 'Escape') handleTimeInputCancel();
+                  }}
+                />
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={handleTimeInputSubmit}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    Set Time
+                  </button>
+                  <button
+                    onClick={handleTimeInputCancel}
+                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Enter time in MM:SS format (e.g., 25:00) or HH:MM:SS (e.g., 1:25:30)
+                </p>
+              </div>
+            ) : (
+              <>
+                <div
+                  className={`text-4xl sm:text-6xl lg:text-8xl font-bold text-gray-800 dark:text-white mb-2 ${
+                    !timer.isRunning ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors' : ''
+                  }`}
+                  onClick={handleTimerClick}
+                  title={!timer.isRunning ? 'Click to edit timer' : ''}
+                >
+                  {formatTimeForTimerWithSeconds(timer.currentTime)}
+                </div>
+                <div className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+                  {timer.isRunning ? 'Time Remaining' : 'Paused'}
+                  {!timer.isRunning && (
+                    <span className="block text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      Click timer to edit
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Progress Bar */}
