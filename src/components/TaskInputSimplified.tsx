@@ -214,7 +214,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                Category <span className="text-gray-400">(Optional)</span>
+                Category <span className="text-gray-400"></span>
               </label>
               <select
                 value={formData.category}
@@ -239,7 +239,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                Deadline <span className="text-gray-400">(Optional)</span>
+                Deadline <span className="text-gray-400"></span>
               </label>
               <input
                 type="date"
