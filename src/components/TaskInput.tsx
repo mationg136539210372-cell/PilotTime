@@ -794,7 +794,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
               </div>
               {/* Task Type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Task Type</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Task Type (optional, this will help you estimate)</label>
                 <select
                   value={formData.taskType}
                   onChange={e => setFormData(f => ({ ...f, taskType: e.target.value }))}
