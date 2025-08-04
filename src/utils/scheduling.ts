@@ -1374,12 +1374,12 @@ export const generateNewStudyPlan = (
           const availableHours = plan.availableHours - usedHours;
 
           if (availableHours >= minSessionHours) {
-            // Determine session length based on frequency preference
-            let maxSessionHours = 1.5; // Default
+            // Determine session length based on frequency preference and task preference
+            let maxSessionHours = task.maxSessionLength || 1.5; // Use task's preference or default
             if (task.targetFrequency === 'weekly') {
-              maxSessionHours = Math.min(4, remainingHours); // Longer sessions for weekly tasks
+              maxSessionHours = Math.min(maxSessionHours * 2, remainingHours); // Longer sessions for weekly tasks
             } else if (task.targetFrequency === 'daily') {
-              maxSessionHours = Math.min(1, remainingHours); // Shorter sessions for daily tasks
+              maxSessionHours = Math.min(maxSessionHours * 0.75, remainingHours); // Shorter sessions for daily tasks
             }
 
             let sessionHours;
@@ -1607,12 +1607,19 @@ export const generateNewStudyPlan = (
         const availableHours = plan.availableHours - usedHours;
 
         if (availableHours >= minSessionHours) {
-          // For one-time tasks, try to schedule all remaining hours at once
+          // Determine session length based on task preference and frequency
+          let maxSessionHours = task.maxSessionLength || 1.5; // Use task's preference or default
+          if (task.targetFrequency === 'weekly') {
+            maxSessionHours = Math.min(maxSessionHours * 2, remainingHours); // Longer sessions for weekly tasks
+          } else if (task.targetFrequency === 'daily') {
+            maxSessionHours = Math.min(maxSessionHours * 0.75, remainingHours); // Shorter sessions for daily tasks
+          }
+
           let sessionHours;
           if (task.isOneTimeTask && sessionNumber === 1) {
             sessionHours = remainingHours <= availableHours ? remainingHours : 0;
           } else {
-            sessionHours = Math.min(remainingHours, availableHours, 1.5);
+            sessionHours = Math.min(remainingHours, availableHours, maxSessionHours);
           }
 
           if (sessionHours <= 0) continue;
