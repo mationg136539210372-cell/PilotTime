@@ -269,7 +269,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                 </div>
                 {formData.taskType && (
                   <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Task type: {formData.taskType}
+                    Task type (optional, select a task type to help you estimate): {formData.taskType}
                   </div>
                 )}
               </div>
