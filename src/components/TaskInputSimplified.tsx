@@ -128,7 +128,8 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       targetFrequency: formData.targetFrequency,
       respectFrequencyForDeadlines: formData.respectFrequencyForDeadlines,
       preferredTimeSlots: formData.preferredTimeSlots,
-      minWorkBlock: formData.minWorkBlock,
+      minWorkBlock: formData.deadlineType !== 'none' ? formData.minWorkBlock : undefined,
+      maxSessionLength: formData.deadlineType === 'none' ? formData.maxSessionLength : undefined,
       isOneTimeTask: formData.isOneTimeTask,
     });
     
@@ -421,26 +422,52 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                     </div>
                   </div>
 
-                  {/* Minimum Work Block */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                      Minimum session length
-                    </label>
-                    <select
-                      value={formData.minWorkBlock}
-                      onChange={e => setFormData(f => ({ ...f, minWorkBlock: parseInt(e.target.value) }))}
-                      className="w-full px-2 py-1 border border-white/30 dark:border-white/20 rounded text-sm bg-white/70 dark:bg-black/20 dark:text-white"
-                    >
-                      <option value={15}>15 minutes</option>
-                      <option value={30}>30 minutes</option>
-                      <option value={45}>45 minutes</option>
-                      <option value={60}>1 hour</option>
-                      <option value={90}>1.5 hours</option>
-                    </select>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Shorter sessions will be avoided or combined
+                  {/* Minimum Work Block (only for deadline tasks) */}
+                  {formData.deadlineType !== 'none' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Minimum session length
+                      </label>
+                      <select
+                        value={formData.minWorkBlock}
+                        onChange={e => setFormData(f => ({ ...f, minWorkBlock: parseInt(e.target.value) }))}
+                        className="w-full px-2 py-1 border border-white/30 dark:border-white/20 rounded text-sm bg-white/70 dark:bg-black/20 dark:text-white"
+                      >
+                        <option value={15}>15 minutes</option>
+                        <option value={30}>30 minutes</option>
+                        <option value={45}>45 minutes</option>
+                        <option value={60}>1 hour</option>
+                        <option value={90}>1.5 hours</option>
+                      </select>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Shorter sessions will be avoided or combined
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Maximum Session Length (only for no-deadline tasks) */}
+                  {formData.deadlineType === 'none' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                        Maximum session length
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={formData.maxSessionLength}
+                          onChange={e => setFormData(f => ({ ...f, maxSessionLength: Math.max(0.5, Math.min(8, parseFloat(e.target.value) || 2)) }))}
+                          min="0.5"
+                          max="8"
+                          step="0.5"
+                          className="w-20 px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-200">hours</span>
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Maximum length for each study session (0.5-8 hours)
+                      </div>
+                    </div>
+                  )}
 
                   {/* Preferred Time Slots (for no-deadline tasks) */}
                   {formData.deadlineType === 'none' && (
