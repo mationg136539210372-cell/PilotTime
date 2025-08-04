@@ -833,20 +833,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
             </div>
           )}
           </div>
-        {/* Enhanced Validation Feedback */}
-        {!isFormValid && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-2 dark:bg-red-900/20 dark:border-red-700">
-            <div className="text-red-800 dark:text-red-200 font-medium mb-2">Please fill in the required fields:</div>
-            <ul className="text-red-700 dark:text-red-300 text-sm space-y-1">
-              {getValidationErrors().map((error, index) => (
-                <li key={index} className="flex items-start gap-2">
-                  <span className="text-red-500 mt-0.5">•</span>
-                  <span>{error}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+
         {/* Low-priority urgent warning */}
         {isLowPriorityUrgent && (
           <div className="text-yellow-600 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded mt-2 flex items-start gap-2 dark:bg-yellow-900/20 dark:text-yellow-200 dark:border-yellow-600">
