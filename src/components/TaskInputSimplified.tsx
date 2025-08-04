@@ -91,8 +91,10 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const isImpactValid = formData.impact !== '';
   const isCustomCategoryValid = !showCustomCategory || (formData.customCategory && formData.customCategory.trim().length > 0 && formData.customCategory.trim().length <= 50);
 
+  const isDeadlineRequiredForOneSitting = formData.isOneTimeTask && (!formData.deadline || formData.deadline.trim() === '');
   const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid && 
-                     isEstimatedValid && isEstimatedReasonable && isImpactValid && isCustomCategoryValid;
+                   isEstimatedValid && isEstimatedReasonable && isImpactValid && 
+                   isCustomCategoryValid && !isDeadlineRequiredForOneSitting;
 
   const getValidationErrors = (): string[] => {
     const errors: string[] = [];
@@ -103,6 +105,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     if (!isEstimatedReasonable) errors.push('Estimated time seems unreasonably high (over 100 hours)');
     if (!isImpactValid) errors.push('Please select task importance');
     if (!isCustomCategoryValid) errors.push('Custom category must be between 1-50 characters');
+    if (isDeadlineRequiredForOneSitting) errors.push('One-sitting tasks require a deadline to be scheduled properly');
     return errors;
   };
 
@@ -295,12 +298,12 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
               </span>
             </label>
             {formData.isOneTimeTask && (
-              <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  💡 One-sitting tasks will be scheduled as single blocks. Work frequency settings won't apply.
-                </p>
-              </div>
-            )}
+                <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    💡 One-sitting tasks require a deadline and will be scheduled as single blocks.
+                  </p>
+                </div>
+              )}
           </div>
 
           {/* Task Impact */}
