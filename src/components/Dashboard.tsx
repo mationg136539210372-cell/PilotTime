@@ -153,25 +153,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
   return (
     <div className="space-y-8">
 
-      {/* Manual Reschedules Warning */}
-      {hasManualReschedules && (
-        <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-lg flex items-center justify-between dark:bg-orange-900/20 dark:border-orange-700">
-          <div className="flex items-center space-x-3">
-            <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-            <div>
-              <span className="font-semibold text-orange-800 dark:text-orange-200">Manual reschedules detected.</span>
-              <span className="ml-2 text-orange-700 dark:text-orange-100">Regenerating the study plan will move them back to their original times.</span>
-            </div>
-          </div>
-          <button
-            onClick={() => onGenerateStudyPlan?.()}
-            className="px-3 py-1 text-sm bg-orange-100 text-orange-800 rounded-lg hover:bg-orange-200 transition-colors dark:bg-orange-800 dark:text-orange-200 dark:hover:bg-orange-700"
-          >
-            Regenerate
-          </button>
-        </div>
-      )}
-
       {/* Positive reinforcement for completed sessions */}
       {hasCompletedSessions && doneCount >= 3 && showRegeneratePrompt && (
         <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg flex items-center justify-between dark:bg-green-900/20 dark:border-green-700">
