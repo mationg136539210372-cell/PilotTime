@@ -132,6 +132,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
       respectFrequencyForDeadlines: task.respectFrequencyForDeadlines !== false, // Default to true
       preferredTimeSlots: task.preferredTimeSlots || [],
       minWorkBlock: task.minWorkBlock || 30,
+      maxSessionLength: task.maxSessionLength || 2,
       isOneTimeTask: task.isOneTimeTask || false,
     });
     setShowAdvancedOptions(false);
