@@ -182,18 +182,36 @@ export const checkSessionStatus = (session: StudySession, planDate: string): 'sc
     return 'completed'; // Treat skipped sessions as completed for display purposes
   }
 
+  // Check if session was manually rescheduled or has been redistributed
   if (session.originalTime && session.originalDate) {
     return 'rescheduled';
+  }
+
+  // Check if session has redistribution metadata indicating it was properly moved
+  if (session.schedulingMetadata?.rescheduleHistory && session.schedulingMetadata.rescheduleHistory.length > 0) {
+    const lastReschedule = session.schedulingMetadata.rescheduleHistory[session.schedulingMetadata.rescheduleHistory.length - 1];
+    // If this session was redistributed to this date, don't mark as missed
+    if (lastReschedule.to.date === planDate && lastReschedule.reason === 'redistribution') {
+      console.log(`Session redistributed to ${planDate} - not marking as missed`);
+      return 'scheduled';
+    }
   }
 
   // Only mark as missed if not completed and from past date
   // AND the session was originally scheduled for that past date (not redistributed there)
   if (planDate < today) {
-    // If session has original time/date, it was redistributed - don't mark as missed
-    if (session.originalTime && session.originalDate) {
-      console.log(`Session redistributed to past date ${planDate} - not marking as missed`);
-      return 'scheduled'; // Treat redistributed sessions as scheduled
+    // Additional check: if session has manual override flag, it was moved intentionally
+    if (session.isManualOverride) {
+      console.log(`Session has manual override on ${planDate} - not marking as missed`);
+      return 'scheduled';
     }
+
+    // If session was marked as 'rescheduled' status, don't mark as missed
+    if (session.status === 'rescheduled') {
+      console.log(`Session marked as rescheduled on ${planDate} - not marking as missed`);
+      return 'rescheduled';
+    }
+
     console.log(`Session from past date ${planDate} marked as MISSED`);
     return 'missed';
   }
@@ -994,14 +1012,19 @@ export const generateNewStudyPlan = (
         let remainingHours = task.estimatedHours;
         const minSessionHours = (task.minWorkBlock || 30) / 60; // Convert minutes to hours
 
-        // Determine session frequency based on task preferences
+        // Determine session frequency based on task preferences and available time
         let sessionGap = 1; // Days between sessions
-        if (task.targetFrequency === 'weekly') sessionGap = 7;
-        else if (task.targetFrequency === '3x-week') sessionGap = 2;
-        else if (task.targetFrequency === 'flexible') {
+        const availableDaysForTask = availableDays.length;
+        const estimatedSessionsNeeded = Math.ceil(task.estimatedHours / 2); // Assume 2 hours per session average
+
+        if (task.targetFrequency === 'weekly') {
+          sessionGap = Math.min(7, Math.floor(availableDaysForTask / Math.max(1, estimatedSessionsNeeded)));
+        } else if (task.targetFrequency === '3x-week') {
+          sessionGap = Math.min(2, Math.floor(availableDaysForTask / Math.max(1, estimatedSessionsNeeded)));
+        } else if (task.targetFrequency === 'flexible') {
           // For flexible tasks, adapt the gap based on available time and task urgency
-          // Start with smaller gaps and increase if needed
-          sessionGap = task.importance ? 2 : 3; // More frequent for important tasks
+          const optimalGap = Math.floor(availableDaysForTask / Math.max(1, estimatedSessionsNeeded));
+          sessionGap = task.importance ? Math.max(1, Math.min(2, optimalGap)) : Math.max(1, Math.min(3, optimalGap));
         }
 
         let sessionNumber = 1;
@@ -1019,12 +1042,19 @@ export const generateNewStudyPlan = (
 
             // Check if we have enough time for minimum session
             if (availableHours >= minSessionHours) {
-              // Determine session length
-              const sessionHours = Math.min(
-                remainingHours,
-                availableHours,
-                Math.max(minSessionHours, Math.min(2, remainingHours)) // Max 2 hours per session
-              );
+              // Determine session length based on task frequency preference and max session length
+          let maxSessionHours = task.maxSessionLength || 2; // Use task's preference or default
+          if (task.targetFrequency === 'weekly') {
+            maxSessionHours = Math.min(maxSessionHours * 2, remainingHours); // Longer sessions for weekly tasks
+          } else if (task.targetFrequency === 'daily') {
+            maxSessionHours = Math.min(maxSessionHours * 0.75, remainingHours); // Shorter sessions for daily tasks
+          }
+
+          const sessionHours = Math.min(
+            remainingHours,
+            availableHours,
+            Math.max(minSessionHours, maxSessionHours)
+          );
 
               // Find proper time slot using the existing function to avoid conflicts
               const commitmentsForDay = fixedCommitments.filter(commitment => {
@@ -1322,49 +1352,79 @@ export const generateNewStudyPlan = (
       }
     }
 
-    // Schedule no-deadline tasks in remaining available time
+    // Schedule no-deadline tasks in remaining available time with frequency consideration
     if (noDeadlineTasksBalanced.length > 0) {
-      // Simple scheduling for no-deadline tasks in balanced mode
       noDeadlineTasksBalanced.forEach(task => {
         let remainingHours = task.estimatedHours;
         const minSessionHours = (task.minWorkBlock || 30) / 60;
         let sessionNumber = 1;
 
-        for (const plan of studyPlans) {
-          if (remainingHours <= 0) break;
+        // Determine session frequency based on task preferences
+        let sessionGap = 1;
+        if (task.targetFrequency === 'weekly') sessionGap = 7;
+        else if (task.targetFrequency === '3x-week') sessionGap = 2;
+        else if (task.targetFrequency === 'flexible') {
+          sessionGap = task.importance ? 2 : 3;
+        }
 
+        let planIndex = 0;
+        while (remainingHours > 0 && planIndex < studyPlans.length) {
+          const plan = studyPlans[planIndex];
           const usedHours = plan.plannedTasks.reduce((sum, session) => sum + session.allocatedHours, 0);
           const availableHours = plan.availableHours - usedHours;
 
           if (availableHours >= minSessionHours) {
-            // For one-time tasks, try to schedule all remaining hours at once
+            // Determine session length based on frequency preference and task preference
+            let maxSessionHours = task.maxSessionLength || 1.5; // Use task's preference or default
+            if (task.targetFrequency === 'weekly') {
+              maxSessionHours = Math.min(maxSessionHours * 2, remainingHours); // Longer sessions for weekly tasks
+            } else if (task.targetFrequency === 'daily') {
+              maxSessionHours = Math.min(maxSessionHours * 0.75, remainingHours); // Shorter sessions for daily tasks
+            }
+
             let sessionHours;
             if (task.isOneTimeTask && sessionNumber === 1) {
               sessionHours = remainingHours <= availableHours ? remainingHours : 0;
             } else {
-              sessionHours = Math.min(remainingHours, availableHours, 1.5); // Max 1.5 hours per session
+              sessionHours = Math.min(remainingHours, availableHours, maxSessionHours);
             }
 
-            if (sessionHours <= 0) continue;
+            if (sessionHours > 0) {
+              // Find available time slot
+              const commitmentsForDay = fixedCommitments.filter(commitment =>
+                doesCommitmentApplyToDate(commitment, plan.date)
+              );
 
-            const startTimeHour = 9 + (usedHours % 8);
-            const endTimeHour = startTimeHour + sessionHours;
+              const slot = findNextAvailableTimeSlot(
+                sessionHours,
+                plan.plannedTasks,
+                commitmentsForDay,
+                settings.studyWindowStartHour || 6,
+                settings.studyWindowEndHour || 23,
+                settings.bufferTimeBetweenSessions || 0,
+                plan.date
+              );
 
-            const session: StudySession = {
-              taskId: task.id,
-              scheduledTime: plan.date,
-              startTime: `${Math.floor(startTimeHour).toString().padStart(2, '0')}:${((startTimeHour % 1) * 60).toString().padStart(2, '0')}`,
-              endTime: `${Math.floor(endTimeHour).toString().padStart(2, '0')}:${((endTimeHour % 1) * 60).toString().padStart(2, '0')}`,
-              allocatedHours: sessionHours,
-              sessionNumber,
-              isFlexible: true
-            };
+              if (slot) {
+                const session: StudySession = {
+                  taskId: task.id,
+                  scheduledTime: plan.date,
+                  startTime: slot.start,
+                  endTime: slot.end,
+                  allocatedHours: sessionHours,
+                  sessionNumber,
+                  isFlexible: true
+                };
 
-            plan.plannedTasks.push(session);
-            plan.totalStudyHours += sessionHours;
-            remainingHours -= sessionHours;
-            sessionNumber++;
+                plan.plannedTasks.push(session);
+                plan.totalStudyHours += sessionHours;
+                remainingHours -= sessionHours;
+                sessionNumber++;
+              }
+            }
           }
+
+          planIndex += sessionGap; // Apply frequency gap
         }
       });
     }
@@ -1547,12 +1607,19 @@ export const generateNewStudyPlan = (
         const availableHours = plan.availableHours - usedHours;
 
         if (availableHours >= minSessionHours) {
-          // For one-time tasks, try to schedule all remaining hours at once
+          // Determine session length based on task preference and frequency
+          let maxSessionHours = task.maxSessionLength || 1.5; // Use task's preference or default
+          if (task.targetFrequency === 'weekly') {
+            maxSessionHours = Math.min(maxSessionHours * 2, remainingHours); // Longer sessions for weekly tasks
+          } else if (task.targetFrequency === 'daily') {
+            maxSessionHours = Math.min(maxSessionHours * 0.75, remainingHours); // Shorter sessions for daily tasks
+          }
+
           let sessionHours;
           if (task.isOneTimeTask && sessionNumber === 1) {
             sessionHours = remainingHours <= availableHours ? remainingHours : 0;
           } else {
-            sessionHours = Math.min(remainingHours, availableHours, 1.5);
+            sessionHours = Math.min(remainingHours, availableHours, maxSessionHours);
           }
 
           if (sessionHours <= 0) continue;
