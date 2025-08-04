@@ -17,7 +17,8 @@ export interface Task {
   targetFrequency?: 'daily' | 'weekly' | '3x-week' | 'flexible'; // Frequency preference for ALL tasks
   respectFrequencyForDeadlines?: boolean; // User choice to override frequency for urgent tasks
   preferredTimeSlots?: ('morning' | 'afternoon' | 'evening')[]; // Preferred time slots
-  minWorkBlock?: number; // Minimum meaningful work session in minutes
+  minWorkBlock?: number; // Minimum meaningful work session in minutes (only for deadline tasks)
+  maxSessionLength?: number; // Maximum session length in hours (only for no-deadline tasks)
   isOneTimeTask?: boolean; // Task should be completed in one sitting, not divided into sessions
 }
 
