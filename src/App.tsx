@@ -331,6 +331,7 @@ function App() {
                 enableNotifications: true,
                 userPrefersPressure: false,
                 studyPlanMode: 'even', // Set default to 'even'
+                dateSpecificStudyWindows: []
             };
             let initialCommitments: FixedCommitment[] = [];
             let initialStudyPlans: StudyPlan[] = [];
@@ -346,7 +347,7 @@ function App() {
                     // Filter out removed settings
                     initialSettings = {
                         dailyAvailableHours: parsedSettings.dailyAvailableHours || 6,
-                        workDays: parsedSettings.workDays || [1, 2, 3, 4, 5, 6],
+                        workDays: parsedSettings.workDays || [0, 1, 2, 3, 4, 5, 6],
                         bufferDays: parsedSettings.bufferDays || 0,
                         minSessionLength: parsedSettings.minSessionLength || 15,
                         bufferTimeBetweenSessions: parsedSettings.bufferTimeBetweenSessions ?? 0,
@@ -360,7 +361,8 @@ function App() {
                         autoCompleteSessions: parsedSettings.autoCompleteSessions || false,
                         enableNotifications: parsedSettings.enableNotifications !== false,
                         userPrefersPressure: parsedSettings.userPrefersPressure || false,
-                        studyPlanMode: parsedSettings.studyPlanMode || 'even', // Default to 'even' if not set
+                        studyPlanMode: parsedSettings.studyPlanMode || 'even',
+                        dateSpecificStudyWindows: parsedSettings.dateSpecificStudyWindows || []
                     };
                 }
             }

@@ -94,6 +94,13 @@ export interface StudyPlan {
   isOverloaded?: boolean; // Is this day too packed?
 }
 
+export interface DateSpecificStudyWindow {
+  date: string; // YYYY-MM-DD format
+  startHour: number; // 0-23
+  endHour: number; // 0-23
+  isActive: boolean; // Whether this override is active
+}
+
 export interface UserSettings {
   dailyAvailableHours: number;
   workDays: number[]; // Days of week user wants to work (0=Sunday, 1=Monday, etc.)
@@ -104,8 +111,8 @@ export interface UserSettings {
   shortBreakDuration: number; // Minutes for short breaks
   longBreakDuration: number; // Minutes for long breaks
   maxConsecutiveHours: number; // Maximum hours before requiring a long break
-  studyWindowStartHour: number; // Earliest hour to start studying (0-23)
-  studyWindowEndHour: number; // Latest hour to end studying (0-23)
+  studyWindowStartHour: number; // Earliest hour to start studying (0-23) - default/fallback
+  studyWindowEndHour: number; // Latest hour to end studying (0-23) - default/fallback
   avoidTimeRanges: Array<{start: string, end: string}>; // Time ranges to avoid scheduling
   weekendStudyHours: number; // Hours available for weekend study
   autoCompleteSessions: boolean; // Auto-mark sessions as complete after timer
@@ -113,6 +120,8 @@ export interface UserSettings {
   userPrefersPressure?: boolean; // User prefers pressure mode for scheduling
   studyStyle?: 'steady' | 'pressure'; // Study style preference
   studyPlanMode?: 'eisenhower' | 'even' | 'balanced';
+  // Date-specific study windows (optional)
+  dateSpecificStudyWindows?: DateSpecificStudyWindow[]; // Override study windows for specific dates
 }
 
 export interface TimerState {

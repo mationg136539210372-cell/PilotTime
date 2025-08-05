@@ -311,14 +311,6 @@ const StudyTimer: React.FC<StudyTimerProps> = ({
               <span>Reset</span>
             </button>
 
-            <button
-              onClick={onTimerSpeedUp}
-              className="flex items-center space-x-2 bg-purple-500 text-white py-3 px-4 sm:px-6 rounded-lg hover:bg-purple-600 transition-all duration-200 text-sm sm:text-base font-semibold"
-              title="Speed up timer (for testing)"
-            >
-              <span>⏩</span>
-              <span>Speed Up</span>
-            </button>
           </div>
 
           {/* Session Actions */}

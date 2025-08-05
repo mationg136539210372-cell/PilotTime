@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Clock, AlertTriangle, Calendar, Zap, Sun } from 'lucide-react';
-import { UserSettings, StudyPlan } from '../types';
+import { Settings as SettingsIcon, Clock, AlertTriangle, Calendar, Zap, Sun, Plus, Trash2, Edit3 } from 'lucide-react';
+import { UserSettings, StudyPlan, DateSpecificStudyWindow } from '../types';
 import { checkSessionStatus } from '../utils/scheduling';
 
 interface SettingsProps {
@@ -34,6 +34,14 @@ const Settings: React.FC<SettingsProps> = ({
   const [studyWindowStartHour, setStudyWindowStartHour] = useState(settings.studyWindowStartHour || 6);
   const [studyWindowEndHour, setStudyWindowEndHour] = useState(settings.studyWindowEndHour || 23);
   const [studyPlanMode, setStudyPlanMode] = useState(settings.studyPlanMode || 'even');
+  const [dateSpecificStudyWindows, setDateSpecificStudyWindows] = useState<DateSpecificStudyWindow[]>(settings.dateSpecificStudyWindows || []);
+  
+  // State for date-specific override form
+  const [showDateSpecificForm, setShowDateSpecificForm] = useState(false);
+  const [editingOverride, setEditingOverride] = useState<DateSpecificStudyWindow | null>(null);
+  const [newOverrideDate, setNewOverrideDate] = useState('');
+  const [newOverrideStartHour, setNewOverrideStartHour] = useState(6);
+  const [newOverrideEndHour, setNewOverrideEndHour] = useState(23);
 
   // Update local state when settings prop changes (e.g., on initial load or external update)
   useEffect(() => {
@@ -45,6 +53,7 @@ const Settings: React.FC<SettingsProps> = ({
     setStudyWindowStartHour(settings.studyWindowStartHour || 6);
     setStudyWindowEndHour(settings.studyWindowEndHour || 23);
     setStudyPlanMode(settings.studyPlanMode || 'even');
+    setDateSpecificStudyWindows(settings.dateSpecificStudyWindows || []);
   }, [settings]);
 
   // Enhanced validation functions with better error prevention
@@ -253,7 +262,8 @@ const Settings: React.FC<SettingsProps> = ({
       weekendStudyHours: settings.weekendStudyHours || 4,
       autoCompleteSessions: settings.autoCompleteSessions || false,
       enableNotifications: settings.enableNotifications !== false,
-      studyPlanMode
+      studyPlanMode,
+      dateSpecificStudyWindows
     });
   };
 
@@ -277,6 +287,85 @@ const Settings: React.FC<SettingsProps> = ({
     return isSettingDisabled(settingKey) 
       ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' 
       : '';
+  };
+
+  // Date-specific study window handlers
+  const handleAddDateSpecificOverride = () => {
+    if (!newOverrideDate) return;
+    
+    // Check if override for this date already exists
+    const existingIndex = dateSpecificStudyWindows.findIndex(override => override.date === newOverrideDate);
+    
+    if (existingIndex !== -1) {
+      // Update existing override
+      const updatedOverrides = [...dateSpecificStudyWindows];
+      updatedOverrides[existingIndex] = {
+        date: newOverrideDate,
+        startHour: newOverrideStartHour,
+        endHour: newOverrideEndHour,
+        isActive: true
+      };
+      setDateSpecificStudyWindows(updatedOverrides);
+    } else {
+      // Add new override
+      const newOverride: DateSpecificStudyWindow = {
+        date: newOverrideDate,
+        startHour: newOverrideStartHour,
+        endHour: newOverrideEndHour,
+        isActive: true
+      };
+      setDateSpecificStudyWindows([...dateSpecificStudyWindows, newOverride]);
+    }
+    
+    // Reset form
+    setNewOverrideDate('');
+    setNewOverrideStartHour(6);
+    setNewOverrideEndHour(23);
+    setShowDateSpecificForm(false);
+    setEditingOverride(null);
+  };
+
+  const handleEditDateSpecificOverride = (override: DateSpecificStudyWindow) => {
+    setEditingOverride(override);
+    setNewOverrideDate(override.date);
+    setNewOverrideStartHour(override.startHour);
+    setNewOverrideEndHour(override.endHour);
+    setShowDateSpecificForm(true);
+  };
+
+  const handleDeleteDateSpecificOverride = (date: string) => {
+    setDateSpecificStudyWindows(dateSpecificStudyWindows.filter(override => override.date !== date));
+  };
+
+  const handleToggleOverrideActive = (date: string) => {
+    const updatedOverrides = dateSpecificStudyWindows.map(override => 
+      override.date === date 
+        ? { ...override, isActive: !override.isActive }
+        : override
+    );
+    setDateSpecificStudyWindows(updatedOverrides);
+  };
+
+  const formatTimeDisplay = (hour: number): string => {
+    return hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
+  };
+
+  const validateDateSpecificOverride = (): { isValid: boolean; message: string } => {
+    if (!newOverrideDate) {
+      return { isValid: false, message: 'Please select a date.' };
+    }
+    if (newOverrideStartHour >= newOverrideEndHour) {
+      return { isValid: false, message: 'End time must be after start time.' };
+    }
+    return { isValid: true, message: '' };
+  };
+
+  const cancelDateSpecificForm = () => {
+    setShowDateSpecificForm(false);
+    setEditingOverride(null);
+    setNewOverrideDate('');
+    setNewOverrideStartHour(6);
+    setNewOverrideEndHour(23);
   };
 
   return (
@@ -498,6 +587,136 @@ const Settings: React.FC<SettingsProps> = ({
               </div>
         </div>
 
+        {/* Toggle Button for Date-Specific Study Windows */}
+          <button
+            type="button"
+            className="mt-4 mb-2 inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700"
+            onClick={() => setShowDateSpecificForm(!showDateSpecificForm)}
+          >
+            {showDateSpecificForm ? 'Hide' : 'Show'} Date-Specific Study Windows
+          </button>
+
+          {showDateSpecificForm && (
+            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex justify-between items-center">
+                <div>
+                  <strong className="text-gray-700 dark:text-gray-200">Date-Specific Study Windows</strong>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Override your default study window for specific dates. Useful for holidays,
+                    special events, or days with different schedules.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDateSpecificForm(!showDateSpecificForm)}
+                  className="flex items-center px-2 py-1 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none"
+                >
+                  <Plus size={14} className="mr-1" />
+                  {showDateSpecificForm ? 'Cancel' : 'Add Override'}
+                </button>
+              </div>
+
+              {showDateSpecificForm && (
+                <div className="my-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-md">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="overrideDate" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                        Date
+                      </label>
+                      <input
+                        type="date"
+                        id="overrideDate"
+                        value={newOverrideDate}
+                        onChange={(e) => setNewOverrideDate(e.target.value)}
+                        className="mt-1 block w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="overrideStartTime" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                        Start Time
+                      </label>
+                      <select
+                        id="overrideStartTime"
+                        value={newOverrideStartHour}
+                        onChange={(e) => setNewOverrideStartHour(parseInt(e.target.value))}
+                        className="mt-1 block w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:text-white"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <option key={i} value={i}>
+                            {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="overrideEndTime" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                        End Time
+                      </label>
+                      <select
+                        id="overrideEndTime"
+                        value={newOverrideEndHour}
+                        onChange={(e) => setNewOverrideEndHour(parseInt(e.target.value))}
+                        className="mt-1 block w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:text-white"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <option key={i} value={i}>
+                            {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    onClick={handleAddDateSpecificOverride}
+                  >
+                    Save Override
+                  </button>
+                </div>
+              )}
+
+              {dateSpecificStudyWindows.length > 0 ? (
+                <ul className="mt-3 space-y-3">
+                  {dateSpecificStudyWindows.map((override) => (
+                    <li key={override.date} className="flex justify-between items-center p-3 bg-white dark:bg-gray-900 rounded-md shadow">
+                      <div className="text-sm">
+                        <strong className="text-gray-700 dark:text-gray-200">{override.date}</strong>
+                        <span className="mx-2 text-gray-500">|</span>
+                        {formatTimeDisplay(override.startHour)} - {formatTimeDisplay(override.endHour)}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 rounded-full p-2"
+                          onClick={() => handleEditDateSpecificOverride(override)}
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="bg-red-100 text-red-700 hover:bg-red-200 rounded-full p-2"
+                          onClick={() => handleDeleteDateSpecificOverride(override.date)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${override.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}
+                          onClick={() => handleToggleOverrideActive(override.date)}
+                        >
+                          {override.isActive ? 'Active' : 'Inactive'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">No date-specific overrides.</p>
+              )}
+            </div>
+          )}
+
         {/* Study Plan Mode */}
             <div className={`${highlightStudyPlanMode ? 'ring-2 ring-yellow-400 animate-pulse shadow-lg shadow-yellow-400/50 rounded-lg p-3 bg-yellow-50 dark:bg-yellow-900/20' : ''}`}>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">Study Plan Mode</label>
@@ -539,11 +758,6 @@ const Settings: React.FC<SettingsProps> = ({
                   <span className="text-sm text-gray-700 dark:text-gray-200">Balanced Priority <span className="text-xs text-gray-500 dark:text-gray-400">(priority-based even distribution)</span></span>
             </label>
               </div>
-              <div className="mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                <div><strong>Eisenhower:</strong> Tasks scheduled by importance & urgency first</div>
-                <div><strong>Even Distribution:</strong> All tasks spread equally across available time</div>
-                <div><strong>Balanced Priority:</strong> Important tasks get priority but are evenly distributed within their tier</div>
-              </div>
               <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-3 border-blue-400">
                 <p className="text-xs text-blue-700 dark:text-blue-300">
                   <strong>Note:</strong> Only the "Evenly Distributed" mode accounts for task frequency preferences.
@@ -553,6 +767,7 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
           </div>
         </div>
+
 
         {/* Full Width Sections */}
         <div className="space-y-3">

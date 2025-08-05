@@ -1,4 +1,4 @@
-import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, RedistributionOptions, RedistributionResult } from '../types';
+import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, RedistributionOptions, RedistributionResult, DateSpecificStudyWindow } from '../types';
 import { createEnhancedRedistributionEngine, createConflictChecker } from './enhanced-scheduling';
 
 // Utility functions
@@ -46,6 +46,38 @@ export const formatTimeForTimer = (seconds: number): string => {
 };
 
 /**
+ * Get the effective study window for a specific date
+ * Takes into account date-specific overrides if they exist
+ * @param date The date string (YYYY-MM-DD format) to get the study window for
+ * @param settings User settings containing default and date-specific study windows
+ * @returns Object with startHour and endHour for the effective study window
+ */
+export const getEffectiveStudyWindow = (
+  date: string,
+  settings: UserSettings
+): { startHour: number; endHour: number } => {
+  // Check if there's a date-specific study window for this date
+  if (settings.dateSpecificStudyWindows) {
+    const dateSpecificWindow = settings.dateSpecificStudyWindows.find(
+      window => window.date === date && window.isActive
+    );
+    
+    if (dateSpecificWindow) {
+      return {
+        startHour: dateSpecificWindow.startHour,
+        endHour: dateSpecificWindow.endHour
+      };
+    }
+  }
+  
+  // Return default study window
+  return {
+    startHour: settings.studyWindowStartHour || 6,
+    endHour: settings.studyWindowEndHour || 23
+  };
+};
+
+/**
  * Check if a commitment applies to a specific date
  * @param commitment The commitment to check
  * @param date The date string to check (YYYY-MM-DD format)
@@ -65,8 +97,9 @@ export const doesCommitmentApplyToDate = (commitment: FixedCommitment, date: str
     // If day of week doesn't match, return false immediately
     if (!dayOfWeekMatches) return false;
     
-    // If there's a date range specified, check if the date is within that range
+    // CRITICAL FIX: If there's a date range specified, the commitment ONLY applies within that range
     if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+      // Only apply if the date is within the specified range
       return date >= commitment.dateRange.startDate && date <= commitment.dateRange.endDate;
     }
     
@@ -307,8 +340,18 @@ function findNextAvailableTimeSlot(
   studyWindowStartHour: number,
   studyWindowEndHour: number,
   bufferTimeBetweenSessions: number = 0, // new param, in minutes
-  targetDate?: string // Add target date for filtering deleted occurrences
+  targetDate?: string, // Add target date for filtering deleted occurrences
+  settings?: UserSettings // Add settings to get date-specific study window
 ): { start: string; end: string } | null {
+  // Use date-specific study window if available
+  let effectiveStartHour = studyWindowStartHour;
+  let effectiveEndHour = studyWindowEndHour;
+  
+  if (settings && targetDate) {
+    const effectiveWindow = getEffectiveStudyWindow(targetDate, settings);
+    effectiveStartHour = effectiveWindow.startHour;
+    effectiveEndHour = effectiveWindow.endHour;
+  }
   // Build a list of all busy intervals (sessions and commitments)
   const busyIntervals: Array<{ start: number; end: number }> = [];
   existingSessions.forEach(s => {
@@ -317,17 +360,29 @@ function findNextAvailableTimeSlot(
     busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
   });
   
-  // Filter commitments to exclude deleted occurrences and apply modifications
+  // Filter commitments to exclude deleted occurrences and check date range applicability
   const activeCommitments = commitments.filter(commitment => {
     if (!targetDate) return true; // If no target date, include all commitments
-    return !commitment.deletedOccurrences?.includes(targetDate);
+    
+    // Use the proper function to check if commitment applies to this date
+    return doesCommitmentApplyToDate(commitment, targetDate);
   });
   
   activeCommitments.forEach(c => {
     // Handle all-day events
     if (c.isAllDay) {
-      // All-day events block the entire day
-      busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
+      // Only certain types of all-day events should block the entire day
+      // Types that should block entire day: work (full work days), buffer (rest days)
+      const shouldBlockEntireDay = c.type === 'work' || c.type === 'buffer';
+      
+      if (shouldBlockEntireDay) {
+        // These all-day events block the entire day
+        busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
+        return;
+      }
+      
+      // For other all-day events (class, appointment, other), don't block scheduling
+      // These are considered background events that don't prevent study sessions
       return;
     }
     
@@ -360,33 +415,76 @@ function findNextAvailableTimeSlot(
   });
   
   busyIntervals.sort((a, b) => a.start - b.start);
-  // Find the first available slot
-  const requiredMinutes = Math.ceil(requiredHours * 60);
-  let current = studyWindowStartHour * 60;
-  const endOfDay = studyWindowEndHour * 60;
-  for (const interval of busyIntervals) {
-    if (interval.start - current >= requiredMinutes) {
-      // Found a slot
-      const startH = Math.floor(current / 60).toString().padStart(2, '0');
-      const startM = (current % 60).toString().padStart(2, '0');
-      const end = current + requiredMinutes;
-      const endH = Math.floor(end / 60).toString().padStart(2, '0');
-      const endM = (end % 60).toString().padStart(2, '0');
-      return { start: `${startH}:${startM}`, end: `${endH}:${endM}` };
-    }
-    // Add buffer after each busy interval
-    current = Math.max(current, interval.end + bufferTimeBetweenSessions);
+// Enhanced logic to find first available slot with better precision
+const requiredMinutes = Math.round(requiredHours * 60); // Use round instead of ceil for better precision
+let current = effectiveStartHour * 60;
+const endOfDay = effectiveEndHour * 60;
+
+// Simple debug logging (console only)
+const debugLog = (message: string, data?: any) => {
+  // Only log to console in development
+  if (process.env.NODE_ENV === 'development') {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    console.log(`[${timestamp}] ${message}`, data || '');
   }
-  // Check after last busy interval
-  if (endOfDay - current >= requiredMinutes) {
+};
+
+if (targetDate) {
+  debugLog(`Finding slot for ${requiredHours}h (${requiredMinutes}min) on ${targetDate}`);
+  debugLog(`Study window: ${effectiveStartHour}:00 - ${effectiveEndHour}:00 (${current}-${endOfDay} minutes)`);
+  debugLog(`Busy intervals:`, busyIntervals.map(i => `${Math.floor(i.start/60)}:${String(i.start%60).padStart(2,'0')}-${Math.floor(i.end/60)}:${String(i.end%60).padStart(2,'0')}`));
+}
+
+// Check gaps between busy intervals
+for (const interval of busyIntervals) {
+  const availableGap = interval.start - current;
+  
+  if (targetDate) {
+    debugLog(`Checking gap: ${Math.floor(current/60)}:${String(current%60).padStart(2,'0')} to ${Math.floor(interval.start/60)}:${String(interval.start%60).padStart(2,'0')} = ${availableGap} minutes (need ${requiredMinutes})`);
+  }
+  
+  if (availableGap >= requiredMinutes) {
+    // Found a gap that fits - use it immediately
     const startH = Math.floor(current / 60).toString().padStart(2, '0');
     const startM = (current % 60).toString().padStart(2, '0');
-    const end = current + requiredMinutes;
-    const endH = Math.floor(end / 60).toString().padStart(2, '0');
-    const endM = (end % 60).toString().padStart(2, '0');
+    const endTime = current + requiredMinutes;
+    const endH = Math.floor(endTime / 60).toString().padStart(2, '0');
+    const endM = (endTime % 60).toString().padStart(2, '0');
+    
+    if (targetDate) {
+      debugLog(`✓ Found slot: ${startH}:${startM} - ${endH}:${endM}`);
+    }
+    
     return { start: `${startH}:${startM}`, end: `${endH}:${endM}` };
   }
-  return null; // No available slot
+  current = Math.max(current, interval.end + bufferTimeBetweenSessions);
+}
+
+// Check if there's space at the end of the day
+const finalGap = endOfDay - current;
+if (targetDate) {
+  debugLog(`Checking final gap: ${Math.floor(current/60)}:${String(current%60).padStart(2,'0')} to ${Math.floor(endOfDay/60)}:${String(endOfDay%60).padStart(2,'0')} = ${finalGap} minutes (need ${requiredMinutes})`);
+}
+
+if (finalGap >= requiredMinutes) {
+  const startH = Math.floor(current / 60).toString().padStart(2, '0');
+  const startM = (current % 60).toString().padStart(2, '0');
+  const endTime = current + requiredMinutes;
+  const endH = Math.floor(endTime / 60).toString().padStart(2, '0');
+  const endM = (endTime % 60).toString().padStart(2, '0');
+  
+  if (targetDate) {
+    debugLog(`✓ Found final slot: ${startH}:${startM} - ${endH}:${endM}`);
+  }
+  
+  return { start: `${startH}:${startM}`, end: `${endH}:${endM}` };
+}
+
+if (targetDate) {
+  debugLog(`✗ No available slot found for ${requiredHours}h session`);
+}
+
+return null; // No available slot
 }
 
 // Helper function to validate that sessions don't overlap with each other or commitments
@@ -974,8 +1072,9 @@ export const generateNewStudyPlan = (
           commitmentsForDay,
           settings.studyWindowStartHour || 6,
           settings.studyWindowEndHour || 23,
-          settings.bufferTimeBetweenSessions || 0, // pass buffer
-          plan.date // pass target date for filtering deleted occurrences
+          settings.bufferTimeBetweenSessions || 0,
+          plan.date,
+          settings
         );
         if (slot) {
           session.startTime = slot.start;
@@ -1861,7 +1960,8 @@ export const getDailyAvailableTimeSlots = (
   commitments: FixedCommitment[],
   workDays: number[],
   startHour: number,
-  endHour: number
+  endHour: number,
+  settings?: UserSettings // Add settings parameter to get date-specific study window
 ): TimeSlot[] => {
   const slots: TimeSlot[] = [];
   const dayOfWeek = date.getDay();
@@ -1873,28 +1973,27 @@ export const getDailyAvailableTimeSlots = (
   
   const dateString = date.toISOString().split('T')[0];
   
-  // Filter commitments for this day, excluding deleted occurrences
+  // Filter commitments for this day using the proper date applicability check
   const dayCommitments = commitments.filter(commitment => {
-    // Check if this commitment applies to this specific date
-    let appliesToDate = false;
-    
-    if (commitment.recurring) {
-      // For recurring commitments, check if the day of week matches
-      appliesToDate = commitment.daysOfWeek.includes(dayOfWeek);
-    } else {
-      // For non-recurring commitments, check if the specific date matches
-      appliesToDate = commitment.specificDates?.includes(dateString) || false;
-    }
-    
-    return appliesToDate && !commitment.deletedOccurrences?.includes(dateString);
+    return doesCommitmentApplyToDate(commitment, dateString);
   });
+  
+  // Use date-specific study window if available
+  let effectiveStartHour = startHour;
+  let effectiveEndHour = endHour;
+  
+  if (settings) {
+    const effectiveWindow = getEffectiveStudyWindow(dateString, settings);
+    effectiveStartHour = effectiveWindow.startHour;
+    effectiveEndHour = effectiveWindow.endHour;
+  }
   
   // Create time slots around commitments
   let currentTime = new Date(date);
-  currentTime.setHours(startHour, 0, 0, 0);
+  currentTime.setHours(effectiveStartHour, 0, 0, 0);
   
   const endTime = new Date(date);
-  endTime.setHours(endHour, 0, 0, 0);
+  endTime.setHours(effectiveEndHour, 0, 0, 0);
   
   // Calculate total available time for the day
   const totalAvailableMinutes = dailyHours * 60;
@@ -1960,11 +2059,16 @@ export const findNextAvailableStartTime = (
   date: Date,
   settings: UserSettings
 ): Date | null => {
+  const dateString = date.toISOString().split('T')[0];
+  
+  // Use date-specific study window if available
+  const effectiveWindow = getEffectiveStudyWindow(dateString, settings);
+  
   const studyWindowStart = new Date(date);
-  studyWindowStart.setHours(settings.studyWindowStartHour || 6, 0, 0, 0);
+  studyWindowStart.setHours(effectiveWindow.startHour, 0, 0, 0);
   
   const studyWindowEnd = new Date(date);
-  studyWindowEnd.setHours(settings.studyWindowEndHour || 23, 0, 0, 0);
+  studyWindowEnd.setHours(effectiveWindow.endHour, 0, 0, 0);
   
   // Check for conflicts with existing sessions
   const proposedEndTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
@@ -2112,14 +2216,7 @@ export const moveMissedSessions = (
     // Add commitments for this day
     const dayOfWeek = date.getDay();
     const dayCommitments = fixedCommitments.filter(commitment => {
-      // Check if this commitment applies to this specific date
-      if (commitment.recurring) {
-        // For recurring commitments, check if the day of week matches
-        return commitment.daysOfWeek.includes(dayOfWeek);
-      } else {
-        // For non-recurring commitments, check if the specific date matches
-        return commitment.specificDates?.includes(dateString) || false;
-      }
+      return doesCommitmentApplyToDate(commitment, dateString);
     });
     
     dayCommitments.forEach(commitment => {
@@ -3042,21 +3139,26 @@ export const checkCommitmentConflicts = (
         existing.daysOfWeek.includes(day)
       );
 
-      // Check date range overlap if both have date ranges
-      let dateRangeOverlap = true; // Default to true if no date ranges
+      // IMPROVED: Check actual date range overlap with proper logic
+      let dateRangeOverlap = false;
       
       if (newCommitment.dateRange?.startDate && newCommitment.dateRange?.endDate && 
           existing.dateRange?.startDate && existing.dateRange?.endDate) {
-        // Check if date ranges overlap
+        // Both have date ranges - check if they actually overlap
         dateRangeOverlap = !(
           newCommitment.dateRange.endDate < existing.dateRange.startDate || 
           newCommitment.dateRange.startDate > existing.dateRange.endDate
         );
       } else if (newCommitment.dateRange?.startDate && newCommitment.dateRange?.endDate) {
-        // New commitment has date range, existing doesn't (assumed indefinite)
+        // New commitment has date range, existing doesn't (existing is indefinite)
+        // They overlap because existing applies to all dates
         dateRangeOverlap = true;
       } else if (existing.dateRange?.startDate && existing.dateRange?.endDate) {
-        // Existing commitment has date range, new doesn't (assumed indefinite)
+        // Existing commitment has date range, new doesn't (new is indefinite)
+        // They overlap because new applies to all dates
+        dateRangeOverlap = true;
+      } else {
+        // Neither has date range (both are indefinite) - they overlap
         dateRangeOverlap = true;
       }
 
@@ -3109,12 +3211,15 @@ export const checkCommitmentConflicts = (
       // One is recurring, one is non-recurring
       if (newCommitment.recurring && !existing.recurring) {
         // New is recurring, existing is non-recurring - OVERRIDE (one-time takes priority)
-        // Filter dates based on day of week and date range if specified
+        // IMPROVED: Use doesCommitmentApplyToDate logic for better date range handling
         const overlappingDates = existing.specificDates?.filter(date => {
           const dayOfWeek = new Date(date).getDay();
           const isInDayOfWeek = newCommitment.daysOfWeek.includes(dayOfWeek);
           
-          // Check if date is within the date range if specified
+          // CRITICAL: Only check date range if the day of week matches first
+          if (!isInDayOfWeek) return false;
+          
+          // Check if date is within the new commitment's date range if specified
           let isInDateRange = true;
           if (newCommitment.dateRange?.startDate && newCommitment.dateRange?.endDate) {
             isInDateRange = (
@@ -3123,7 +3228,7 @@ export const checkCommitmentConflicts = (
             );
           }
           
-          return isInDayOfWeek && isInDateRange;
+          return isInDateRange; // Both day of week and date range must match
         }) || [];
 
         if (overlappingDates.length > 0) {
@@ -3147,12 +3252,15 @@ export const checkCommitmentConflicts = (
         }
       } else {
         // New is non-recurring, existing is recurring - OVERRIDE (one-time takes priority)
-        // Filter dates based on day of week and date range if specified
+        // IMPROVED: Use doesCommitmentApplyToDate logic for better date range handling
         const overlappingDates = newCommitment.specificDates?.filter(date => {
           const dayOfWeek = new Date(date).getDay();
           const isInDayOfWeek = existing.daysOfWeek.includes(dayOfWeek);
           
-          // Check if date is within the existing commitment's date range if specified
+          // CRITICAL: Only check date range if the day of week matches first
+          if (!isInDayOfWeek) return false;
+          
+          // Check if date is within the existing commitment's date range if specified  
           let isInDateRange = true;
           if (existing.dateRange?.startDate && existing.dateRange?.endDate) {
             isInDateRange = (
@@ -3161,7 +3269,7 @@ export const checkCommitmentConflicts = (
             );
           }
           
-          return isInDayOfWeek && isInDateRange;
+          return isInDateRange; // Both day of week and date range must match
         }) || [];
 
         if (overlappingDates.length > 0) {

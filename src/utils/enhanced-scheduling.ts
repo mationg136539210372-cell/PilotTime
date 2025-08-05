@@ -11,7 +11,7 @@ import {
   SessionSchedulingMetadata,
   SkipMetadata
 } from '../types';
-import { getLocalDateString, formatTime } from './scheduling';
+import { getLocalDateString, formatTime, getEffectiveStudyWindow } from './scheduling';
 
 /**
  * Enhanced Conflict Checker and Validation System
@@ -44,10 +44,11 @@ export class ConflictChecker {
     }
 
     // Check study window - skip for all-day events
-    if (!isAllDay && !this.isWithinStudyWindow(startTime, endTime)) {
+    if (!isAllDay && !this.isWithinStudyWindow(date, startTime, endTime)) {
+      const effectiveWindow = getEffectiveStudyWindow(date, this.settings);
       conflicts.push({
         type: 'invalid_time_slot',
-        message: `Time slot is outside study window (${this.settings.studyWindowStartHour}:00 - ${this.settings.studyWindowEndHour}:00)`
+        message: `Time slot is outside study window (${effectiveWindow.startHour}:00 - ${effectiveWindow.endHour}:00)`
       });
     }
 
@@ -158,8 +159,11 @@ export class ConflictChecker {
    */
   private getAvailableTimeSlots(date: string, existingSessions: StudySession[]): TimeSlot[] {
     const slots: TimeSlot[] = [];
-    const studyWindowStart = this.settings.studyWindowStartHour * 60; // Convert to minutes
-    const studyWindowEnd = this.settings.studyWindowEndHour * 60;
+    
+    // Use date-specific study window if available
+    const effectiveWindow = getEffectiveStudyWindow(date, this.settings);
+    const studyWindowStart = effectiveWindow.startHour * 60; // Convert to minutes
+    const studyWindowEnd = effectiveWindow.endHour * 60;
     
     // Get all busy intervals (sessions and commitments)
     const busyIntervals = this.getBusyIntervals(date, existingSessions);
@@ -447,11 +451,14 @@ export class ConflictChecker {
     return start < end && start >= 0 && end <= 24 * 60;
   }
 
-  private isWithinStudyWindow(startTime: string, endTime: string): boolean {
+  private isWithinStudyWindow(date: string, startTime: string, endTime: string): boolean {
     const start = this.timeStringToMinutes(startTime);
     const end = this.timeStringToMinutes(endTime);
-    const windowStart = this.settings.studyWindowStartHour * 60;
-    const windowEnd = this.settings.studyWindowEndHour * 60;
+    
+    // Use date-specific study window if available
+    const effectiveWindow = getEffectiveStudyWindow(date, this.settings);
+    const windowStart = effectiveWindow.startHour * 60;
+    const windowEnd = effectiveWindow.endHour * 60;
     
     return start >= windowStart && end <= windowEnd;
   }
