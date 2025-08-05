@@ -32,6 +32,7 @@ interface CalendarEvent {
   title: string;
   start: Date;
   end: Date;
+  allDay?: boolean;
   resource: {
     type: 'study' | 'commitment';
     data: any;
@@ -46,17 +47,7 @@ const intervalOptions = [
   { value: 60, label: '1 hour' },
 ];
 
-// Color palette for up to 8 categories
-const CATEGORY_COLORS = [
-  '#6366f1', // Indigo
-  '#f59e42', // Orange
-  '#10b981', // Green
-  '#f43f5e', // Red
-  '#eab308', // Yellow
-  '#3b82f6', // Blue
-  '#a21caf', // Purple
-  '#14b8a6', // Teal
-];
+
 const DEFAULT_UNCATEGORIZED_TASK_COLOR = '#9ca3af'; // Light gray for uncategorized tasks
 
 
@@ -296,10 +287,32 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       if (commitment.recurring) {
         // Handle recurring commitments
         const today = new Date();
-        // Extend the range to 365 days (1 year) to prevent days from getting cut off
-        const endDate = new Date();
+        // Default end date is 1 year from today
+        let endDate = new Date();
         endDate.setDate(today.getDate() + 365);
-        const currentDate = new Date(today);
+        
+        // Declare currentDate variable before the if-else block
+        let currentDate: Date;
+        
+        // If dateRange is specified, use it instead
+        if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+          // Use the later of today or startDate as the beginning date
+          const rangeStartDate = new Date(commitment.dateRange.startDate);
+          const startDate = rangeStartDate > today ? rangeStartDate : today;
+          endDate = new Date(commitment.dateRange.endDate);
+          
+          // If the range is in the past, skip this commitment
+          if (endDate < today) {
+            return;
+          }
+          
+          // Update the current date to start from the range start
+          currentDate = new Date(startDate);
+        } else {
+          // No date range specified, use default 1-year range
+          endDate.setDate(today.getDate() + 365);
+          currentDate = new Date(today);
+        }
         while (currentDate <= endDate) {
           if (commitment.daysOfWeek.includes(currentDate.getDay())) {
             const dateString = currentDate.toISOString().split('T')[0];
@@ -313,21 +326,33 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             // Check for modified occurrence
             const modifiedSession = commitment.modifiedOccurrences?.[dateString];
             
-            const startDateTime = new Date(currentDate);
-            const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime).split(':').map(Number);
-            startDateTime.setHours(startHour, startMinute, 0, 0);
-            const endDateTime = new Date(currentDate);
-            const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime).split(':').map(Number);
-            endDateTime.setHours(endHour, endMinute, 0, 0);
+            // Check if this is an all-day event (either from the commitment or a modified occurrence)
+            const isAllDay = modifiedSession?.isAllDay !== undefined ? modifiedSession.isAllDay : commitment.isAllDay;
+            
+            let startDateTime = new Date(currentDate);
+            let endDateTime = new Date(currentDate);
+            
+            if (isAllDay) {
+              // For all-day events, set time to 00:00:00 for start and 23:59:59 for end
+              startDateTime.setHours(0, 0, 0, 0);
+              endDateTime.setHours(23, 59, 59, 999);
+            } else {
+              // For time-specific events, use the specified times
+              const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime || '00:00').split(':').map(Number);
+              startDateTime.setHours(startHour, startMinute, 0, 0);
+              const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime || '23:59').split(':').map(Number);
+              endDateTime.setHours(endHour, endMinute, 0, 0);
+            }
             
             // Split if crosses midnight
             splitEventIfCrossesMidnight(startDateTime, endDateTime).forEach(({ start, end }, idx) => {
-              const uniqueId = `commitment-${commitment.id}-${currentDate.toISOString().split('T')[0]}-${(modifiedSession?.startTime || commitment.startTime).replace(':', '')}-${idx}`;
+              const uniqueId = `commitment-${commitment.id}-${currentDate.toISOString().split('T')[0]}-${(modifiedSession?.startTime || commitment.startTime || '00:00').replace(':', '')}-${idx}`;
               calendarEvents.push({
                 id: uniqueId,
                 title: modifiedSession?.title || commitment.title,
                 start,
                 end,
+                allDay: isAllDay,
                 resource: {
                   type: 'commitment',
                   data: {
@@ -335,7 +360,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     title: modifiedSession?.title || commitment.title,
                     startTime: modifiedSession?.startTime || commitment.startTime,
                     endTime: modifiedSession?.endTime || commitment.endTime,
-                    type: modifiedSession?.type || commitment.type
+                    type: modifiedSession?.type || commitment.type,
+                    isAllDay: isAllDay
                   }
                 }
               });
@@ -356,21 +382,33 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           // Check for modified occurrence
           const modifiedSession = commitment.modifiedOccurrences?.[dateString];
           
-          const startDateTime = new Date(currentDate);
-          const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime).split(':').map(Number);
-          startDateTime.setHours(startHour, startMinute, 0, 0);
-          const endDateTime = new Date(currentDate);
-          const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime).split(':').map(Number);
-          endDateTime.setHours(endHour, endMinute, 0, 0);
+          // Check if this is an all-day event (either from the commitment or a modified occurrence)
+          const isAllDay = modifiedSession?.isAllDay !== undefined ? modifiedSession.isAllDay : commitment.isAllDay;
+          
+          let startDateTime = new Date(currentDate);
+          let endDateTime = new Date(currentDate);
+          
+          if (isAllDay) {
+            // For all-day events, set time to 00:00:00 for start and 23:59:59 for end
+            startDateTime.setHours(0, 0, 0, 0);
+            endDateTime.setHours(23, 59, 59, 999);
+          } else {
+            // For time-specific events, use the specified times
+            const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime || '00:00').split(':').map(Number);
+            startDateTime.setHours(startHour, startMinute, 0, 0);
+            const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime || '23:59').split(':').map(Number);
+            endDateTime.setHours(endHour, endMinute, 0, 0);
+          }
           
           // Split if crosses midnight
           splitEventIfCrossesMidnight(startDateTime, endDateTime).forEach(({ start, end }, idx) => {
-            const uniqueId = `commitment-${commitment.id}-${dateString}-${(modifiedSession?.startTime || commitment.startTime).replace(':', '')}-${idx}`;
+            const uniqueId = `commitment-${commitment.id}-${dateString}-${(modifiedSession?.startTime || commitment.startTime || '00:00').replace(':', '')}-${idx}`;
             calendarEvents.push({
               id: uniqueId,
               title: modifiedSession?.title || commitment.title,
               start,
               end,
+              allDay: isAllDay,
               resource: {
                 type: 'commitment',
                 data: {
@@ -378,7 +416,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   title: modifiedSession?.title || commitment.title,
                   startTime: modifiedSession?.startTime || commitment.startTime,
                   endTime: modifiedSession?.endTime || commitment.endTime,
-                  type: modifiedSession?.type || commitment.type
+                  type: modifiedSession?.type || commitment.type,
+                  isAllDay: isAllDay
                 }
               }
             });
@@ -1235,8 +1274,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 </div>
                 <div className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                   Duration: {(() => {
-                    const [sh, sm] = selectedManualSession.startTime.split(":").map(Number);
-                    const [eh, em] = selectedManualSession.endTime.split(":").map(Number);
+                    const [sh, sm] = (selectedManualSession.startTime || '00:00').split(":").map(Number);
+                    const [eh, em] = (selectedManualSession.endTime || '23:59').split(":").map(Number);
                     let mins = (eh * 60 + em) - (sh * 60 + sm);
                     if (mins < 0) mins += 24 * 60;
                     return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
@@ -1248,8 +1287,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   onClick={() => {
                     // Start session (redirect to timer)
                     if (onStartManualSession) {
-                      const [sh, sm] = selectedManualSession.startTime.split(":").map(Number);
-                      const [eh, em] = selectedManualSession.endTime.split(":").map(Number);
+                      const [sh, sm] = (selectedManualSession.startTime || '00:00').split(":").map(Number);
+                      const [eh, em] = (selectedManualSession.endTime || '23:59').split(":").map(Number);
                       let mins = (eh * 60 + em) - (sh * 60 + sm);
                       if (mins < 0) mins += 24 * 60;
                       setSelectedManualSession(null);

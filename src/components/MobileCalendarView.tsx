@@ -26,6 +26,7 @@ interface CalendarEvent {
   title: string;
   start: Date;
   end: Date;
+  allDay?: boolean;
   resource: {
     type: 'study' | 'commitment';
     data: any;
@@ -125,31 +126,43 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
         // Check for modified occurrence for the specific date
         const modifiedSession = commitment.modifiedOccurrences?.[dateString];
         
-        // Use modified times if they exist, otherwise use original commitment times
-        const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime).split(':').map(Number);
-        const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime).split(':').map(Number);
+        // Check if this is an all-day event (either from the commitment or a modified occurrence)
+        const isAllDay = modifiedSession?.isAllDay !== undefined ? modifiedSession.isAllDay : commitment.isAllDay;
         
-        // Set the hour and minute on the selectedDate to create the correct timestamp
-        const startTime = moment(selectedDate)
-          .set({
-            hour: startHour,
-            minute: startMinute,
-            second: 0,
-            millisecond: 0
-          });
-        const endTime = moment(selectedDate)
-          .set({
-            hour: endHour,
-            minute: endMinute,
-            second: 0,
-            millisecond: 0
-          });
+        let startTime, endTime;
+        
+        if (isAllDay) {
+          // For all-day events, set time to 00:00:00 for start and 23:59:59 for end
+          startTime = moment(selectedDate).startOf('day');
+          endTime = moment(selectedDate).endOf('day');
+        } else {
+          // Use modified times if they exist, otherwise use original commitment times
+          const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime || '00:00').split(':').map(Number);
+          const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime || '23:59').split(':').map(Number);
+          
+          // Set the hour and minute on the selectedDate to create the correct timestamp
+          startTime = moment(selectedDate)
+            .set({
+              hour: startHour,
+              minute: startMinute,
+              second: 0,
+              millisecond: 0
+            });
+          endTime = moment(selectedDate)
+            .set({
+              hour: endHour,
+              minute: endMinute,
+              second: 0,
+              millisecond: 0
+            });
+        }
         
         events.push({
           id: commitment.id, // Using commitment ID as the event ID
           title: modifiedSession?.title || commitment.title,
           start: startTime.toDate(),
           end: endTime.toDate(),
+          allDay: isAllDay,
           resource: {
             type: 'commitment',
             data: {
@@ -157,7 +170,8 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
               title: modifiedSession?.title || commitment.title, // Override with modified title if present
               startTime: modifiedSession?.startTime || commitment.startTime, // Override with modified start time if present
               endTime: modifiedSession?.endTime || commitment.endTime, // Override with modified end time if present
-              type: modifiedSession?.type || commitment.type // Override with modified type if present
+              type: modifiedSession?.type || commitment.type, // Override with modified type if present
+              isAllDay: isAllDay // Include the all-day flag
             }
           }
         });
@@ -362,11 +376,42 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
         </div>
       </div>
 
+      {/* All-Day Events Section */}
+      <div className="mb-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden">
+          <div className="w-full p-3 text-sm font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            All-Day Events
+          </div>
+          <div className="p-3">
+            {selectedDateEvents.filter(event => event.allDay).length > 0 ? (
+              selectedDateEvents
+                .filter(event => event.allDay)
+                .map((event) => (
+                  <div
+                    key={event.id}
+                    onClick={() => handleEventClick(event)}
+                    className="mb-2 p-3 rounded-lg text-white text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-80"
+                    style={{ backgroundColor: getEventColor(event) }}
+                  >
+                    <div className="font-bold">{event.title}</div>
+                    <div className="text-xs opacity-90">
+                      All day • {event.resource.data.location ? `${event.resource.data.location} • ` : ''}
+                      {event.resource.type === 'commitment' ? event.resource.data.type : 'Study Session'}
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <div className="text-sm text-gray-500 dark:text-gray-400 py-2">No all-day events</div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Vertical Timeline */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden">
         <div className="max-h-[600px] overflow-y-auto">
           {timeSlots.map((hour) => {
-            const events = getEventsForTimeSlot(hour);
+            const events = getEventsForTimeSlot(hour).filter(event => !event.allDay);
             return (
               <div key={hour} className="border-b border-gray-200 dark:border-gray-700">
                 <div className="flex">

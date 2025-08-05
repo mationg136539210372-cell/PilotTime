@@ -60,7 +60,18 @@ export const doesCommitmentApplyToDate = (commitment: FixedCommitment, date: str
   // Check if commitment applies to this date
   if (commitment.recurring) {
     // For recurring commitments, check if the day of week matches
-    return commitment.daysOfWeek.includes(new Date(date).getDay());
+    const dayOfWeekMatches = commitment.daysOfWeek.includes(new Date(date).getDay());
+    
+    // If day of week doesn't match, return false immediately
+    if (!dayOfWeekMatches) return false;
+    
+    // If there's a date range specified, check if the date is within that range
+    if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+      return date >= commitment.dateRange.startDate && date <= commitment.dateRange.endDate;
+    }
+    
+    // No date range specified, so it applies to all dates with matching day of week
+    return true;
   } else {
     // For non-recurring commitments, check if the specific date matches
     return commitment.specificDates?.includes(date) || false;
@@ -313,12 +324,27 @@ function findNextAvailableTimeSlot(
   });
   
   activeCommitments.forEach(c => {
-    const [sh, sm] = c.startTime.split(":").map(Number);
-    const [eh, em] = c.endTime.split(":").map(Number);
+    // Handle all-day events
+    if (c.isAllDay) {
+      // All-day events block the entire day
+      busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
+      return;
+    }
+    
+    // Handle time-specific events
+    const [sh, sm] = c.startTime?.split(":").map(Number) || [0, 0];
+    const [eh, em] = c.endTime?.split(":").map(Number) || [23, 59];
     
     // Apply modifications if they exist for the target date
     if (targetDate && c.modifiedOccurrences?.[targetDate]) {
       const modified = c.modifiedOccurrences[targetDate];
+      
+      // Check if the modified occurrence is an all-day event
+      if (modified.isAllDay) {
+        busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
+        return;
+      }
+      
       if (modified.startTime) {
         const [msh, msm] = modified.startTime.split(":").map(Number);
         busyIntervals.push({ start: msh * 60 + (msm || 0), end: eh * 60 + (em || 0) });
@@ -371,7 +397,7 @@ function validateSessionTimes(
 ): boolean {
   const timeToMinutes = (timeStr: string): number => {
     const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
+    return (hours || 0) * 60 + (minutes || 0);
   };
 
   // Create a list of all busy intervals
@@ -381,17 +407,48 @@ function validateSessionTimes(
   commitments.forEach(commitment => {
     let appliesToDate = false;
     if (commitment.recurring) {
-      appliesToDate = commitment.daysOfWeek.includes(new Date(date).getDay());
+      // Check day of week match
+      const dayOfWeekMatches = commitment.daysOfWeek.includes(new Date(date).getDay());
+      
+      if (dayOfWeekMatches) {
+        // Check date range if specified
+        if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+          appliesToDate = date >= commitment.dateRange.startDate && date <= commitment.dateRange.endDate;
+        } else {
+          appliesToDate = true;
+        }
+      }
     } else {
       appliesToDate = commitment.specificDates?.includes(date) || false;
     }
 
     if (appliesToDate && !commitment.deletedOccurrences?.includes(date)) {
-      busyIntervals.push({
-        start: timeToMinutes(commitment.startTime),
-        end: timeToMinutes(commitment.endTime),
-        source: `commitment-${commitment.title}`
-      });
+      // Check for modified occurrences
+      const modified = commitment.modifiedOccurrences?.[date];
+      
+      // Check if the commitment or its modification is an all-day event
+      const isAllDay = modified?.isAllDay !== undefined ? modified.isAllDay : commitment.isAllDay;
+      
+      // For all-day events, block the entire day
+      if (isAllDay) {
+        busyIntervals.push({
+          start: 0,
+          end: 24 * 60 - 1,
+          source: `commitment-${commitment.title}-allday`
+        });
+      } else {
+        // For time-specific events, use the specified times
+        const startTime = modified?.startTime || commitment.startTime;
+        const endTime = modified?.endTime || commitment.endTime;
+        
+        if (startTime && endTime) {
+          busyIntervals.push({
+            start: timeToMinutes(startTime),
+            end: timeToMinutes(endTime),
+            source: `commitment-${commitment.title}`
+          });
+        }
+      }
     }
   });
 
@@ -459,7 +516,7 @@ export const generateNewStudyPlan = (
       .filter(task => !task.deadline || task.deadline.trim().length === 0 || task.deadlineType === 'none')
       .sort((a, b) => {
         if (a.importance !== b.importance) return a.importance ? -1 : 1; // Important first
-        return a.title.localeCompare(b.title); // Then alphabetically
+        return (a.title || '').localeCompare(b.title || ''); // Then alphabetically
       });
 
     // Use deadline tasks for now (we'll add no-deadline scheduling later)
@@ -643,7 +700,7 @@ export const generateNewStudyPlan = (
         Object.entries(sessionsByTask).forEach(([taskId, sessions]) => {
           if (sessions.length > 1) {
             // Sort sessions by start time
-            sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+          sessions.sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00'));
 
             // Group adjacent sessions together
             let currentGroup: StudySession[] = [sessions[0]];
@@ -1142,7 +1199,7 @@ export const generateNewStudyPlan = (
       .filter(task => !task.deadline || task.deadline.trim().length === 0 || task.deadlineType === 'none')
       .sort((a, b) => {
         if (a.importance !== b.importance) return a.importance ? -1 : 1; // Important first
-        return a.title.localeCompare(b.title); // Then alphabetically
+        return (a.title || '').localeCompare(b.title || ''); // Then alphabetically
       });
 
     const tasksBalanced = deadlineTasksBalanced;
@@ -1455,7 +1512,7 @@ export const generateNewStudyPlan = (
     .filter(task => !task.deadline || task.deadline.trim().length === 0 || task.deadlineType === 'none')
     .sort((a, b) => {
       if (a.importance !== b.importance) return a.importance ? -1 : 1; // Important first
-      return a.title.localeCompare(b.title); // Then alphabetically
+      return (a.title || '').localeCompare(b.title || ''); // Then alphabetically
     });
 
   const tasksSorted = deadlineTasksEisen;
@@ -1845,8 +1902,8 @@ export const getDailyAvailableTimeSlots = (
   
   // Sort commitments by start time
   const sortedCommitments = dayCommitments.sort((a, b) => {
-    const aStartTime = a.modifiedOccurrences?.[dateString]?.startTime || a.startTime;
-    const bStartTime = b.modifiedOccurrences?.[dateString]?.startTime || b.startTime;
+    const aStartTime = a.modifiedOccurrences?.[dateString]?.startTime || a.startTime || '00:00';
+    const bStartTime = b.modifiedOccurrences?.[dateString]?.startTime || b.startTime || '00:00';
     return aStartTime.localeCompare(bStartTime);
   });
   
@@ -1854,11 +1911,11 @@ export const getDailyAvailableTimeSlots = (
     const modifiedSession = commitment.modifiedOccurrences?.[dateString];
     
     const commitmentStart = new Date(date);
-    const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime).split(':').map(Number);
+    const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime || '00:00').split(':').map(Number);
     commitmentStart.setHours(startHour, startMinute, 0, 0);
     
     const commitmentEnd = new Date(date);
-    const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime).split(':').map(Number);
+    const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime || '23:59').split(':').map(Number);
     commitmentEnd.setHours(endHour, endMinute, 0, 0);
     
     // Add slot before commitment if there's time
@@ -1914,11 +1971,11 @@ export const findNextAvailableStartTime = (
   
   for (const session of existingSessions) {
     const sessionStart = new Date(date);
-    const [startHour, startMinute] = session.startTime.split(':').map(Number);
+    const [startHour, startMinute] = (session.startTime || '00:00').split(':').map(Number);
     sessionStart.setHours(startHour, startMinute, 0, 0);
     
     const sessionEnd = new Date(date);
-    const [endHour, endMinute] = session.endTime.split(':').map(Number);
+    const [endHour, endMinute] = (session.endTime || '23:59').split(':').map(Number);
     sessionEnd.setHours(endHour, endMinute, 0, 0);
     
     // Check if there's a conflict
@@ -2067,11 +2124,11 @@ export const moveMissedSessions = (
     
     dayCommitments.forEach(commitment => {
       const commitmentStart = new Date(date);
-      const [startHour, startMinute] = commitment.startTime.split(':').map(Number);
+      const [startHour, startMinute] = (commitment.startTime || '00:00').split(':').map(Number);
       commitmentStart.setHours(startHour, startMinute, 0, 0);
       
       const commitmentEnd = new Date(date);
-      const [endHour, endMinute] = commitment.endTime.split(':').map(Number);
+      const [endHour, endMinute] = (commitment.endTime || '23:59').split(':').map(Number);
       commitmentEnd.setHours(endHour, endMinute, 0, 0);
       
       busySlots.push({ start: commitmentStart, end: commitmentEnd });
@@ -2083,11 +2140,11 @@ export const moveMissedSessions = (
       existingPlan.plannedTasks.forEach(session => {
         if (session.status !== 'skipped') {
           const sessionStart = new Date(date);
-          const [startHour, startMinute] = session.startTime.split(':').map(Number);
+          const [startHour, startMinute] = (session.startTime || '00:00').split(':').map(Number);
           sessionStart.setHours(startHour, startMinute, 0, 0);
           
           const sessionEnd = new Date(date);
-          const [endHour, endMinute] = session.endTime.split(':').map(Number);
+          const [endHour, endMinute] = (session.endTime || '23:59').split(':').map(Number);
           sessionEnd.setHours(endHour, endMinute, 0, 0);
           
           busySlots.push({ start: sessionStart, end: sessionEnd });
@@ -2240,8 +2297,8 @@ export const moveMissedSessions = (
       newSession.startTime = moveResult.targetTime;
       
       // Calculate end time
-      const [startHour, startMinute] = moveResult.targetTime.split(':').map(Number);
-      const startTimeInMinutes = startHour * 60 + startMinute;
+      const [startHour, startMinute] = (moveResult.targetTime || '00:00').split(':').map(Number);
+      const startTimeInMinutes = (startHour || 0) * 60 + (startMinute || 0);
       const endTimeInMinutes = startTimeInMinutes + Math.round(sessionDuration * 60);
       const endHour = Math.floor(endTimeInMinutes / 60);
       const endMinute = endTimeInMinutes % 60;
@@ -2391,10 +2448,10 @@ const validateStudyPlanConflicts = (
           const [bStartHour, bStartMinute] = sessionB.startTime.split(':').map(Number);
           const [bEndHour, bEndMinute] = sessionB.endTime.split(':').map(Number);
           
-          const aStart = aStartHour * 60 + aStartMinute;
-          const aEnd = aEndHour * 60 + aEndMinute;
-          const bStart = bStartHour * 60 + bStartMinute;
-          const bEnd = bEndHour * 60 + bEndMinute;
+          const aStart = (aStartHour || 0) * 60 + (aStartMinute || 0);
+          const aEnd = (aEndHour || 0) * 60 + (aEndMinute || 0);
+          const bStart = (bStartHour || 0) * 60 + (bStartMinute || 0);
+          const bEnd = (bEndHour || 0) * 60 + (bEndMinute || 0);
           
           if (aStart < bEnd && aEnd > bStart) {
             console.error(`Session overlap detected on ${plan.date}`);
@@ -2739,7 +2796,7 @@ export const redistributeAfterTaskDeletion = (
       Object.entries(sessionsByTask).forEach(([taskId, sessions]) => {
         if (sessions.length > 1) {
           // Sort sessions by start time
-          sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+          sessions.sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00'));
           
           // Combine all sessions into one
           const firstSession = sessions[0];
@@ -2938,11 +2995,16 @@ export const redistributeAfterTaskDeletion = (
 // Function to check for time conflicts between commitments
 export const checkCommitmentConflicts = (
   newCommitment: {
-    startTime: string;
-    endTime: string;
+    startTime?: string;
+    endTime?: string;
     recurring: boolean;
     daysOfWeek: number[];
     specificDates?: string[];
+    isAllDay?: boolean;
+    dateRange?: {
+      startDate: string;
+      endDate: string;
+    };
   },
   existingCommitments: FixedCommitment[],
   excludeCommitmentId?: string // For editing, exclude the commitment being edited
@@ -2953,13 +3015,15 @@ export const checkCommitmentConflicts = (
   conflictingDates?: string[];
 } => {
   // Convert time strings to minutes for easier comparison
-  const timeToMinutes = (timeStr: string): number => {
+  const timeToMinutes = (timeStr?: string): number => {
+    if (!timeStr) return 0; // For all-day events
     const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
+    return (hours || 0) * 60 + (minutes || 0);
   };
 
-  const newStartMinutes = timeToMinutes(newCommitment.startTime);
-  const newEndMinutes = timeToMinutes(newCommitment.endTime);
+  // For all-day events, use full day time range (00:00 to 23:59)
+  const newStartMinutes = newCommitment.isAllDay ? 0 : timeToMinutes(newCommitment.startTime);
+  const newEndMinutes = newCommitment.isAllDay ? 24 * 60 - 1 : timeToMinutes(newCommitment.endTime);
 
   // Check each existing commitment for conflicts
   for (const existing of existingCommitments) {
@@ -2978,15 +3042,36 @@ export const checkCommitmentConflicts = (
         existing.daysOfWeek.includes(day)
       );
 
-      if (hasOverlappingDays) {
-        const existingStartMinutes = timeToMinutes(existing.startTime);
-        const existingEndMinutes = timeToMinutes(existing.endTime);
-
-        // Check for time overlap
-        const hasTimeOverlap = !(
-          newEndMinutes <= existingStartMinutes || 
-          newStartMinutes >= existingEndMinutes
+      // Check date range overlap if both have date ranges
+      let dateRangeOverlap = true; // Default to true if no date ranges
+      
+      if (newCommitment.dateRange?.startDate && newCommitment.dateRange?.endDate && 
+          existing.dateRange?.startDate && existing.dateRange?.endDate) {
+        // Check if date ranges overlap
+        dateRangeOverlap = !(
+          newCommitment.dateRange.endDate < existing.dateRange.startDate || 
+          newCommitment.dateRange.startDate > existing.dateRange.endDate
         );
+      } else if (newCommitment.dateRange?.startDate && newCommitment.dateRange?.endDate) {
+        // New commitment has date range, existing doesn't (assumed indefinite)
+        dateRangeOverlap = true;
+      } else if (existing.dateRange?.startDate && existing.dateRange?.endDate) {
+        // Existing commitment has date range, new doesn't (assumed indefinite)
+        dateRangeOverlap = true;
+      }
+
+      if (hasOverlappingDays && dateRangeOverlap) {
+        const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
+        const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
+
+        // If either commitment is all-day, or there's a time overlap
+        const hasTimeOverlap = 
+          newCommitment.isAllDay || 
+          existing.isAllDay || 
+          !(
+            newEndMinutes <= existingStartMinutes || 
+            newStartMinutes >= existingEndMinutes
+          );
 
         if (hasTimeOverlap) {
           hasConflict = true;
@@ -3000,14 +3085,17 @@ export const checkCommitmentConflicts = (
       );
 
       if (hasOverlappingDates) {
-        const existingStartMinutes = timeToMinutes(existing.startTime);
-        const existingEndMinutes = timeToMinutes(existing.endTime);
+        const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
+        const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
 
-        // Check for time overlap
-        const hasTimeOverlap = !(
-          newEndMinutes <= existingStartMinutes || 
-          newStartMinutes >= existingEndMinutes
-        );
+        // If either commitment is all-day, or there's a time overlap
+        const hasTimeOverlap = 
+          newCommitment.isAllDay || 
+          existing.isAllDay || 
+          !(
+            newEndMinutes <= existingStartMinutes || 
+            newStartMinutes >= existingEndMinutes
+          );
 
         if (hasTimeOverlap) {
           hasConflict = true;
@@ -3021,20 +3109,35 @@ export const checkCommitmentConflicts = (
       // One is recurring, one is non-recurring
       if (newCommitment.recurring && !existing.recurring) {
         // New is recurring, existing is non-recurring - OVERRIDE (one-time takes priority)
+        // Filter dates based on day of week and date range if specified
         const overlappingDates = existing.specificDates?.filter(date => {
           const dayOfWeek = new Date(date).getDay();
-          return newCommitment.daysOfWeek.includes(dayOfWeek);
+          const isInDayOfWeek = newCommitment.daysOfWeek.includes(dayOfWeek);
+          
+          // Check if date is within the date range if specified
+          let isInDateRange = true;
+          if (newCommitment.dateRange?.startDate && newCommitment.dateRange?.endDate) {
+            isInDateRange = (
+              date >= newCommitment.dateRange.startDate && 
+              date <= newCommitment.dateRange.endDate
+            );
+          }
+          
+          return isInDayOfWeek && isInDateRange;
         }) || [];
 
         if (overlappingDates.length > 0) {
-          const existingStartMinutes = timeToMinutes(existing.startTime);
-          const existingEndMinutes = timeToMinutes(existing.endTime);
+          const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
+          const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
 
-          // Check for time overlap
-          const hasTimeOverlap = !(
-            newEndMinutes <= existingStartMinutes || 
-            newStartMinutes >= existingEndMinutes
-          );
+          // If either commitment is all-day, or there's a time overlap
+          const hasTimeOverlap = 
+            newCommitment.isAllDay || 
+            existing.isAllDay || 
+            !(
+              newEndMinutes <= existingStartMinutes || 
+              newStartMinutes >= existingEndMinutes
+            );
 
           if (hasTimeOverlap) {
             hasConflict = true;
@@ -3044,20 +3147,35 @@ export const checkCommitmentConflicts = (
         }
       } else {
         // New is non-recurring, existing is recurring - OVERRIDE (one-time takes priority)
+        // Filter dates based on day of week and date range if specified
         const overlappingDates = newCommitment.specificDates?.filter(date => {
           const dayOfWeek = new Date(date).getDay();
-          return existing.daysOfWeek.includes(dayOfWeek);
+          const isInDayOfWeek = existing.daysOfWeek.includes(dayOfWeek);
+          
+          // Check if date is within the existing commitment's date range if specified
+          let isInDateRange = true;
+          if (existing.dateRange?.startDate && existing.dateRange?.endDate) {
+            isInDateRange = (
+              date >= existing.dateRange.startDate && 
+              date <= existing.dateRange.endDate
+            );
+          }
+          
+          return isInDayOfWeek && isInDateRange;
         }) || [];
 
         if (overlappingDates.length > 0) {
-          const existingStartMinutes = timeToMinutes(existing.startTime);
-          const existingEndMinutes = timeToMinutes(existing.endTime);
+          const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
+          const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
 
-          // Check for time overlap
-          const hasTimeOverlap = !(
-            newEndMinutes <= existingStartMinutes || 
-            newStartMinutes >= existingEndMinutes
-          );
+          // If either commitment is all-day, or there's a time overlap
+          const hasTimeOverlap = 
+            newCommitment.isAllDay || 
+            existing.isAllDay || 
+            !(
+              newEndMinutes <= existingStartMinutes || 
+              newStartMinutes >= existingEndMinutes
+            );
 
           if (hasTimeOverlap) {
             hasConflict = true;
@@ -3105,7 +3223,7 @@ const combineSessionsOnSameDayWithValidation = (studyPlans: StudyPlan[], setting
     Object.entries(sessionsByTask).forEach(([taskId, sessions]) => {
       if (sessions.length > 1) {
         // Sort sessions by start time
-        sessions.sort((a, b) => a.startTime.localeCompare(b.startTime));
+        sessions.sort((a, b) => (a.startTime || '00:00').localeCompare(b.startTime || '00:00'));
         
         // Calculate total hours
         const totalHours = sessions.reduce((sum, session) => sum + session.allocatedHours, 0);

@@ -30,20 +30,21 @@ export class ConflictChecker {
     startTime: string,
     endTime: string,
     existingSessions: StudySession[] = [],
-    excludeSessionId?: string
+    excludeSessionId?: string,
+    isAllDay?: boolean
   ): ConflictCheckResult {
     const conflicts: ConflictCheckResult['conflicts'] = [];
     
-    // Basic time validation
-    if (!this.isValidTimeRange(startTime, endTime)) {
+    // Basic time validation - skip for all-day events
+    if (!isAllDay && !this.isValidTimeRange(startTime, endTime)) {
       conflicts.push({
         type: 'invalid_time_slot',
         message: 'Invalid time range'
       });
     }
 
-    // Check study window
-    if (!this.isWithinStudyWindow(startTime, endTime)) {
+    // Check study window - skip for all-day events
+    if (!isAllDay && !this.isWithinStudyWindow(startTime, endTime)) {
       conflicts.push({
         type: 'invalid_time_slot',
         message: `Time slot is outside study window (${this.settings.studyWindowStartHour}:00 - ${this.settings.studyWindowEndHour}:00)`
@@ -59,14 +60,14 @@ export class ConflictChecker {
       });
     }
 
-    // Check session overlaps
+    // Check session overlaps - all-day events conflict with all sessions
     const sessionConflicts = this.checkSessionOverlaps(
       date, startTime, endTime, existingSessions, excludeSessionId
     );
     conflicts.push(...sessionConflicts);
 
     // Check commitment conflicts
-    const commitmentConflicts = this.checkCommitmentConflicts(date, startTime, endTime);
+    const commitmentConflicts = this.checkCommitmentConflicts(date, startTime, endTime, isAllDay);
     conflicts.push(...commitmentConflicts);
 
     // Check daily limits
@@ -75,7 +76,7 @@ export class ConflictChecker {
 
     const isValid = conflicts.length === 0;
     const suggestedAlternatives = isValid ? undefined : this.findAlternativeSlots(
-      date, this.calculateDuration(startTime, endTime), existingSessions
+      date, this.calculateDuration(startTime, endTime), existingSessions, isAllDay
     );
 
     return {
@@ -92,8 +93,38 @@ export class ConflictChecker {
     requiredHours: number,
     preferredDate: string,
     existingSessions: StudySession[] = [],
-    maxDaysToSearch: number = 14
+    maxDaysToSearch: number = 14,
+    isAllDay?: boolean
   ): TimeSlot | null {
+    // If this is an all-day event, we need to find a day with no all-day events
+    if (isAllDay) {
+      const startDate = new Date(preferredDate);
+      
+      for (let dayOffset = 0; dayOffset < maxDaysToSearch; dayOffset++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(currentDate.getDate() + dayOffset);
+        const dateString = currentDate.toISOString().split('T')[0];
+        
+        // Skip non-work days
+        if (!this.settings.workDays.includes(currentDate.getDay())) {
+          continue;
+        }
+        
+        // Check if there are any all-day events on this date
+        const conflicts = this.checkCommitmentConflicts(dateString, '00:00', '23:59', true);
+        if (conflicts.length === 0) {
+          return {
+            start: '00:00',
+            end: '23:59',
+            duration: 24
+          };
+        }
+      }
+      
+      return null;
+    }
+    
+    // For regular time-specific events
     const startDate = new Date(preferredDate);
     
     for (let dayOffset = 0; dayOffset < maxDaysToSearch; dayOffset++) {
@@ -181,21 +212,40 @@ export class ConflictChecker {
     this.fixedCommitments.forEach(commitment => {
       let appliesToDate = false;
       
-      if (commitment.recurring && commitment.daysOfWeek.includes(dayOfWeek)) {
-        appliesToDate = true;
+      if (commitment.recurring) {
+        // Check if the commitment applies to this day of week
+        if (commitment.daysOfWeek.includes(dayOfWeek)) {
+          // If there's a date range, check if the current date is within that range
+          if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+            appliesToDate = date >= commitment.dateRange.startDate && date <= commitment.dateRange.endDate;
+          } else {
+            // No date range specified, so it applies to all dates with matching day of week
+            appliesToDate = true;
+          }
+        }
       } else if (!commitment.recurring && commitment.specificDates?.includes(date)) {
         appliesToDate = true;
       }
       
       if (appliesToDate && !commitment.deletedOccurrences?.includes(date)) {
         const modified = commitment.modifiedOccurrences?.[date];
-        const startTime = modified?.startTime || commitment.startTime;
-        const endTime = modified?.endTime || commitment.endTime;
         
-        intervals.push({
-          start: this.timeStringToMinutes(startTime),
-          end: this.timeStringToMinutes(endTime)
-        });
+        // Check if the commitment or its modification is an all-day event
+        const isAllDay = modified?.isAllDay !== undefined ? modified.isAllDay : commitment.isAllDay;
+        
+        if (isAllDay) {
+          // All-day events block the entire day (00:00 to 23:59)
+          intervals.push({ start: 0, end: 24 * 60 - 1 });
+        } else {
+          // Make sure startTime and endTime are defined before using them
+          const startTime = modified?.startTime || commitment.startTime || '00:00';
+          const endTime = modified?.endTime || commitment.endTime || '23:59';
+          
+          intervals.push({
+            start: this.timeStringToMinutes(startTime),
+            end: this.timeStringToMinutes(endTime)
+          });
+        }
       }
     });
     
@@ -249,31 +299,53 @@ export class ConflictChecker {
   private checkCommitmentConflicts(
     date: string,
     startTime: string,
-    endTime: string
+    endTime: string,
+    isAllDay?: boolean
   ): ConflictCheckResult['conflicts'] {
     const conflicts: ConflictCheckResult['conflicts'] = [];
-    const startMinutes = this.timeStringToMinutes(startTime);
-    const endMinutes = this.timeStringToMinutes(endTime);
+    // For all-day events being checked, use full day time range
+    const startMinutes = isAllDay ? 0 : this.timeStringToMinutes(startTime);
+    const endMinutes = isAllDay ? 24 * 60 - 1 : this.timeStringToMinutes(endTime);
     const dayOfWeek = new Date(date).getDay();
     
     this.fixedCommitments.forEach(commitment => {
       let appliesToDate = false;
       
-      if (commitment.recurring && commitment.daysOfWeek.includes(dayOfWeek)) {
-        appliesToDate = true;
+      if (commitment.recurring) {
+        // Check if the commitment applies to this day of week
+        if (commitment.daysOfWeek.includes(dayOfWeek)) {
+          // If there's a date range, check if the current date is within that range
+          if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+            appliesToDate = date >= commitment.dateRange.startDate && date <= commitment.dateRange.endDate;
+          } else {
+            // No date range specified, so it applies to all dates with matching day of week
+            appliesToDate = true;
+          }
+        }
       } else if (!commitment.recurring && commitment.specificDates?.includes(date)) {
         appliesToDate = true;
       }
       
       if (appliesToDate && !commitment.deletedOccurrences?.includes(date)) {
         const modified = commitment.modifiedOccurrences?.[date];
-        const commitmentStart = this.timeStringToMinutes(modified?.startTime || commitment.startTime);
-        const commitmentEnd = this.timeStringToMinutes(modified?.endTime || commitment.endTime);
         
-        if (startMinutes < commitmentEnd && endMinutes > commitmentStart) {
+        // Check if the commitment or its modification is an all-day event
+        const commitmentIsAllDay = modified?.isAllDay !== undefined ? modified.isAllDay : commitment.isAllDay;
+        
+        // For all-day events, use full day time range (00:00 to 23:59)
+        // Make sure startTime and endTime are defined before using them
+        const commitmentStart = commitmentIsAllDay ? 0 : this.timeStringToMinutes(modified?.startTime || commitment.startTime || '00:00');
+        const commitmentEnd = commitmentIsAllDay ? 24 * 60 - 1 : this.timeStringToMinutes(modified?.endTime || commitment.endTime || '23:59');
+        
+        // If either event is all-day or there's a time overlap
+        if (isAllDay || commitmentIsAllDay || (startMinutes < commitmentEnd && endMinutes > commitmentStart)) {
+          // Format the time display for the conflict message
+          let timeDisplay = commitmentIsAllDay ? 'All day' : 
+            `${modified?.startTime || commitment.startTime} - ${modified?.endTime || commitment.endTime}`;
+          
           conflicts.push({
             type: 'commitment_conflict',
-            message: `Conflicts with ${commitment.title} (${modified?.startTime || commitment.startTime} - ${modified?.endTime || commitment.endTime})`,
+            message: `Conflicts with ${commitment.title} (${timeDisplay})`,
             conflictingItem: commitment
           });
         }
@@ -311,10 +383,31 @@ export class ConflictChecker {
   private findAlternativeSlots(
     date: string,
     requiredHours: number,
-    existingSessions: StudySession[]
+    existingSessions: StudySession[],
+    isAllDay?: boolean
   ): TimeSlot[] {
     const alternatives: TimeSlot[] = [];
     
+    // For all-day events, we need to find days with no all-day events
+    if (isAllDay) {
+      for (let dayOffset = 1; dayOffset <= 5; dayOffset++) {
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + dayOffset);
+        const nextDateString = nextDate.toISOString().split('T')[0];
+        
+        if (this.settings.workDays.includes(nextDate.getDay())) {
+          const slot = this.findNextAvailableSlot(requiredHours, nextDateString, [], 1, true);
+          if (slot) {
+            alternatives.push(slot);
+            if (alternatives.length >= 3) break;
+          }
+        }
+      }
+      
+      return alternatives;
+    }
+    
+    // For regular time-specific events
     // Try same day alternatives
     const availableSlots = this.getAvailableTimeSlots(date, existingSessions);
     availableSlots.forEach(slot => {
@@ -371,7 +464,7 @@ export class ConflictChecker {
 
   private timeStringToMinutes(timeString: string): number {
     const [hours, minutes] = timeString.split(':').map(Number);
-    return hours * 60 + (minutes || 0);
+    return (hours || 0) * 60 + (minutes || 0);
   }
 
   private minutesToTimeString(minutes: number): string {
@@ -436,7 +529,7 @@ export class EnhancedRedistributionEngine {
         options
       );
       
-      if (result.success) {
+      if (result.success && result.newSession) {
         redistributedSessions.push(result.newSession);
         conflictsResolved++;
         
@@ -455,7 +548,7 @@ export class EnhancedRedistributionEngine {
                 endTime: missedSession.session.endTime
               },
               to: {
-                date: result.targetDate!,
+                date: result.targetDate || today, // Fallback to today if targetDate is undefined
                 startTime: result.newSession.startTime,
                 endTime: result.newSession.endTime
               },
@@ -469,12 +562,14 @@ export class EnhancedRedistributionEngine {
         
         // Remove original missed session and add new session
         this.removeSessionFromPlans(workingPlans, missedSession);
-        this.addSessionToPlans(workingPlans, result.newSession, result.targetDate!);
+        if (result.targetDate) {
+          this.addSessionToPlans(workingPlans, result.newSession, result.targetDate);
+        }
         
       } else {
         failedSessions.push({
           session: missedSession.session,
-          reason: result.reason
+          reason: result.reason || 'Unknown error'
         });
       }
     }
@@ -544,7 +639,9 @@ export class EnhancedRedistributionEngine {
       const slot = this.conflictChecker.findNextAvailableSlot(
         remainingHours,
         planDate,
-        plan.plannedTasks
+        plan.plannedTasks,
+        14,  // Default maxDaysToSearch
+        session.isAllDay || false
       );
       
       if (slot) {
@@ -675,7 +772,8 @@ export class EnhancedRedistributionEngine {
         session.allocatedHours,
         targetDateStr,
         existingSessions,
-        1
+        1,
+        session.isAllDay || false
       );
       
       if (slot) {
@@ -684,7 +782,9 @@ export class EnhancedRedistributionEngine {
           targetDateStr,
           slot.start,
           slot.end,
-          existingSessions
+          existingSessions,
+          undefined,  // excludeSessionId
+          session.isAllDay || false
         );
         
         if (validation.isValid) {
@@ -760,7 +860,7 @@ export class EnhancedRedistributionEngine {
     });
     
     // Sort plans by date
-    workingPlans.sort((a, b) => a.date.localeCompare(b.date));
+    workingPlans.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   }
 }
 

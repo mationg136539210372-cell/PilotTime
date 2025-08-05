@@ -6,6 +6,12 @@ interface CommitmentSessionManagerProps {
   commitment: FixedCommitment;
   targetDate: string;
   onDeleteSession: (commitmentId: string, date: string) => void;
+  onEditSession?: (commitmentId: string, date: string, updates: {
+    startTime?: string;
+    endTime?: string;
+    title?: string;
+    type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
+  }) => void;
   onCancel: () => void;
 }
 
@@ -13,6 +19,7 @@ const CommitmentSessionManager: React.FC<CommitmentSessionManagerProps> = ({
   commitment,
   targetDate,
   onDeleteSession,
+  onEditSession,
   onCancel
 }) => {
   const formatDate = (dateString: string) => {
@@ -101,4 +108,4 @@ const CommitmentSessionManager: React.FC<CommitmentSessionManagerProps> = ({
   );
 };
 
-export default CommitmentSessionManager; 
+export default CommitmentSessionManager;

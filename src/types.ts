@@ -64,6 +64,7 @@ export interface StudySession {
   originalTime?: string; // Original start time (HH:MM format)
   originalDate?: string; // Original date (YYYY-MM-DD format)
   rescheduledAt?: string; // Timestamp when session was rescheduled
+  isAllDay?: boolean; // Whether this is an all-day session
 }
 
 /**
@@ -124,8 +125,8 @@ export interface TimerState {
 export interface FixedCommitment {
   id: string;
   title: string;
-  startTime: string; // HH:MM format
-  endTime: string; // HH:MM format
+  startTime?: string; // HH:MM format - optional for all-day events
+  endTime?: string; // HH:MM format - optional for all-day events
   recurring: boolean; // true for recurring, false for one-time
   daysOfWeek: number[]; // 0 = Sunday, 1 = Monday, etc. (for recurring commitments)
   specificDates?: string[]; // Array of date strings (YYYY-MM-DD) for non-recurring commitments
@@ -133,6 +134,11 @@ export interface FixedCommitment {
   location?: string;
   description?: string;
   createdAt: string;
+  isAllDay?: boolean; // New field for all-day events with no specific time
+  dateRange?: { // New field for recurring commitments with date range
+    startDate: string; // YYYY-MM-DD format
+    endDate: string; // YYYY-MM-DD format
+  };
   // New fields for individual session management
   deletedOccurrences?: string[]; // Array of date strings (YYYY-MM-DD)
   modifiedOccurrences?: {
@@ -141,6 +147,7 @@ export interface FixedCommitment {
       endTime?: string;
       title?: string;
       type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
+      isAllDay?: boolean; // Allow individual occurrences to be all-day
     };
   };
 }

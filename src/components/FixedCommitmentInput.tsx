@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Clock, MapPin, User, AlertTriangle } from 'lucide-react';
+import { Plus, Clock, MapPin, User, AlertTriangle, Calendar } from 'lucide-react';
 import { FixedCommitment } from '../types';
 import { checkCommitmentConflicts } from '../utils/scheduling';
 
@@ -19,23 +19,31 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
     specificDates: [] as string[],
     type: 'class' as const,
     location: '',
-    description: ''
+    description: '',
+    isAllDay: false,
+    dateRange: {
+      startDate: '',
+      endDate: ''
+    }
   });
   const [conflictError, setConflictError] = useState<string | null>(null);
 
   // Enhanced validation
   const isTitleValid = formData.title.trim().length > 0;
   const isTitleLengthValid = formData.title.trim().length <= 100;
-  const isStartTimeValid = formData.startTime.trim().length > 0;
-  const isEndTimeValid = formData.endTime.trim().length > 0;
+  const isStartTimeValid = formData.isAllDay || formData.startTime.trim().length > 0;
+  const isEndTimeValid = formData.isAllDay || formData.endTime.trim().length > 0;
   const isDaysValid = formData.recurring ? formData.daysOfWeek.length > 0 : true;
   const isDatesValid = !formData.recurring ? formData.specificDates.length > 0 : true;
-  const isTimeRangeValid = formData.startTime && formData.endTime ? 
-    formData.startTime < formData.endTime : true;
+  const isTimeRangeValid = formData.isAllDay || !formData.startTime || !formData.endTime || 
+    formData.startTime < formData.endTime;
   const isLocationValid = !formData.location || formData.location.trim().length <= 200;
+  const isDateRangeValid = !formData.recurring || !formData.dateRange.startDate || !formData.dateRange.endDate || 
+    formData.dateRange.startDate <= formData.dateRange.endDate;
 
-  const isFormValid = isTitleValid && isTitleLengthValid && isStartTimeValid && 
-                     isEndTimeValid && isDaysValid && isDatesValid && isTimeRangeValid && isLocationValid;
+  const isFormValid = isTitleValid && isTitleLengthValid && isDaysValid && 
+                     isDatesValid && isTimeRangeValid && isLocationValid && isDateRangeValid &&
+                     (formData.isAllDay || (isStartTimeValid && isEndTimeValid));
 
 
 
@@ -97,7 +105,19 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
     // Clear any previous conflict errors
     setConflictError(null);
     
-    onAddCommitment(formData);
+    // Prepare commitment data
+    const commitmentData = {
+      ...formData,
+      // Only include startTime and endTime if not an all-day event
+      startTime: formData.isAllDay ? undefined : formData.startTime,
+      endTime: formData.isAllDay ? undefined : formData.endTime,
+      // Only include dateRange if it has valid values
+      dateRange: (formData.recurring && formData.dateRange.startDate && formData.dateRange.endDate) 
+        ? formData.dateRange 
+        : undefined
+    };
+    
+    onAddCommitment(commitmentData);
     setFormData({
       title: '',
       startTime: '',
@@ -107,7 +127,12 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
       specificDates: [],
       type: 'class',
       location: '',
-      description: ''
+      description: '',
+      isAllDay: false,
+      dateRange: {
+        startDate: '',
+        endDate: ''
+      }
     });
     setIsOpen(false);
   };
@@ -207,7 +232,20 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mb-4">
+          <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+            <input
+              type="checkbox"
+              checked={formData.isAllDay}
+              onChange={(e) => setFormData({ ...formData, isAllDay: e.target.checked })}
+              className="text-blue-600 focus:ring-blue-500"
+            />
+            <span>All-day event (no specific time)</span>
+          </label>
+        </div>
+
+        {!formData.isAllDay && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
                 Start Time
@@ -216,7 +254,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
                 <Clock className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <input
                   type="time"
-                  required
+                  required={!formData.isAllDay}
                   value={formData.startTime}
                   onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
@@ -232,7 +270,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
                 <Clock className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <input
                   type="time"
-                  required
+                  required={!formData.isAllDay}
                   value={formData.endTime}
                   onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
@@ -240,27 +278,81 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
               </div>
             </div>
           </div>
+        )}
 
                   {formData.recurring ? (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
-              Days of Week
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {daysOfWeekOptions.map((day) => (
-                <button
-                  key={day.value}
-                  type="button"
-                  onClick={() => handleDayToggle(day.value)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                    formData.daysOfWeek.includes(day.value)
-                      ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {day.label}
-                </button>
-              ))}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
+                Days of Week
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {daysOfWeekOptions.map((day) => (
+                  <button
+                    key={day.value}
+                    type="button"
+                    onClick={() => handleDayToggle(day.value)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                      formData.daysOfWeek.includes(day.value)
+                        ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
+                Date Range (Optional)
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">
+                    Start Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                    <input
+                      type="date"
+                      value={formData.dateRange.startDate}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        dateRange: {
+                          ...formData.dateRange,
+                          startDate: e.target.value
+                        }
+                      })}
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">
+                    End Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                    <input
+                      type="date"
+                      value={formData.dateRange.endDate}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        dateRange: {
+                          ...formData.dateRange,
+                          endDate: e.target.value
+                        }
+                      })}
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
+                If no date range is specified, the commitment will recur indefinitely.
+              </p>
             </div>
           </div>
         ) : (
