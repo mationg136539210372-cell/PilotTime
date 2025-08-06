@@ -2023,8 +2023,6 @@ function App() {
                                 setActiveTab('timer');
                             }}
                             onDeleteFixedCommitment={handleDeleteFixedCommitment}
-                            onDeleteCommitmentSession={handleDeleteCommitmentSession}
-                            onEditCommitmentSession={handleEditCommitmentSession}
                         />
                     )}
 
