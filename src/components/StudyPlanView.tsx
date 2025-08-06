@@ -234,29 +234,11 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
     console.log('Missed session:', ms.task.title, 'on', ms.planDate, 'status:', checkSessionStatus(ms.session, ms.planDate));
   });
 
-  // Enhanced handler to skip a missed session with partial skip support
-  const handleSkipMissedSession = (planDate: string, sessionNumber: number, taskId: string, partialHours?: number) => {
-    if (partialHours) {
-      // Use enhanced skip functionality for partial skipping
-      const success = skipSessionEnhanced(studyPlans, planDate, sessionNumber, taskId, {
-        partialHours,
-        reason: 'user_choice'
-      });
-
-      if (success) {
-        setNotificationMessage(`Partially skipped ${formatTime(partialHours)} of session. Remaining time will be rescheduled.`);
-        // Force a re-render by calling the parent's redistribution handler
-        if (onRedistributeMissedSessions) {
-          onRedistributeMissedSessions();
-        }
-      } else {
-        setNotificationMessage('Failed to partially skip session.');
-      }
-    } else {
-      // Full skip using original method
-      onSkipMissedSession(planDate, sessionNumber, taskId);
-      setNotificationMessage('Session skipped! It will not be redistributed in future plans.');
-    }
+  // Handler to skip a missed session (full skip only)
+  const handleSkipMissedSession = (planDate: string, sessionNumber: number, taskId: string) => {
+    // Full skip using original method - treat as completed, no regeneration
+    onSkipMissedSession(planDate, sessionNumber, taskId);
+    setNotificationMessage('Session skipped! It will not be redistributed in future plans.');
   };
 
   // Enhanced redistribution handler
@@ -356,15 +338,8 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     <span>Redistributing...</span>
                   </div>
                 ) : (
-                  'Smart Redistribution'
+                  'Redistribute Sessions'
                 )}
-              </button>
-              <button
-                onClick={onRedistributeMissedSessions || onGenerateStudyPlan}
-                className="px-4 py-2 bg-gray-500 text-white text-sm rounded-lg hover:bg-gray-600 transition-colors"
-                title="Use legacy redistribution method"
-              >
-                Legacy Mode
               </button>
             </div>
           </div>
@@ -374,8 +349,8 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               <>
                 <p>You have missed {missedSessions.length} study session{missedSessions.length > 1 ? 's' : ''}. You can:</p>
                 <ul className="mt-2 space-y-1">
-                  <li>• <strong>Skip</strong> missed sessions (they won't be redistributed)</li>
-                  <li>• <strong>Smart Redistribution</strong> uses conflict-free scheduling with priority-based placement</li>
+                  <li>• <strong>Skip</strong> missed sessions (marks them as completed, won't be redistributed)</li>
+                  <li>• <strong>Redistribute Sessions</strong> reschedules missed sessions to future days</li>
                   <li>• <strong>Start studying</strong> any missed session now</li>
                 </ul>
               </>
@@ -459,17 +434,8 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
                     className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
                   >
-                    Skip All
+                    Skip
                   </button>
-                  {session.allocatedHours > 0.5 && (
-                    <button
-                      onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id, session.allocatedHours / 2)}
-                      className="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors duration-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800"
-                      title={`Skip ${formatTime(session.allocatedHours / 2)} and reschedule the rest`}
-                    >
-                      Skip Half
-                    </button>
-                  )}
                 </div>
               </div>
             ))
