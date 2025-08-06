@@ -59,8 +59,8 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
   const pendingTasks = tasks.filter(task => task.status === 'pending');
   const totalEstimatedHours = pendingTasks.reduce((sum, task) => sum + task.estimatedHours, 0);
   
-  // Calculate completed hours from actual done sessions (including those from completed tasks)
-  const completedHours = filteredPlans.reduce((planSum, plan) => 
+  // Calculate completed hours from ALL done sessions (not just filtered ones)
+  const completedHours = studyPlans.reduce((planSum, plan) => 
     planSum + plan.plannedTasks
       .filter(session => session.done || session.status === 'completed')
       .reduce((sessionSum, session) => sessionSum + (session.actualHours || session.allocatedHours), 0), 
