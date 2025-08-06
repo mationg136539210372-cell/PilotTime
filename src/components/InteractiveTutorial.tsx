@@ -202,9 +202,9 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
     },
 
     {
-      id: 'commitment-types-explanation',
-      title: 'Understanding Commitment Types',
-      description: 'TimePilot supports different types of commitments for flexible scheduling.',
+      id: 'commitment-patterns-explanation',
+      title: 'Understanding Commitment Patterns',
+      description: 'TimePilot supports different recurrence patterns for flexible scheduling.',
       position: 'center',
       action: 'observe',
       requiresAction: false,

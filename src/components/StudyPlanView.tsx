@@ -165,7 +165,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
         recurring: false,
         daysOfWeek: [],
         specificDates: [newDate],
-        type: 'other',
+        category: 'personal',
         createdAt: new Date().toISOString(),
       };
       onAddFixedCommitment(newFixedCommitment);
@@ -549,7 +549,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                       recurring: false,
                       daysOfWeek: [],
                       specificDates: [reschedDate],
-                      type: 'other',
+                      category: 'personal',
                       createdAt: new Date().toISOString(),
                     };
                     if (onAddFixedCommitment) {

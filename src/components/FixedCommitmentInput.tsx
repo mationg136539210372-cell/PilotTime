@@ -17,7 +17,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
     recurring: true,
     daysOfWeek: [] as number[],
     specificDates: [] as string[],
-    type: 'class' as const,
+    category: 'Academics',
     location: '',
     description: '',
     isAllDay: false,
@@ -125,7 +125,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
       recurring: true,
       daysOfWeek: [],
       specificDates: [],
-      type: 'class',
+      category: 'Academics',
       location: '',
       description: '',
       isAllDay: false,
@@ -179,24 +179,29 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-                Type
+                Category
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <select
-                  value={formData.type}
+                  value={formData.category}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      type: e.target.value as typeof formData.type
+                      category: e.target.value
                     })
                   }
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 >
-                  <option value="class">Class</option>
-                  <option value="work">Work</option>
-                  <option value="appointment">Appointment</option>
-                  <option value="other">Other</option>
+                  <option value="Academics">Academics</option>
+                  <option value="Work">Work</option>
+                  <option value="Personal">Personal</option>
+                  <option value="Health">Health</option>
+                  <option value="Learning">Learning</option>
+                  <option value="Finance">Finance</option>
+                  <option value="Home">Home</option>
+                  <option value="Organization">Organization</option>
+                  <option value="Buffer">Buffer</option>
                 </select>
               </div>
                       </div>
@@ -205,7 +210,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-              Commitment Type
+              Recurrence Pattern
             </label>
             <div className="flex space-x-4">
               <label className="flex items-center space-x-2">

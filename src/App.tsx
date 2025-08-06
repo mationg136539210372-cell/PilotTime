@@ -979,124 +979,6 @@ function App() {
         }
     };
 
-    const handleDeleteCommitmentSession = (commitmentId: string, date: string) => {
-        const updatedCommitments = fixedCommitments.map(commitment => {
-            if (commitment.id === commitmentId) {
-                const deletedOccurrences = commitment.deletedOccurrences || [];
-                if (!deletedOccurrences.includes(date)) {
-                    return {
-                        ...commitment,
-                        deletedOccurrences: [...deletedOccurrences, date]
-                    };
-                }
-            }
-            return commitment;
-        });
-        setFixedCommitments(updatedCommitments);
-        
-        // Regenerate study plan with updated commitments
-        if (tasks.length > 0) {
-            const { plans: newPlans } = generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
-            
-            // Preserve session status from previous plan
-            newPlans.forEach(plan => {
-                const prevPlan = studyPlans.find(p => p.date === plan.date);
-                if (!prevPlan) return;
-                
-                // Preserve session status and properties
-                plan.plannedTasks.forEach(session => {
-                    const prevSession = prevPlan.plannedTasks.find(s => s.taskId === session.taskId && s.sessionNumber === session.sessionNumber);
-                    if (prevSession) {
-                        // Preserve done sessions
-                        if (prevSession.done) {
-                            session.done = true;
-                            session.status = prevSession.status;
-                            session.actualHours = prevSession.actualHours;
-                            session.completedAt = prevSession.completedAt;
-                        }
-                        // Preserve skipped sessions
-                        else if (prevSession.status === 'skipped') {
-                            session.status = 'skipped';
-                        }
-                        // Preserve rescheduled sessions
-                        else if (prevSession.originalTime && prevSession.originalDate) {
-                            session.originalTime = prevSession.originalTime;
-                            session.originalDate = prevSession.originalDate;
-                            session.rescheduledAt = prevSession.rescheduledAt;
-                            session.isManualOverride = prevSession.isManualOverride;
-                        }
-                    }
-                });
-            });
-            
-            setStudyPlans(newPlans);
-        setLastPlanStaleReason("commitment");
-        }
-    };
-
-    const handleEditCommitmentSession = (commitmentId: string, date: string, updates: {
-        startTime?: string;
-        endTime?: string;
-        title?: string;
-        type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
-    }) => {
-        const updatedCommitments = fixedCommitments.map(commitment => {
-            if (commitment.id === commitmentId) {
-                const modifiedOccurrences = commitment.modifiedOccurrences || {};
-                return {
-                    ...commitment,
-                    modifiedOccurrences: {
-                        ...modifiedOccurrences,
-                        [date]: {
-                            ...modifiedOccurrences[date],
-                            ...updates
-                        }
-                    }
-                };
-            }
-            return commitment;
-        });
-        setFixedCommitments(updatedCommitments);
-        
-        // Regenerate study plan with updated commitments
-        if (tasks.length > 0) {
-            const { plans: newPlans } = generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
-            
-            // Preserve session status from previous plan
-            newPlans.forEach(plan => {
-                const prevPlan = studyPlans.find(p => p.date === plan.date);
-                if (!prevPlan) return;
-                
-                // Preserve session status and properties
-                plan.plannedTasks.forEach(session => {
-                    const prevSession = prevPlan.plannedTasks.find(s => s.taskId === session.taskId && s.sessionNumber === session.sessionNumber);
-                    if (prevSession) {
-                        // Preserve done sessions
-                        if (prevSession.done) {
-                            session.done = true;
-                            session.status = prevSession.status;
-                            session.actualHours = prevSession.actualHours;
-                            session.completedAt = prevSession.completedAt;
-                        }
-                        // Preserve skipped sessions
-                        else if (prevSession.status === 'skipped') {
-                            session.status = 'skipped';
-                        }
-                        // Preserve rescheduled sessions
-                        else if (prevSession.originalTime && prevSession.originalDate) {
-                            session.originalTime = prevSession.originalTime;
-                            session.originalDate = prevSession.originalDate;
-                            session.rescheduledAt = prevSession.rescheduledAt;
-                            session.isManualOverride = prevSession.isManualOverride;
-                        }
-                    }
-                });
-            });
-            
-            setStudyPlans(newPlans);
-        setLastPlanStaleReason("commitment");
-        }
-    };
 
     const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
         const updatedTasks = tasks.map(task =>
@@ -2200,13 +2082,18 @@ function App() {
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center space-x-3 mb-3">
                                                                 <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white truncate">{commitment.title}</h3>
-                                                                <span className={`px-2 sm:px-3 py-1 text-xs font-medium rounded-full capitalize flex-shrink-0 ${
-                                                                    commitment.type === 'class' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
-                                                                    commitment.type === 'work' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
-                                                                    commitment.type === 'appointment' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
-                                                                        'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
+                                                                <span className={`px-2 sm:px-3 py-1 text-xs font-medium rounded-full flex-shrink-0 ${
+                                                                    commitment.category === 'Academics' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
+                                                                    commitment.category === 'Work' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' :
+                                                                    commitment.category === 'Personal' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' :
+                                                                    commitment.category === 'Health' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' :
+                                                                    commitment.category === 'Learning' ? 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-300' :
+                                                                    commitment.category === 'Finance' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
+                                                                    commitment.category === 'Home' ? 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300' :
+                                                                    commitment.category === 'Organization' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                                    'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300'
                                                                 }`}>
-                                                                    {commitment.type}
+                                                                    {commitment.category}
                                                                 </span>
                                                             </div>
                                                             <div className="space-y-2">

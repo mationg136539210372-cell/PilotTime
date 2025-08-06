@@ -156,6 +156,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       respectFrequencyForDeadlines: true,
       preferredTimeSlots: [],
       minWorkBlock: 30,
+      maxSessionLength: 2,
       isOneTimeTask: false,
     });
   };

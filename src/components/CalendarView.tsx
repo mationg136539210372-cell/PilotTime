@@ -7,7 +7,6 @@ import { BookOpen, Clock, Settings, X } from 'lucide-react';
 import { checkSessionStatus } from '../utils/scheduling';
 import { getLocalDateString } from '../utils/scheduling';
 import MobileCalendarView from './MobileCalendarView';
-import CommitmentSessionManager from './CommitmentSessionManager';
 
 const localizer = momentLocalizer(moment);
 
@@ -18,13 +17,6 @@ interface CalendarViewProps {
   onSelectTask?: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
   onStartManualSession?: (commitment: FixedCommitment, durationSeconds: number) => void;
   onDeleteFixedCommitment?: (commitmentId: string) => void;
-  onDeleteCommitmentSession?: (commitmentId: string, date: string) => void;
-  onEditCommitmentSession?: (commitmentId: string, date: string, updates: {
-    startTime?: string;
-    endTime?: string;
-    title?: string;
-    type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
-  }) => void;
 }
 
 interface CalendarEvent {
@@ -50,15 +42,10 @@ const intervalOptions = [
 
 const DEFAULT_UNCATEGORIZED_TASK_COLOR = '#9ca3af'; // Light gray for uncategorized tasks
 
+// Default color for commitments
+const COMMITMENT_DEFAULT_COLOR = '#3b82f6'; // Blue for commitments
 
-
-const DEFAULT_COMMITMENT_TYPE_COLORS: Record<string, string> = {
-  class: '#3b82f6',     // Blue
-  work: '#a21caf',      // Purple
-  appointment: '#f59e42', // Orange
-  other: '#14b8a6',     // Teal
-  buffer: '#6366f1',    // Indigo
-};
+// Removed DEFAULT_COMMITMENT_CATEGORY_COLORS as we'll use the same color coding for tasks and commitments
 
 
 const DEFAULT_MISSED_COLOR = '#dc2626'; // Darker Red
@@ -66,17 +53,16 @@ const DEFAULT_OVERDUE_COLOR = '#c2410c'; // Even Darker Orange
 const DEFAULT_COMPLETED_COLOR = '#d1d5db'; // Gray
 const DEFAULT_IMPORTANT_TASK_COLOR = '#f59e0b'; // Amber
 const DEFAULT_NOT_IMPORTANT_TASK_COLOR = '#64748b'; // Gray
-const COMMITMENT_DEFAULT_COLOR = '#64748b';
+const DEFAULT_UNCATEGORIZED_COLOR = '#64748b'; // Gray for uncategorized items
 
 interface ColorSettings {
-  commitmentTypeColors: Record<string, string>;
   missedColor: string;
   overdueColor: string;
   completedColor: string;
   importantTaskColor: string;
   notImportantTaskColor: string;
-  commitmentColor: string;
   uncategorizedTaskColor: string;
+  // commitmentColor removed as commitments now use category-based colors
 }
 
 // Utility to split an event if it crosses midnight
@@ -107,8 +93,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   onSelectTask,
   onStartManualSession,
   onDeleteFixedCommitment,
-  onDeleteCommitmentSession,
-  onEditCommitmentSession,
 }) => {
   const [timeInterval, setTimeInterval] = useState(() => {
     const saved = localStorage.getItem('timepilot-calendar-interval');
@@ -131,23 +115,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       }
     }
     return {
-      commitmentTypeColors: { ...DEFAULT_COMMITMENT_TYPE_COLORS },
       missedColor: DEFAULT_MISSED_COLOR,
       overdueColor: DEFAULT_OVERDUE_COLOR,
       completedColor: DEFAULT_COMPLETED_COLOR,
       importantTaskColor: DEFAULT_IMPORTANT_TASK_COLOR,
       notImportantTaskColor: DEFAULT_NOT_IMPORTANT_TASK_COLOR,
-      commitmentColor: '#64748b', // Add commitment color setting
-      uncategorizedTaskColor: DEFAULT_UNCATEGORIZED_TASK_COLOR,
+      uncategorizedTaskColor: DEFAULT_UNCATEGORIZED_COLOR,
     };
   });
   const [selectedManualSession, setSelectedManualSession] = useState<FixedCommitment | null>(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [showSessionManager, setShowSessionManager] = useState(false);
-  const [selectedSessionToManage, setSelectedSessionToManage] = useState<{
-    commitment: FixedCommitment;
-    date: string;
-  } | null>(null);
 
 
   // Mobile detection
@@ -180,14 +157,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const resetToDefaults = () => {
     setColorSettings({
-      commitmentTypeColors: { ...DEFAULT_COMMITMENT_TYPE_COLORS },
       missedColor: DEFAULT_MISSED_COLOR,
       overdueColor: DEFAULT_OVERDUE_COLOR,
       completedColor: DEFAULT_COMPLETED_COLOR,
       importantTaskColor: DEFAULT_IMPORTANT_TASK_COLOR,
       notImportantTaskColor: DEFAULT_NOT_IMPORTANT_TASK_COLOR,
-      commitmentColor: '#64748b',
-      uncategorizedTaskColor: DEFAULT_UNCATEGORIZED_TASK_COLOR,
+      uncategorizedTaskColor: DEFAULT_UNCATEGORIZED_COLOR,
     });
   };
 
@@ -313,7 +288,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           endDate.setDate(today.getDate() + 365);
           currentDate = new Date(today);
         }
-        while (currentDate <= endDate) {
+        // Add one day to endDate to include the full last day
+        const inclusiveEndDate = new Date(endDate);
+        inclusiveEndDate.setDate(inclusiveEndDate.getDate() + 1);
+        while (currentDate < inclusiveEndDate) {
           if (commitment.daysOfWeek.includes(currentDate.getDay())) {
             const dateString = currentDate.toISOString().split('T')[0];
             
@@ -360,7 +338,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     title: modifiedSession?.title || commitment.title,
                     startTime: modifiedSession?.startTime || commitment.startTime,
                     endTime: modifiedSession?.endTime || commitment.endTime,
-                    type: modifiedSession?.type || commitment.type,
+                    category: modifiedSession?.category || commitment.category,
                     isAllDay: isAllDay
                   }
                 }
@@ -416,7 +394,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   title: modifiedSession?.title || commitment.title,
                   startTime: modifiedSession?.startTime || commitment.startTime,
                   endTime: modifiedSession?.endTime || commitment.endTime,
-                  type: modifiedSession?.type || commitment.type,
+                  category: modifiedSession?.category || commitment.category,
                   isAllDay: isAllDay
                 }
               }
@@ -502,60 +480,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       const commitment = event.resource.data as FixedCommitment;
       
       // Check if this is a manual rescheduled session
-      if (commitment.type === 'other' && commitment.title.includes('(Manual Resched)')) {
+      if (commitment.title.includes('(Manual Resched)')) {
         setSelectedManualSession(commitment);
-      } else {
-        // Handle regular commitment session management
-        const targetDate = event.start.toISOString().split('T')[0];
-        
-        // Check if this session is deleted
-        if (commitment.deletedOccurrences?.includes(targetDate)) {
-          return; // Don't allow interaction with deleted sessions
-        }
-        
-        // Check if this session is modified
-        const modifiedSession = commitment.modifiedOccurrences?.[targetDate];
-        
-        setSelectedSessionToManage({
-          commitment: {
-            ...commitment,
-            title: modifiedSession?.title || commitment.title,
-            startTime: modifiedSession?.startTime || commitment.startTime,
-            endTime: modifiedSession?.endTime || commitment.endTime,
-            type: modifiedSession?.type || commitment.type
-          },
-          date: targetDate
-        });
-        setShowSessionManager(true);
       }
     }
   };
 
-  const handleDeleteSession = (commitmentId: string, date: string) => {
-    if (onDeleteCommitmentSession) {
-      onDeleteCommitmentSession(commitmentId, date);
-    }
-    setShowSessionManager(false);
-    setSelectedSessionToManage(null);
-  };
-
-  const handleEditSession = (commitmentId: string, date: string, updates: {
-    startTime?: string;
-    endTime?: string;
-    title?: string;
-    type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
-  }) => {
-    if (onEditCommitmentSession) {
-      onEditCommitmentSession(commitmentId, date, updates);
-    }
-    setShowSessionManager(false);
-    setSelectedSessionToManage(null);
-  };
-
-  const handleCancelSessionManager = () => {
-    setShowSessionManager(false);
-    setSelectedSessionToManage(null);
-  };
 
   // Custom event style for modern look, now color-coded by priority or type
   const eventStyleGetter = (event: CalendarEvent, start: Date, _end: Date, isSelected: boolean) => {
@@ -612,15 +542,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       }
 
     } else if (event.resource.type === 'commitment') {
-      const type = event.resource.data.type;
-      if (type === 'buffer') {
+      const commitment = event.resource.data;
+      // Use category-based colors for commitments, same as tasks
+      if (commitment.category && categoryColorMap[commitment.category]) {
+        backgroundColor = categoryColorMap[commitment.category];
+      } else {
+        backgroundColor = colorSettings.uncategorizedTaskColor;
+      }
+      
+      // Special case for buffer category
+      if (commitment.category === 'Buffer') {
         // Make buffer commitments invisible but still block time
         backgroundColor = 'transparent';
         opacity = 0;
         display = 'none';
-      } else {
-        // Use commitment color from settings
-        backgroundColor = colorSettings.commitmentColor;
       }
     }
     // Add visual indicators for task importance
@@ -745,23 +680,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       console.log(`Calendar event "${event.title}" status: ${sessionStatus}, indicator: ${statusIndicator}`);
     } else if (event.resource.type === 'commitment') {
       const commitment = event.resource.data as FixedCommitment;
-      // For commitments, use type-based emojis
-      switch (commitment.type) {
-        case 'class':
-          categoryEmoji = '🎓';
-          break;
-        case 'work':
-          categoryEmoji = '💼';
-          break;
-        case 'appointment':
-          categoryEmoji = '👤';
-          break;
-        case 'other':
-          categoryEmoji = '📅';
-          break;
-        default:
-          categoryEmoji = '📅';
-      }
+      // For commitments, use the same category emoji system as tasks
+      categoryEmoji = getCategoryEmoji(commitment.category);
     }
 
     return (
@@ -843,8 +763,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         onSelectTask={onSelectTask}
         onStartManualSession={onStartManualSession}
         onDeleteFixedCommitment={onDeleteFixedCommitment}
-        onDeleteCommitmentSession={onDeleteCommitmentSession}
-        onEditCommitmentSession={onEditCommitmentSession}
       />
     );
   }
@@ -909,11 +827,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             </div>
           );
         })}
-        {/* Commitment Legend */}
-        <div className="flex items-center space-x-2">
-          <span style={{ background: colorSettings.commitmentColor, width: 16, height: 16, borderRadius: '50%', display: 'inline-block', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}></span>
-          <span className="text-sm text-gray-700 font-medium dark:text-gray-300">Commitments</span>
-        </div>
+        {/* Commitments now use the same category colors as tasks, so no separate legend needed */}
         {/* Show uncategorized legend only if there are custom/uncategorized tasks - positioned next to commitments */}
         {(taskCategories.some(category => !defaultCategories.includes(category)) || tasks.some(task => !task.category)) && (
           <div className="flex items-center space-x-2">
@@ -1168,23 +1082,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   </div>
                 </div>
 
-                {/* Commitment Color */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Commitment Color</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="color"
-                        value={colorSettings.commitmentColor}
-                        onChange={(e) => handleSpecialColorChange('commitmentColor', e.target.value)}
-                        className="w-12 h-8 rounded border border-gray-300 dark:border-gray-600"
-                      />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        All Commitments
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                {/* Commitments now use category-based colors instead of a single color */}
 
                 {/* Special Status Colors */}
                 <div>
@@ -1318,16 +1216,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       )}
 
-      {/* Session Manager Modal */}
-      {showSessionManager && selectedSessionToManage && (
-        <CommitmentSessionManager
-          commitment={selectedSessionToManage.commitment}
-          targetDate={selectedSessionToManage.date}
-          onDeleteSession={handleDeleteSession}
-          onEditSession={handleEditSession}
-          onCancel={handleCancelSessionManager}
-        />
-      )}
     </div>
   );
 };

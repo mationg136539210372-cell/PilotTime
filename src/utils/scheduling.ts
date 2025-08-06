@@ -100,7 +100,11 @@ export const doesCommitmentApplyToDate = (commitment: FixedCommitment, date: str
     // CRITICAL FIX: If there's a date range specified, the commitment ONLY applies within that range
     if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
       // Only apply if the date is within the specified range
-      return date >= commitment.dateRange.startDate && date <= commitment.dateRange.endDate;
+      // Add one day to endDate to include the full last day
+      const endDateObj = new Date(commitment.dateRange.endDate);
+      endDateObj.setDate(endDateObj.getDate() + 1);
+      const inclusiveEndDate = endDateObj.toISOString().split('T')[0];
+      return date >= commitment.dateRange.startDate && date < inclusiveEndDate;
     }
     
     // No date range specified, so it applies to all dates with matching day of week
@@ -369,20 +373,9 @@ function findNextAvailableTimeSlot(
   });
   
   activeCommitments.forEach(c => {
-    // Handle all-day events
+    // Handle all-day events - removed blocking logic for work categories
     if (c.isAllDay) {
-      // Only certain types of all-day events should block the entire day
-      // Types that should block entire day: work (full work days), buffer (rest days)
-      const shouldBlockEntireDay = c.type === 'work' || c.type === 'buffer';
-      
-      if (shouldBlockEntireDay) {
-        // These all-day events block the entire day
-        busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
-        return;
-      }
-      
-      // For other all-day events (class, appointment, other), don't block scheduling
-      // These are considered background events that don't prevent study sessions
+      // All-day events no longer block study session scheduling
       return;
     }
     
@@ -511,7 +504,11 @@ function validateSessionTimes(
       if (dayOfWeekMatches) {
         // Check date range if specified
         if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
-          appliesToDate = date >= commitment.dateRange.startDate && date <= commitment.dateRange.endDate;
+          // Add one day to endDate to include the full last day
+          const endDateObj = new Date(commitment.dateRange.endDate);
+          endDateObj.setDate(endDateObj.getDate() + 1);
+          const inclusiveEndDate = endDateObj.toISOString().split('T')[0];
+          appliesToDate = date >= commitment.dateRange.startDate && date < inclusiveEndDate;
         } else {
           appliesToDate = true;
         }
@@ -3102,6 +3099,7 @@ export const checkCommitmentConflicts = (
       startDate: string;
       endDate: string;
     };
+    type?: string; // Added type to check for all-day events
   },
   existingCommitments: FixedCommitment[],
   excludeCommitmentId?: string // For editing, exclude the commitment being edited
@@ -3133,6 +3131,14 @@ export const checkCommitmentConflicts = (
     let conflictType: 'strict' | 'override' = 'strict';
     let conflictingDates: string[] = [];
 
+    // Allow all-day recurring commitments to coexist with other commitments
+    // This is the key change to allow all-day events even when there are existing commitments
+    if (newCommitment.recurring && newCommitment.isAllDay) {
+      // All-day recurring commitments are allowed to overlap with existing commitments
+      // We'll skip conflict detection for these
+      continue;
+    }
+
     if (newCommitment.recurring && existing.recurring) {
       // Both are recurring - STRICT conflict (same type)
       const hasOverlappingDays = newCommitment.daysOfWeek.some(day => 
@@ -3162,14 +3168,17 @@ export const checkCommitmentConflicts = (
         dateRangeOverlap = true;
       }
 
+      // Skip conflict detection if the existing commitment is an all-day event
+      if (existing.isAllDay) {
+        continue;
+      }
+
       if (hasOverlappingDays && dateRangeOverlap) {
         const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
         const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
 
-        // If either commitment is all-day, or there's a time overlap
+        // If there's a time overlap (we already handled all-day events above)
         const hasTimeOverlap = 
-          newCommitment.isAllDay || 
-          existing.isAllDay || 
           !(
             newEndMinutes <= existingStartMinutes || 
             newStartMinutes >= existingEndMinutes
@@ -3186,18 +3195,20 @@ export const checkCommitmentConflicts = (
         existing.specificDates?.includes(date)
       );
 
-      if (hasOverlappingDates) {
-        const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
-        const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
+      // Skip conflict detection if either commitment is an all-day event
+      if (newCommitment.isAllDay || existing.isAllDay) {
+        continue;
+      }
 
-        // If either commitment is all-day, or there's a time overlap
-        const hasTimeOverlap = 
-          newCommitment.isAllDay || 
-          existing.isAllDay || 
-          !(
-            newEndMinutes <= existingStartMinutes || 
-            newStartMinutes >= existingEndMinutes
-          );
+      if (hasOverlappingDates) {
+        const existingStartMinutes = timeToMinutes(existing.startTime);
+        const existingEndMinutes = timeToMinutes(existing.endTime);
+
+        // Check for time overlap (we already handled all-day events above)
+        const hasTimeOverlap = !(
+          newEndMinutes <= existingStartMinutes || 
+          newStartMinutes >= existingEndMinutes
+        );
 
         if (hasTimeOverlap) {
           hasConflict = true;
@@ -3210,6 +3221,16 @@ export const checkCommitmentConflicts = (
     } else {
       // One is recurring, one is non-recurring
       if (newCommitment.recurring && !existing.recurring) {
+        // Skip conflict detection if new commitment is an all-day event
+        if (newCommitment.isAllDay) {
+          continue;
+        }
+        
+        // Skip conflict detection if existing commitment is an all-day event
+        if (existing.isAllDay) {
+          continue;
+        }
+        
         // New is recurring, existing is non-recurring - OVERRIDE (one-time takes priority)
         // IMPROVED: Use doesCommitmentApplyToDate logic for better date range handling
         const overlappingDates = existing.specificDates?.filter(date => {
@@ -3222,9 +3243,13 @@ export const checkCommitmentConflicts = (
           // Check if date is within the new commitment's date range if specified
           let isInDateRange = true;
           if (newCommitment.dateRange?.startDate && newCommitment.dateRange?.endDate) {
+            // Add one day to endDate to include the full last day
+            const endDateObj = new Date(newCommitment.dateRange.endDate);
+            endDateObj.setDate(endDateObj.getDate() + 1);
+            const inclusiveEndDate = endDateObj.toISOString().split('T')[0];
             isInDateRange = (
               date >= newCommitment.dateRange.startDate && 
-              date <= newCommitment.dateRange.endDate
+              date < inclusiveEndDate
             );
           }
           
@@ -3232,17 +3257,14 @@ export const checkCommitmentConflicts = (
         }) || [];
 
         if (overlappingDates.length > 0) {
-          const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
-          const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
+          const existingStartMinutes = timeToMinutes(existing.startTime);
+          const existingEndMinutes = timeToMinutes(existing.endTime);
 
-          // If either commitment is all-day, or there's a time overlap
-          const hasTimeOverlap = 
-            newCommitment.isAllDay || 
-            existing.isAllDay || 
-            !(
-              newEndMinutes <= existingStartMinutes || 
-              newStartMinutes >= existingEndMinutes
-            );
+          // Check for time overlap (we already handled all-day events above)
+          const hasTimeOverlap = !(
+            newEndMinutes <= existingStartMinutes || 
+            newStartMinutes >= existingEndMinutes
+          );
 
           if (hasTimeOverlap) {
             hasConflict = true;
@@ -3251,6 +3273,16 @@ export const checkCommitmentConflicts = (
           }
         }
       } else {
+        // Skip conflict detection if new commitment is an all-day event
+        if (newCommitment.isAllDay) {
+          continue;
+        }
+        
+        // Skip conflict detection if existing commitment is an all-day event
+        if (existing.isAllDay) {
+          continue;
+        }
+        
         // New is non-recurring, existing is recurring - OVERRIDE (one-time takes priority)
         // IMPROVED: Use doesCommitmentApplyToDate logic for better date range handling
         const overlappingDates = newCommitment.specificDates?.filter(date => {
@@ -3263,9 +3295,13 @@ export const checkCommitmentConflicts = (
           // Check if date is within the existing commitment's date range if specified  
           let isInDateRange = true;
           if (existing.dateRange?.startDate && existing.dateRange?.endDate) {
+            // Add one day to endDate to include the full last day
+            const endDateObj = new Date(existing.dateRange.endDate);
+            endDateObj.setDate(endDateObj.getDate() + 1);
+            const inclusiveEndDate = endDateObj.toISOString().split('T')[0];
             isInDateRange = (
               date >= existing.dateRange.startDate && 
-              date <= existing.dateRange.endDate
+              date < inclusiveEndDate
             );
           }
           
@@ -3273,17 +3309,14 @@ export const checkCommitmentConflicts = (
         }) || [];
 
         if (overlappingDates.length > 0) {
-          const existingStartMinutes = existing.isAllDay ? 0 : timeToMinutes(existing.startTime);
-          const existingEndMinutes = existing.isAllDay ? 24 * 60 - 1 : timeToMinutes(existing.endTime);
+          const existingStartMinutes = timeToMinutes(existing.startTime);
+          const existingEndMinutes = timeToMinutes(existing.endTime);
 
-          // If either commitment is all-day, or there's a time overlap
-          const hasTimeOverlap = 
-            newCommitment.isAllDay || 
-            existing.isAllDay || 
-            !(
-              newEndMinutes <= existingStartMinutes || 
-              newStartMinutes >= existingEndMinutes
-            );
+          // Check for time overlap (we already handled all-day events above)
+          const hasTimeOverlap = !(
+            newEndMinutes <= existingStartMinutes || 
+            newStartMinutes >= existingEndMinutes
+          );
 
           if (hasTimeOverlap) {
             hasConflict = true;

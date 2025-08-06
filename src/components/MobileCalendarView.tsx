@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight, Clock, BookOpen, X, Play, Trash2 } from 'luc
 import { StudyPlan, FixedCommitment, Task } from '../types';
 import { checkSessionStatus, formatTime } from '../utils/scheduling';
 import moment from 'moment';
-import CommitmentSessionManager from './CommitmentSessionManager';
 
 interface MobileCalendarViewProps {
   studyPlans: StudyPlan[];
@@ -12,13 +11,6 @@ interface MobileCalendarViewProps {
   onSelectTask?: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
   onStartManualSession?: (commitment: FixedCommitment, durationSeconds: number) => void;
   onDeleteFixedCommitment?: (commitmentId: string) => void;
-  onDeleteCommitmentSession?: (commitmentId: string, date: string) => void;
-  onEditCommitmentSession?: (commitmentId: string, date: string, updates: {
-    startTime?: string;
-    endTime?: string;
-    title?: string;
-    type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
-  }) => void;
 }
 
 interface CalendarEvent {
@@ -40,16 +32,9 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
   onSelectTask,
   onStartManualSession,
   onDeleteFixedCommitment,
-  onDeleteCommitmentSession,
-  onEditCommitmentSession,
 }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [showSessionManager, setShowSessionManager] = useState(false);
-  const [selectedSessionToManage, setSelectedSessionToManage] = useState<{
-    commitment: FixedCommitment;
-    date: string;
-  } | null>(null);
 
   // Generate dates for the horizontal picker (7 days around selected date)
   const dateRange = useMemo(() => {
@@ -110,6 +95,15 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
       if (commitment.recurring) {
         // For recurring commitments, check if the day of week matches
         shouldInclude = commitment.daysOfWeek.includes(dayOfWeek);
+        
+        // If there's a date range, check if the current date is within that range
+        if (shouldInclude && commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+          // Add one day to endDate to include the full last day
+          const endDateObj = new Date(commitment.dateRange.endDate);
+          endDateObj.setDate(endDateObj.getDate() + 1);
+          const inclusiveEndDate = endDateObj.toISOString().split('T')[0];
+          shouldInclude = selectedDateStr >= commitment.dateRange.startDate && selectedDateStr < inclusiveEndDate;
+        }
       } else {
         // For non-recurring commitments, check if the specific date matches
         shouldInclude = commitment.specificDates?.includes(selectedDateStr) || false;
@@ -170,7 +164,7 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
               title: modifiedSession?.title || commitment.title, // Override with modified title if present
               startTime: modifiedSession?.startTime || commitment.startTime, // Override with modified start time if present
               endTime: modifiedSession?.endTime || commitment.endTime, // Override with modified end time if present
-              type: modifiedSession?.type || commitment.type, // Override with modified type if present
+              category: modifiedSession?.category || commitment.category, // Override with modified category if present
               isAllDay: isAllDay // Include the all-day flag
             }
           }
@@ -195,12 +189,17 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
   const getEventColor = (event: CalendarEvent) => {
     if (event.resource.type === 'commitment') {
       const commitment = event.resource.data as FixedCommitment;
-      switch (commitment.type) {
-        case 'class': return '#3b82f6'; // Blue
-        case 'work': return '#a21caf';    // Purple
-        case 'appointment': return '#f59e42'; // Orange
-        case 'other': return '#14b8a6';   // Teal
-        case 'buffer': return '#64748b'; // Gray (default for buffer)
+      // Use category-based colors for commitments, same as tasks
+      switch (commitment.category?.toLowerCase()) {
+        case 'academics': return '#3b82f6'; // Blue
+        case 'work': return '#f59e0b';    // Orange
+        case 'personal': return '#a21caf'; // Purple
+        case 'health': return '#ef4444'; // Red
+        case 'learning': return '#a855f7'; // Lavender
+        case 'finance': return '#10b981'; // Green
+        case 'home': return '#f472b6'; // Pink
+        case 'organization': return '#eab308'; // Yellow
+        case 'buffer': return '#6366f1'; // Indigo
         default: return '#64748b';       // Default gray
       }
     } else {
@@ -234,25 +233,8 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
 
   // Handle click on a calendar event
   const handleEventClick = (event: CalendarEvent) => {
-    if (event.resource.type === 'commitment') {
-      // For commitments, open the session manager to allow editing/deletion of occurrences
-      const commitment = event.resource.data as FixedCommitment;
-      const dateString = moment(selectedDate).format('YYYY-MM-DD');
-      
-      // Prevent interaction with explicitly deleted occurrences
-      if (commitment.deletedOccurrences?.includes(dateString)) {
-        return; 
-      }
-      
-      setSelectedSessionToManage({
-        commitment,
-        date: dateString
-      });
-      setShowSessionManager(true);
-    } else {
-      // For study sessions, show a simple detail modal
-      setSelectedEvent(event);
-    }
+    // For study sessions, show a simple detail modal
+    setSelectedEvent(event);
   };
 
   // Handle starting a manual commitment session from the detail modal
@@ -279,34 +261,6 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
     setSelectedEvent(null); // Close modal after deleting
   };
 
-  // Callback for deleting a specific occurrence of a commitment from the session manager
-  const handleDeleteCommitmentSession = (commitmentId: string, date: string) => {
-    if (onDeleteCommitmentSession) {
-      onDeleteCommitmentSession(commitmentId, date);
-    }
-    setShowSessionManager(false);
-    setSelectedSessionToManage(null);
-  };
-
-  // Callback for editing a specific occurrence of a commitment from the session manager
-  const handleEditCommitmentSession = (commitmentId: string, date: string, updates: {
-    startTime?: string;
-    endTime?: string;
-    title?: string;
-    type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
-  }) => {
-    if (onEditCommitmentSession) {
-      onEditCommitmentSession(commitmentId, date, updates);
-    }
-    setShowSessionManager(false);
-    setSelectedSessionToManage(null);
-  };
-
-  // Cancel button handler for the session manager modal
-  const handleCancelSessionManager = () => {
-    setShowSessionManager(false);
-    setSelectedSessionToManage(null);
-  };
 
   // Format hour for time slot display (e.g., "4 AM", "1 PM")
   const formatTimeSlot = (hour: number) => {
@@ -396,7 +350,7 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
                     <div className="font-bold">{event.title}</div>
                     <div className="text-xs opacity-90">
                       All day • {event.resource.data.location ? `${event.resource.data.location} • ` : ''}
-                      {event.resource.type === 'commitment' ? event.resource.data.type : 'Study Session'}
+                      {event.resource.type === 'commitment' ? event.resource.data.category : 'Study Session'}
                     </div>
                   </div>
                 ))
@@ -507,7 +461,7 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
                 {selectedEvent.resource.type === 'commitment' && (
                   <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                     <Clock size={16} />
-                    <span className="capitalize">{selectedEvent.resource.data.type}</span>
+                    <span className="capitalize">{selectedEvent.resource.data.category}</span>
                   </div>
                 )}
               </div>
@@ -554,15 +508,6 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
         </div>
       )}
 
-      {/* Commitment Session Manager Modal */}
-      {showSessionManager && selectedSessionToManage && (
-        <CommitmentSessionManager
-          commitment={selectedSessionToManage.commitment}
-          targetDate={selectedSessionToManage.date}
-          onDeleteSession={handleDeleteCommitmentSession}
-          onCancel={handleCancelSessionManager}
-        />
-      )}
     </div>
   );
 };

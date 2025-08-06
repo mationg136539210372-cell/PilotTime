@@ -139,7 +139,7 @@ export interface FixedCommitment {
   recurring: boolean; // true for recurring, false for one-time
   daysOfWeek: number[]; // 0 = Sunday, 1 = Monday, etc. (for recurring commitments)
   specificDates?: string[]; // Array of date strings (YYYY-MM-DD) for non-recurring commitments
-  type: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
+  category: string; // Using the same categories as tasks
   location?: string;
   description?: string;
   createdAt: string;
@@ -155,7 +155,7 @@ export interface FixedCommitment {
       startTime?: string;
       endTime?: string;
       title?: string;
-      type?: 'class' | 'work' | 'appointment' | 'other' | 'buffer';
+      category?: string; // Using the same categories as tasks
       isAllDay?: boolean; // Allow individual occurrences to be all-day
     };
   };
