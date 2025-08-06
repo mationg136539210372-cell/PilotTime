@@ -16,13 +16,13 @@ type EditFormData = Partial<Task> & {
   estimatedMinutes?: number;
   customCategory?: string;
   impact?: string;
-  taskType?: string;
   deadlineType?: 'hard' | 'soft' | 'none';
   schedulingPreference?: 'consistent' | 'opportunistic' | 'intensive';
   targetFrequency?: 'daily' | 'weekly' | '3x-week' | 'flexible';
   respectFrequencyForDeadlines?: boolean;
   preferredTimeSlots?: ('morning' | 'afternoon' | 'evening')[];
   minWorkBlock?: number;
+  maxSessionLength?: number;
   isOneTimeTask?: boolean;
 };
 
@@ -32,6 +32,21 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Auto-detect deadline type based on whether deadline is set (similar to TaskInput)
+  React.useEffect(() => {
+    if (editingTaskId) {
+      if (editFormData.deadline && editFormData.deadline.trim() !== '') {
+        // User set a deadline - keep current deadlineType or default to 'hard'
+        if (editFormData.deadlineType === 'none') {
+          setEditFormData(prev => ({ ...prev, deadlineType: 'hard' }));
+        }
+      } else {
+        // No deadline set - automatically set to 'none'
+        setEditFormData(prev => ({ ...prev, deadlineType: 'none' }));
+      }
+    }
+  }, [editFormData.deadline, editingTaskId]);
   
   // Get today's date in YYYY-MM-DD format for min attribute
   const today = new Date().toISOString().split('T')[0];
@@ -123,9 +138,8 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
       estimatedMinutes: minutes,
       subject: task.subject,
       category: task.category === 'Custom...' ? '' : task.category,
-      customCategory: task.category && !['Academics', 'Org', 'Work', 'Personal', 'Health', 'Learning', 'Finance', 'Home'].includes(task.category) ? task.category : '',
+      customCategory: task.category && !['Academics', 'Organization', 'Work', 'Personal', 'Health', 'Learning', 'Finance', 'Home'].includes(task.category) ? task.category : '',
       impact: task.impact || (task.importance ? 'high' : 'low'),
-      taskType: task.taskType || '',
       deadlineType: task.deadlineType || (task.deadline ? 'hard' : 'none'),
       schedulingPreference: task.schedulingPreference || 'consistent',
       targetFrequency: task.targetFrequency || 'daily', // Default to daily for all tasks
@@ -138,8 +152,19 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     setShowAdvancedOptions(false);
   };
 
+  // Form validation for edit form
+  const isEditFormValid = React.useMemo(() => {
+    if (!editFormData.title?.trim()) return false;
+    const totalHours = (editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60);
+    if (totalHours <= 0) return false;
+    if (!editFormData.impact) return false;
+    if (editFormData.deadline && editFormData.deadline < today) return false;
+    if (editFormData.category === 'Custom...' && !editFormData.customCategory?.trim()) return false;
+    return true;
+  }, [editFormData, today]);
+
   const saveEdit = () => {
-    if (editingTaskId && editFormData.title) {
+    if (editingTaskId && isEditFormValid) {
       const totalHours = (editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60);
       const category = editFormData.category === 'Custom...' ? editFormData.customCategory : editFormData.category;
 
@@ -150,6 +175,14 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
         deadline: editFormData.deadlineType === 'none' ? '' : (editFormData.deadline || ''),
         deadlineType: editFormData.deadline ? editFormData.deadlineType : 'none',
         importance: editFormData.impact === 'high',
+        // Ensure all advanced fields are properly updated
+        targetFrequency: editFormData.targetFrequency,
+        respectFrequencyForDeadlines: editFormData.respectFrequencyForDeadlines,
+        preferredTimeSlots: editFormData.preferredTimeSlots,
+        minWorkBlock: editFormData.minWorkBlock,
+        maxSessionLength: editFormData.maxSessionLength,
+        isOneTimeTask: editFormData.isOneTimeTask,
+        schedulingPreference: editFormData.schedulingPreference,
       });
       setEditingTaskId(null);
       setEditFormData({});
@@ -160,6 +193,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
   const cancelEdit = () => {
     setEditingTaskId(null);
     setEditFormData({});
+    setShowAdvancedOptions(false);
   };
 
   return (
@@ -205,8 +239,8 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
               >
               {editingTaskId === task.id ? (
                   <div className="space-y-4">
-                    {/* Task Title & Description */}
-                    <div className="grid grid-cols-1 gap-4">
+                    {/* Task Title & Category Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Task Title <span className="text-red-500">*</span></label>
                         <input
@@ -220,14 +254,39 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Description <span className="text-gray-400">(Optional)</span></label>
-                        <textarea
-                          value={editFormData.description || ''}
-                          onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none h-20 border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
-                          placeholder="Describe the task..."
-                        />
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Category <span className="text-gray-400">(Optional)</span></label>
+                        <select
+                          value={editFormData.category || ''}
+                          onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value, customCategory: '' })}
+                          className="w-full border rounded-lg px-3 py-2 text-base bg-white dark:bg-gray-800 dark:text-white"
+                        >
+                          <option value="">Select category...</option>
+                          {['Academics', 'Organization', 'Work', 'Personal', 'Health', 'Learning', 'Finance', 'Home', 'Custom...'].map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                        {editFormData.category === 'Custom...' && (
+                          <input
+                            type="text"
+                            value={editFormData.customCategory || ''}
+                            onChange={(e) => setEditFormData({ ...editFormData, customCategory: e.target.value })}
+                            className="w-full border rounded-lg px-3 py-2 mt-2 text-base bg-white dark:bg-gray-800 dark:text-white"
+                            placeholder="Enter custom category"
+                          />
+                        )}
                       </div>
+                    </div>
+
+                    {/* Description */}
+                    <div>
+
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Description <span className="text-gray-400">(Optional)</span></label>
+                      <textarea
+                        value={editFormData.description || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none h-20 border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
+                        placeholder="Describe the task..."
+                      />
                     </div>
 
                     {/* Estimated Time */}
@@ -286,7 +345,51 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                           <span className="text-sm text-gray-700 dark:text-gray-200">Complete this task in one sitting (don't divide into sessions)</span>
                         </label>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Check this for short tasks or tasks that need to be done all at once</div>
+                        {editFormData.isOneTimeTask && (
+                          <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
+                            <div className="text-xs text-blue-700 dark:text-blue-300">
+                              💡 One-sitting tasks will be scheduled as single blocks. Work frequency settings won't apply.
+                            </div>
+                          </div>
+                        )}
                       </div>
+
+                      {/* Work Frequency Preference - Dropdown */}
+                      {!editFormData.isOneTimeTask && (
+                        <div className="mt-4">
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                            How often would you like to work on this?
+                          </label>
+                          <select
+                            value={editFormData.targetFrequency || 'daily'}
+                            onChange={(e) => setEditFormData({ ...editFormData, targetFrequency: e.target.value as any })}
+                            className="w-full px-3 py-2 border rounded-lg text-base bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="daily">📅 Daily progress - Work a bit each day</option>
+                            <option value="3x-week">🗓️ Few times per week - Every 2-3 days</option>
+                            <option value="weekly">📆 Weekly sessions - Once per week</option>
+                            <option value="flexible">⏰ When I have time - Flexible scheduling</option>
+                          </select>
+
+                          {/* Show warning if frequency conflicts with deadline */}
+                          {deadlineConflict.hasConflict && (
+                            <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+                              <div className="flex items-start gap-1">
+                                <span className="text-amber-600 dark:text-amber-400">⚠️</span>
+                                <div>
+                                  <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+                                  <div className="mt-1">{deadlineConflict.reason}</div>
+                                  {deadlineConflict.recommendedFrequency && (
+                                    <div className="mt-1">
+                                      <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Impact */}
@@ -341,45 +444,6 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                             </button>
                           </div>
 
-                          {/* Category & Task Type */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Category <span className="text-gray-400">(Optional)</span></label>
-                              <select
-                                value={editFormData.category || ''}
-                                onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value, customCategory: '' })}
-                                className="w-full border rounded-lg px-3 py-2 text-base bg-white dark:bg-gray-800 dark:text-white"
-                              >
-                                <option value="">Select category...</option>
-                                {['Academics', 'Org', 'Work', 'Personal', 'Health', 'Learning', 'Finance', 'Home', 'Custom...'].map(opt => (
-                                  <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                              {editFormData.category === 'Custom...' && (
-                                <input
-                                  type="text"
-                                  value={editFormData.customCategory || ''}
-                                  onChange={(e) => setEditFormData({ ...editFormData, customCategory: e.target.value })}
-                                  className="w-full border rounded-lg px-3 py-2 mt-2 text-base bg-white dark:bg-gray-800 dark:text-white"
-                                  placeholder="Enter custom category"
-                                />
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Task Type</label>
-                              <select
-                                value={editFormData.taskType || ''}
-                                onChange={(e) => setEditFormData({ ...editFormData, taskType: e.target.value })}
-                                className="w-full border rounded-lg px-3 py-2 text-base bg-white dark:bg-gray-800 dark:text-white"
-                              >
-                                <option value="">Select task type...</option>
-                                {['Planning', 'Creating', 'Learning', 'Administrative', 'Communicating', 'Deep Focus Work'].map(opt => (
-                                  <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
 
                           {/* Deadline Type Selection */}
                           <div className="space-y-2 mb-4">
@@ -426,38 +490,21 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                             </label>
                           </div>
 
-                          {/* Work frequency preference - now applies to ALL tasks */}
+                          {/* Additional options for deadline tasks */}
                           <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Work frequency preference</label>
-                              <select
-                                value={editFormData.targetFrequency || ''}
-                                onChange={(e) => setEditFormData({ ...editFormData, targetFrequency: e.target.value as any })}
-                                className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
-                              >
-                                <option value="daily">Daily progress (default)</option>
-                                <option value="3x-week">Few times per week</option>
-                                <option value="weekly">Weekly sessions</option>
-                                <option value="flexible">When I have time</option>
-                              </select>
-                              
-                              {/* Show warning if frequency conflicts with deadline */}
-                              {deadlineConflict.hasConflict && (
-                                <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
-                                  <div className="flex items-start gap-1">
-                                    <span className="text-amber-600 dark:text-amber-400">⚠️</span>
-                                    <div>
-                                      <div className="font-medium">Frequency preference may not allow completion before deadline</div>
-                                      <div className="mt-1">{deadlineConflict.reason}</div>
-                                      {deadlineConflict.recommendedFrequency && (
-                                        <div className="mt-1">
-                                          <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                              <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                                <input
+                                  type="checkbox"
+                                  checked={editFormData.respectFrequencyForDeadlines !== false}
+                                  onChange={(e) => setEditFormData({ ...editFormData, respectFrequencyForDeadlines: e.target.checked })}
+                                  className="text-blue-600"
+                                />
+                                Respect frequency preference for deadline tasks
+                              </label>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Uncheck to allow daily scheduling for urgent deadline tasks regardless of frequency preference
+                              </div>
                             </div>
 
                             {/* Additional preferences for no-deadline tasks */}
@@ -487,17 +534,17 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                                 </div>
 
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Minimum session</label>
+                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Maximum session length</label>
                                   <select
-                                    value={editFormData.minWorkBlock || 30}
-                                    onChange={(e) => setEditFormData({ ...editFormData, minWorkBlock: parseInt(e.target.value) })}
+                                    value={editFormData.maxSessionLength || 2}
+                                    onChange={(e) => setEditFormData({ ...editFormData, maxSessionLength: parseInt(e.target.value) })}
                                     className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
                                   >
-                                    <option value={15}>15 minutes</option>
-                                    <option value={30}>30 minutes</option>
-                                    <option value={45}>45 minutes</option>
-                                    <option value={60}>1 hour</option>
-                                    <option value={90}>1.5 hours</option>
+                                    <option value={1}>1 hour</option>
+                                    <option value={1.5}>1.5 hours</option>
+                                    <option value={2}>2 hours</option>
+                                    <option value={3}>3 hours</option>
+                                    <option value={4}>4 hours</option>
                                   </select>
                                 </div>
                               </>
@@ -527,10 +574,26 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                       </div>
                     )}
 
+                    {/* Validation errors display */}
+                    {!isEditFormValid && editFormData.title && (
+                      <div className="text-red-600 text-sm space-y-1">
+                        {!editFormData.title?.trim() && <div>• Task title is required</div>}
+                        {((editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60)) <= 0 && <div>• Estimated time must be greater than 0</div>}
+                        {!editFormData.impact && <div>• Priority level is required</div>}
+                        {editFormData.deadline && editFormData.deadline < today && <div>• Deadline cannot be in the past</div>}
+                        {editFormData.category === 'Custom...' && !editFormData.customCategory?.trim() && <div>• Custom category is required</div>}
+                      </div>
+                    )}
+
                     <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                       <button
                         onClick={saveEdit}
-                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                        disabled={!isEditFormValid}
+                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                          isEditFormValid
+                            ? 'bg-blue-500 text-white hover:bg-blue-600'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-600 dark:text-gray-400'
+                        }`}
                       >
                         Save Changes
                       </button>
