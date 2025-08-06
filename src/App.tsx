@@ -2109,6 +2109,12 @@ function App() {
                                                                         <span className="truncate">{commitment.location}</span>
                                                                     </div>
                                                                 )}
+                                                                {commitment.description && (
+                                                                    <div className="flex items-start space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                                                                        <span className="font-medium mt-0.5">📝</span>
+                                                                        <span className="flex-1">{commitment.description}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center space-x-2 ml-4 flex-shrink-0">

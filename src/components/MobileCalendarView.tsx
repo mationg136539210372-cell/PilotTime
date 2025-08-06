@@ -387,6 +387,9 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
                           <div className="flex-1 min-w-0">
                             <div className="font-semibold truncate">
                               {event.title} {(() => {
+                                // Don't show duration for all-day events
+                                if (event.allDay) return '';
+                                
                                 const durationHours = moment(event.end).diff(moment(event.start), 'hours', true);
                                 const durationMinutes = moment(event.end).diff(moment(event.start), 'minutes', true);
                                 if (durationHours >= 1) {
@@ -397,8 +400,8 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
                                   return `(${Math.round(durationMinutes)}m)`;
                                 }
                                 return ''; // No duration if 0 or negative
-                              })()}
-                            </div>
+                              })()
+                            }
                             <div className="text-xs opacity-90">
                               {moment(event.start).format('h:mm A')} - {moment(event.end).format('h:mm A')}
                             </div>
@@ -444,12 +447,21 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
               </div>
               
               <div className="space-y-3 mb-6">
-                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                  <Clock size={16} />
-                  <span>
-                    {moment(selectedEvent.start).format('h:mm A')} - {moment(selectedEvent.end).format('h:mm A')}
-                  </span>
-                </div>
+                {!selectedEvent.allDay && (
+                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                    <Clock size={16} />
+                    <span>
+                      {moment(selectedEvent.start).format('h:mm A')} - {moment(selectedEvent.end).format('h:mm A')}
+                    </span>
+                  </div>
+                )}
+                
+                {selectedEvent.allDay && (
+                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                    <Clock size={16} />
+                    <span>All Day</span>
+                  </div>
+                )}
                 
                 {selectedEvent.resource.type === 'study' && (
                   <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">

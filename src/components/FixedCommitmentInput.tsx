@@ -365,43 +365,75 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
             <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
               Specific Dates
             </label>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="date"
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value && !formData.specificDates.includes(e.target.value)) {
-                      setFormData({
-                        ...formData,
-                        specificDates: [...formData.specificDates, e.target.value].sort()
-                      });
-                    }
-                  }}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                />
-                <span className="text-sm text-gray-500 dark:text-gray-400">Add date</span>
+            <div className="space-y-3">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                <div className="flex items-center space-x-2 mb-2">
+                  <Calendar className="text-blue-500 dark:text-blue-400" size={20} />
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Select dates for this commitment</span>
+                </div>
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  Choose each date when this commitment occurs. The date picker will reset after each selection to make it easy to add multiple dates.
+                </p>
               </div>
-              {formData.specificDates.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {formData.specificDates.map((date) => (
-                    <div
-                      key={date}
-                      className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg dark:bg-blue-900/20 dark:text-blue-300"
-                    >
-                      <span className="text-sm">{new Date(date).toLocaleDateString()}</span>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({
+              
+              <div className="flex items-center space-x-2">
+                <div className="relative flex-1">
+                  <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                  <input
+                    type="date"
+                    key={formData.specificDates.length} // This will reset the input after each date is added
+                    min={new Date().toISOString().split('T')[0]} // Prevent selecting past dates
+                    onChange={(e) => {
+                      if (e.target.value && !formData.specificDates.includes(e.target.value)) {
+                        setFormData({
                           ...formData,
-                          specificDates: formData.specificDates.filter(d => d !== date)
-                        })}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                          specificDates: [...formData.specificDates, e.target.value].sort()
+                        });
+                        // Reset the input by changing its key (handled above)
+                      }
+                    }}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    placeholder="Select a date"
+                  />
+                </div>
+                <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Click to add</span>
+              </div>
+              
+              {formData.specificDates.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                      Selected Dates ({formData.specificDates.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, specificDates: [] })}
+                      className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                    {formData.specificDates.map((date) => (
+                      <div
+                        key={date}
+                        className="flex items-center justify-between bg-blue-100 text-blue-800 px-3 py-2 rounded-lg dark:bg-blue-900/20 dark:text-blue-300"
                       >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                        <span className="text-sm font-medium">{new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            specificDates: formData.specificDates.filter(d => d !== date)
+                          })}
+                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-bold text-lg leading-none"
+                          title="Remove this date"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
