@@ -66,6 +66,20 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
       .reduce((sessionSum, session) => sessionSum + (session.actualHours || session.allocatedHours), 0), 
     0
   );
+  
+  // Calculate total original estimated hours from all tasks (both completed and pending)
+  const totalOriginalEstimatedHours = tasks.reduce((sum, task) => {
+    // For completed tasks, we need to get their original estimated hours
+    // For pending tasks, use their current estimated hours
+    if (task.status === 'completed') {
+      // For completed tasks, get the sum of all their sessions (completed + skipped)
+      const taskSessions = studyPlans.flatMap(plan => plan.plannedTasks).filter(s => s.taskId === task.id);
+      const taskOriginalHours = taskSessions.reduce((sum, session) => sum + session.allocatedHours, 0);
+      return sum + taskOriginalHours;
+    } else {
+      return sum + task.estimatedHours;
+    }
+  }, 0);
 
   // Urgent tasks for all pending tasks
   const urgentTasks = pendingTasks
@@ -129,8 +143,8 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
     },
     {
       title: 'Study Hours',
-      value: formatTime(totalEstimatedHours),
-      subtitle: `${formatTime(completedHours)} actually studied`,
+      value: formatTime(totalOriginalEstimatedHours),
+      subtitle: `${formatTime(completedHours)} completed`,
       icon: Clock,
       color: 'bg-purple-500'
     },
@@ -365,7 +379,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
                     <Pie
                       data={[
                         { name: 'Completed', value: completedHours, color: '#8b5cf6' },
-                        { name: 'Remaining', value: Math.max(0, totalEstimatedHours + completedHours - completedHours), color: '#e5e7eb' }
+                        { name: 'Remaining', value: Math.max(0, totalOriginalEstimatedHours - completedHours), color: '#e5e7eb' }
                       ]}
                       cx="50%"
                       cy="50%"
@@ -376,7 +390,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
                     >
                       {[
                         { name: 'Completed', value: completedHours, color: '#8b5cf6' },
-                        { name: 'Remaining', value: Math.max(0, totalEstimatedHours + completedHours - completedHours), color: '#e5e7eb' }
+                        { name: 'Remaining', value: Math.max(0, totalOriginalEstimatedHours - completedHours), color: '#e5e7eb' }
                       ].map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
@@ -395,7 +409,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-gray-800 dark:text-white">
-                      {(totalEstimatedHours + completedHours) > 0 ? Math.round((completedHours / (totalEstimatedHours + completedHours)) * 100) : 0}%
+                      {totalOriginalEstimatedHours > 0 ? Math.round((completedHours / totalOriginalEstimatedHours) * 100) : 0}%
                     </div>
                   </div>
                 </div>
@@ -413,7 +427,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
                       return '0h';
                     };
                     const completed = completedHours;
-                    const total = totalEstimatedHours + completedHours;
+                    const total = totalOriginalEstimatedHours;
                     if (completed > 0) {
                       return `${formatSmartTime(completed)}/${formatSmartTime(total)}`;
                     } else {
