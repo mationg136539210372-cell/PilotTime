@@ -400,8 +400,8 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
                                   return `(${Math.round(durationMinutes)}m)`;
                                 }
                                 return ''; // No duration if 0 or negative
-                              })()
-                            }
+                              })()}
+                            </div>
                             <div className="text-xs opacity-90">
                               {moment(event.start).format('h:mm A')} - {moment(event.end).format('h:mm A')}
                             </div>
