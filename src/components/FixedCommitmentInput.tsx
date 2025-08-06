@@ -372,7 +372,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
                   <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Select dates for this commitment</span>
                 </div>
                 <p className="text-xs text-blue-600 dark:text-blue-400">
-                  Choose each date when this commitment occurs. The date picker will reset after each selection to make it easy to add multiple dates.
+                  Choose each date when this commitment occurs.
                 </p>
               </div>
               
