@@ -644,16 +644,24 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const customGutterHeader = (date: Date) => moment(date).format('HH:mm');
 
   // Custom event component with category emoji
-  const CustomEventComponent = ({ event, ...props }: any) => {
+  const CustomEventComponent = ({
+    event,
+    continuesPrior,
+    continuesAfter,
+    isAllDay,
+    slotStart,
+    slotEnd,
+    ...props
+  }: any) => {
           let categoryEmoji = '';
       let statusIndicator = '';
       let duration = '';
-      
+
       // Calculate duration more accurately
       const durationMs = moment(event.end).diff(moment(event.start));
       const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
       const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-      
+
       if (durationHours >= 1) {
         if (durationMinutes > 0) {
           duration = `(${durationHours}h ${durationMinutes}m)`;
@@ -663,11 +671,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       } else {
         duration = `(${durationMinutes}m)`;
       }
-      
+
       if (event.resource.type === 'study') {
       const task = event.resource.data.task;
       categoryEmoji = getCategoryEmoji(task?.category);
-      
+
       // Add status indicators for missed/overdue sessions
       const sessionStatus = checkSessionStatus(event.resource.data, moment(event.start).format('YYYY-MM-DD'));
       if (sessionStatus === 'missed') {
@@ -675,7 +683,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       } else if (sessionStatus === 'overdue') {
         statusIndicator = '⏰'; // Clock for overdue
       }
-      
+
       // Debug logging for calendar event status
       console.log(`Calendar event "${event.title}" status: ${sessionStatus}, indicator: ${statusIndicator}`);
     } else if (event.resource.type === 'commitment') {
@@ -685,7 +693,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
 
     return (
-      <div className="relative w-full h-full" {...props}>
+      <div className="relative w-full h-full">
         {/* Main event content with emoji */}
         <div className="w-full h-full flex items-start justify-center text-center px-1 py-1 pt-1">
           <div className="flex items-center gap-1">
