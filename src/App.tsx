@@ -2016,6 +2016,7 @@ function App() {
                             onSkipMissedSession={handleSkipMissedSession}
                 onRedistributeMissedSessions={handleRedistributeMissedSessions}
                 onEnhancedRedistribution={handleEnhancedRedistribution}
+                            onUpdateTask={handleUpdateTask}
                         />
                     )}
 
