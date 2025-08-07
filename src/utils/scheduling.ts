@@ -46,6 +46,22 @@ export const formatTimeForTimer = (seconds: number): string => {
 };
 
 /**
+ * Check if a task's deadline has passed
+ * @param deadline The task deadline string (YYYY-MM-DD format)
+ * @returns true if the deadline has passed, false otherwise
+ */
+export const isTaskDeadlinePast = (deadline: string): boolean => {
+  const now = new Date();
+  const deadlineDate = new Date(deadline);
+
+  // Reset time to start of day for accurate comparison
+  now.setHours(0, 0, 0, 0);
+  deadlineDate.setHours(0, 0, 0, 0);
+
+  return deadlineDate < now;
+};
+
+/**
  * Get the effective study window for a specific date
  * Takes into account date-specific overrides if they exist
  * @param date The date string (YYYY-MM-DD format) to get the study window for
