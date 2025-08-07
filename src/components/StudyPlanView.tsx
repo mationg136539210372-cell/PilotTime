@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, BookOpen, TrendingUp, AlertTriangle, CheckCircle, Lightbulb, X, CheckCircle2, Clock3 } from 'lucide-react';
 import { StudyPlan, Task, StudySession, FixedCommitment, UserSettings } from '../types'; // Added FixedCommitment to imports
-import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionStatus, getDailyAvailableTimeSlots, findNextAvailableStartTime, moveIndividualSession, redistributeMissedSessionsEnhanced, skipSessionEnhanced, validateTimeSlot } from '../utils/scheduling';
+import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionStatus, getDailyAvailableTimeSlots, findNextAvailableStartTime, moveIndividualSession, redistributeMissedSessionsEnhanced, skipSessionEnhanced, validateTimeSlot, isTaskDeadlinePast } from '../utils/scheduling';
 import { RedistributionOptions } from '../types';
 
 interface StudyPlanViewProps {
@@ -16,6 +16,7 @@ interface StudyPlanViewProps {
   onSkipMissedSession: (planDate: string, sessionNumber: number, taskId: string) => void;
   onRedistributeMissedSessions?: () => void; // NEW PROP for redistribution
   onEnhancedRedistribution?: () => void; // Enhanced redistribution prop
+  onUpdateTask?: (taskId: string, updates: Partial<Task>) => void; // NEW PROP for task completion
 }
 
 // Force warnings UI to be hidden for all users on first load unless they have a preference
@@ -25,7 +26,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, settings, onAddFixedCommitment, onSkipMissedSession, onRedistributeMissedSessions, onEnhancedRedistribution }) => {
+const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, settings, onAddFixedCommitment, onSkipMissedSession, onRedistributeMissedSessions, onEnhancedRedistribution, onUpdateTask }) => {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [] = useState<{ taskTitle: string; unscheduledMinutes: number } | null>(null);
   const [showRegenerateConfirmation, setShowRegenerateConfirmation] = useState(false);
@@ -187,27 +188,33 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
 
   // --- Missed Sessions Section ---
   // Gather all missed sessions from past studyPlans (excluding today's overdue sessions)
-  const missedSessions: Array<{planDate: string, session: StudySession, task: Task}> = [];
-  
+  const allMissedSessions: Array<{planDate: string, session: StudySession, task: Task}> = [];
+
   // Only include past plans (not today's plan)
   const plansToCheck = studyPlans.filter(plan => plan.date < today);
-  
+
   plansToCheck.forEach(plan => {
     plan.plannedTasks.forEach(session => {
       const sessionStatus = checkSessionStatus(session, plan.date);
       // Only consider sessions as missed if they were originally scheduled for that date
       // and not redistributed there
       const isRedistributedToPast = session.originalTime && session.originalDate && plan.date < today;
-      
+
       if (sessionStatus === 'missed' && !isRedistributedToPast) {
         const task = getTaskById(session.taskId);
         if (task) {
           console.log(`Found missed session: ${task.title} on ${plan.date}, status: ${sessionStatus}, sessionNumber: ${session.sessionNumber}`);
-          missedSessions.push({ planDate: plan.date, session, task });
+          allMissedSessions.push({ planDate: plan.date, session, task });
         }
       }
     });
   });
+
+  // Categorize missed sessions by overdue status
+  const missedSessions = allMissedSessions.filter(({task}) => !isTaskDeadlinePast(task.deadline));
+  const overdueMissedSessions = allMissedSessions.filter(({task}) => isTaskDeadlinePast(task.deadline));
+  const hasOverdueSessions = overdueMissedSessions.length > 0;
+  const canRedistribute = missedSessions.length > 0;
 
   // Debug logging
   console.log('Today:', today);
@@ -308,29 +315,40 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
 
   const activeTasks = tasks.filter(task => task.status === 'pending' && task.estimatedHours > 0);
 
+  // Handler for marking overdue tasks as completed
+  const handleMarkTaskAsCompleted = (taskId: string) => {
+    if (onUpdateTask) {
+      onUpdateTask(taskId, { status: 'completed' });
+      setNotificationMessage('Task marked as completed');
+    }
+  };
+
   return (
     <div className="space-y-6 relative study-plan-container">
       {/* Missed Sessions Section */}
-      {missedSessions.length > 0 && (
-        <div className={`bg-white rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900 border-l-4 ${missedSessions.length > 0 ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}>
+      {(missedSessions.length > 0 || overdueMissedSessions.length > 0) && (
+        <div className={`bg-white rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900 border-l-4 ${(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
-              <AlertTriangle className={`${missedSessions.length > 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`} size={24} />
+              <AlertTriangle className={`${(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`} size={24} />
               <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Missed Sessions</h2>
-              <span className={`px-2 py-1 text-xs rounded-full ${
-                missedSessions.length > 0 
-                  ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' 
-                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-              }`}>
-                {missedSessions.length} missed
-              </span>
+              {missedSessions.length > 0 && (
+                <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
+                  {missedSessions.length} can redistribute
+                </span>
+              )}
+              {overdueMissedSessions.length > 0 && (
+                <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">
+                  {overdueMissedSessions.length} overdue
+                </span>
+              )}
             </div>
             <div className="flex space-x-2">
               <button
                 onClick={handleEnhancedRedistribution}
-                disabled={redistributionInProgress}
+                disabled={redistributionInProgress || !canRedistribute}
                 className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm rounded-lg hover:from-blue-600 hover:to-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Intelligently redistribute missed sessions with conflict prevention"
+                title={canRedistribute ? "Intelligently redistribute missed sessions with conflict prevention" : "Redistribution disabled - no sessions with future deadlines to redistribute"}
               >
                 {redistributionInProgress ? (
                   <div className="flex items-center space-x-2">
@@ -345,14 +363,27 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           </div>
           
           <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
-            {missedSessions.length > 0 ? (
+            {(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? (
               <>
-                <p>You have missed {missedSessions.length} study session{missedSessions.length > 1 ? 's' : ''}. You can:</p>
+                <p>You have missed study sessions. Available actions:</p>
                 <ul className="mt-2 space-y-1">
-                  <li>• <strong>Skip</strong> missed sessions (marks them as completed, won't be redistributed)</li>
-                  <li>• <strong>Redistribute Sessions</strong> reschedules missed sessions to future days</li>
+                  <li>• <strong>Skip</strong> any missed session (marks as completed, won't be redistributed)</li>
                   <li>• <strong>Start studying</strong> any missed session now</li>
+                  {missedSessions.length > 0 && (
+                    <li>• <strong>Redistribute Sessions</strong> reschedules sessions for tasks with future deadlines</li>
+                  )}
+                  {overdueMissedSessions.length > 0 && (
+                    <li>• <strong>Mark as Done</strong> completes overdue tasks (deadline already passed)</li>
+                  )}
                 </ul>
+                {hasOverdueSessions && (
+                  <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700">
+                    <p className="text-orange-800 dark:text-orange-200 text-xs">
+                      <strong>Note:</strong> Sessions for tasks with passed deadlines cannot be redistributed.
+                      You can either work on them now, skip the sessions, or mark the entire task as completed.
+                    </p>
+                  </div>
+                )}
               </>
             ) : (
               <p>No missed sessions found. All past study sessions have been completed or are up to date.</p>
@@ -394,52 +425,134 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           )}
 
           <div className="space-y-3">
-                        {missedSessions.length > 0 ? (
-              missedSessions.map(({planDate, session, task}, idx) => (
-                <div key={`missed-${planDate}-${session.sessionNumber || 0}-${task.id}-${session.startTime || ''}-${idx}`} 
-                     className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <BookOpen className="text-blue-500 dark:text-blue-400" size={18} />
-                    <h3 className="font-medium text-gray-800 dark:text-white">{task.title}</h3>
-                    {task.category && (
-                      <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-300">
-                        {task.category}
-                      </span>
-                    )}
+            {/* Redistributable Sessions */}
+            {missedSessions.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Sessions that can be redistributed:
+                </h3>
+                {missedSessions.map(({planDate, session, task}, idx) => (
+                  <div key={`missed-${planDate}-${session.sessionNumber || 0}-${task.id}-${session.startTime || ''}-${idx}`}
+                       className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <BookOpen className="text-blue-500 dark:text-blue-400" size={18} />
+                        <h3 className="font-medium text-gray-800 dark:text-white">{task.title}</h3>
+                        {task.category && (
+                          <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-300">
+                            {task.category}
+                          </span>
+                        )}
+                        <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full dark:bg-green-900 dark:text-green-300">
+                          Due: {new Date(task.deadline).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span className="flex items-center space-x-1">
+                          <Calendar size={14} />
+                          <span>{planDate}</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <Clock size={14} />
+                          <span>{session.startTime} - {session.endTime}</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <TrendingUp size={14} />
+                          <span>{formatTime(session.allocatedHours)}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => onSelectTask(task, { allocatedHours: session.allocatedHours, planDate, sessionNumber: session.sessionNumber })}
+                        className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors duration-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
+                      >
+                        Start Now
+                      </button>
+                      <button
+                        onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
+                        className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
+                      >
+                        Skip
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                    <span className="flex items-center space-x-1">
-                      <Calendar size={14} />
-                      <span>{planDate}</span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <Clock size={14} />
-                      <span>{session.startTime} - {session.endTime}</span>
-                    </span>
-                    <span className="flex items-center space-x-1">
-                      <TrendingUp size={14} />
-                      <span>{formatTime(session.allocatedHours)}</span>
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => onSelectTask(task, { allocatedHours: session.allocatedHours, planDate, sessionNumber: session.sessionNumber })}
-                    className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors duration-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
-                  >
-                    Start Now
-                  </button>
-                  <button
-                    onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
-                    className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
-                  >
-                    Skip
-                  </button>
-                </div>
+                ))}
               </div>
-            ))
-            ) : (
+            )}
+
+            {/* Overdue Sessions */}
+            {overdueMissedSessions.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-orange-700 dark:text-orange-300 mb-2">
+                    Sessions for overdue tasks (deadline passed):
+                  </h3>
+                  <span className="text-xs text-orange-600 dark:text-orange-400">
+                    Redistribution not available
+                  </span>
+                </div>
+                {overdueMissedSessions.map(({planDate, session, task}, idx) => (
+                  <div key={`overdue-${planDate}-${session.sessionNumber || 0}-${task.id}-${session.startTime || ''}-${idx}`}
+                       className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-700 hover:shadow-md transition-all duration-200">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <BookOpen className="text-orange-500 dark:text-orange-400" size={18} />
+                        <h3 className="font-medium text-gray-800 dark:text-white">{task.title}</h3>
+                        {task.category && (
+                          <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full dark:bg-orange-900 dark:text-orange-300">
+                            {task.category}
+                          </span>
+                        )}
+                        <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full dark:bg-red-900 dark:text-red-300">
+                          Overdue: {new Date(task.deadline).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                        <span className="flex items-center space-x-1">
+                          <Calendar size={14} />
+                          <span>{planDate}</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <Clock size={14} />
+                          <span>{session.startTime} - {session.endTime}</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <TrendingUp size={14} />
+                          <span>{formatTime(session.allocatedHours)}</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => onSelectTask(task, { allocatedHours: session.allocatedHours, planDate, sessionNumber: session.sessionNumber })}
+                        className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors duration-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
+                      >
+                        Start Now
+                      </button>
+                      <button
+                        onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
+                        className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
+                      >
+                        Skip
+                      </button>
+                      {onUpdateTask && (
+                        <button
+                          onClick={() => handleMarkTaskAsCompleted(task.id)}
+                          className="px-3 py-1 text-xs bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200 transition-colors duration-200 dark:bg-purple-900 dark:text-purple-200 dark:hover:bg-purple-800"
+                          title="Mark the entire task as completed"
+                        >
+                          Mark as Done
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* No sessions found */}
+            {missedSessions.length === 0 && overdueMissedSessions.length === 0 && (
               <div className="text-center py-4 text-gray-500 dark:text-gray-400">
                 <CheckCircle className="text-green-500 dark:text-green-400 mx-auto mb-2" size={24} />
                 <p>All past sessions are up to date!</p>
