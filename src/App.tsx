@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { generateNewStudyPlan, getUnscheduledMinutesForTasks, getLocalDateString, redistributeAfterTaskDeletion, redistributeMissedSessionsWithFeedback, checkCommitmentConflicts, redistributeMissedSessionsEnhanced } from './utils/scheduling';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts } from './utils/scheduling';
+import { generateStudyPlanWithUnifiedRedistribution as generateNewStudyPlan, validateRedistributionResult, analyzeSessionStates } from './utils/scheduling-integration';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
-import { RedistributionOptions } from './types';
 import {
   ACHIEVEMENTS,
   updateUserStats,
@@ -447,11 +447,11 @@ function App() {
     }, [tasks, settings, fixedCommitments, hasLoadedFromStorage]);
 
     // Manual study plan generation handler
-    const handleGenerateStudyPlan = () => {
+    const handleGenerateStudyPlan = async () => {
         if (tasks.length > 0) {
             // Check if there are manually rescheduled sessions that will be affected
-            const hasManualReschedules = studyPlans.some(plan => 
-                plan.plannedTasks.some(session => 
+            const hasManualReschedules = studyPlans.some(plan =>
+                plan.plannedTasks.some(session =>
                     session.originalTime && session.originalDate && session.isManualOverride
                 )
             );
@@ -460,10 +460,10 @@ function App() {
                 const shouldPreserveReschedules = window.confirm(
                     "You have manually rescheduled sessions. Regenerating the study plan will move them back to their original times. Would you like to preserve your manual reschedules?"
                 );
-                
+
                 if (shouldPreserveReschedules) {
                     // Generate plan but preserve manual reschedules
-                    const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+                    const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
                     const newPlans = result.plans;
                     
                     // Enhanced preservation logic
@@ -516,8 +516,17 @@ function App() {
             }
 
             // Generate new study plan with existing plans for progress calculation and missed session redistribution
-            const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+            const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
             const newPlans = result.plans;
+
+            // Show redistribution feedback
+            if (result.redistributionResult?.success && result.redistributionResult.redistributedSessions.length > 0) {
+                setNotificationMessage(`Study plan generated! ${result.redistributionResult.redistributedSessions.length} missed sessions redistributed.`);
+                setTimeout(() => setNotificationMessage(''), 5000);
+            } else if (result.redistributionResult && !result.redistributionResult.success) {
+                setNotificationMessage(`Study plan generated! Some missed sessions could not be redistributed: ${result.redistributionResult.feedback}`);
+                setTimeout(() => setNotificationMessage(''), 7000);
+            }
             
             // Preserve session status from previous plan
             newPlans.forEach(plan => {
@@ -556,65 +565,74 @@ function App() {
     };
 
     // Enhanced redistribution handler with conflict prevention
-    const handleEnhancedRedistribution = () => {
+    const handleEnhancedRedistribution = async () => {
         if (tasks.length > 0) {
-            const options: RedistributionOptions = {
-                prioritizeMissedSessions: true,
-                respectDailyLimits: true,
-                allowWeekendOverflow: false,
-                maxRedistributionDays: 14
-            };
-
             try {
-                const result = redistributeMissedSessionsEnhanced(
-                    studyPlans,
-                    settings,
-                    fixedCommitments,
-                    tasks,
-                    options
-                );
+                // Use the new unified redistribution system
+                const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans, {
+                    prioritizeImportantTasks: true,
+                    respectDailyLimits: true,
+                    allowWeekendOverflow: false,
+                    maxRedistributionDays: 14,
+                    preserveSessionSize: true,
+                    enableRollback: true
+                });
 
-                if (result.totalSessionsMoved > 0) {
+                setStudyPlans(result.plans);
+
+                if (result.redistributionResult?.success && result.redistributionResult.redistributedSessions.length > 0) {
                     setNotificationMessage(
-                        `Enhanced redistribution complete: ${result.totalSessionsMoved} sessions moved, ${result.failedSessions.length} failed, ${result.conflictsResolved} conflicts resolved`
+                        `Enhanced redistribution complete: ${result.redistributionResult.redistributedSessions.length} sessions moved, ${result.redistributionResult.failedSessions.length} failed`
                     );
+                } else if (result.redistributionResult?.failedSessions.length === 0) {
+                    setNotificationMessage('No missed sessions found to redistribute.');
                 } else {
-                    setNotificationMessage('No sessions could be redistributed. Check your schedule for available time slots.');
+                    setNotificationMessage('Some sessions could not be redistributed. Check your schedule for available time slots.');
                 }
+
+                setTimeout(() => setNotificationMessage(''), 5000);
             } catch (error) {
                 console.error('Enhanced redistribution failed:', error);
                 setNotificationMessage('Enhanced redistribution failed. Please try again.');
+                setTimeout(() => setNotificationMessage(''), 5000);
             }
         }
     };
 
-    // Handle redistribution of missed sessions specifically (legacy method)
-    const handleRedistributeMissedSessions = () => {
+    // Handle redistribution of missed sessions specifically using unified system
+    const handleRedistributeMissedSessions = async () => {
         if (tasks.length > 0) {
-            // Use enhanced redistribution with detailed feedback
-            const { updatedPlans, feedback } = redistributeMissedSessionsWithFeedback(studyPlans, settings, fixedCommitments, tasks);
+            try {
+                // Use the unified redistribution system for missed sessions only
+                const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans, {
+                    respectDailyLimits: true,
+                    allowWeekendOverflow: false,
+                    maxRedistributionDays: 14,
+                    prioritizeImportantTasks: true,
+                    preserveSessionSize: true,
+                    enableRollback: true
+                });
 
-            if (feedback.success) {
-                setStudyPlans(updatedPlans);
-                setNotificationMessage(feedback.message);
+                if (result.redistributionResult?.success) {
+                    setStudyPlans(result.plans);
+                    setNotificationMessage(result.redistributionResult.feedback);
 
-                // Log detailed information for debugging
-                console.log('Redistribution details:', feedback.details);
-            } else {
-                setNotificationMessage(feedback.message);
+                    // Log detailed information for debugging
+                    console.log('Unified redistribution details:', result.redistributionResult);
+                } else {
+                    setNotificationMessage(result.redistributionResult?.feedback || 'Redistribution completed with no changes.');
 
-                // Log conflicts and issues for debugging
-                if (feedback.details.conflictsDetected || feedback.details.issues.length > 0 || feedback.details.remainingMissed > 0) {
-                    console.warn('Redistribution issues detected:', {
-                        totalMissed: feedback.details.totalMissed,
-                        successfullyMoved: feedback.details.successfullyMoved,
-                        failedToMove: feedback.details.failedToMove,
-                        remainingMissed: feedback.details.remainingMissed,
-                        conflictsDetected: feedback.details.conflictsDetected,
-                        issues: feedback.details.issues,
-                        suggestions: feedback.details.suggestions
-                    });
+                    // Log any issues
+                    if (result.redistributionResult?.failedSessions.length) {
+                        console.warn('Some sessions could not be redistributed:', result.redistributionResult.failedSessions);
+                    }
                 }
+
+                setTimeout(() => setNotificationMessage(''), 5000);
+            } catch (error) {
+                console.error('Unified redistribution failed:', error);
+                setNotificationMessage('Redistribution failed. Please try again.');
+                setTimeout(() => setNotificationMessage(''), 5000);
             }
         }
     };
@@ -631,9 +649,9 @@ function App() {
         };
         let updatedTasks = [...tasks, newTask];
         // Generate a study plan with the new task
-        let { plans } = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
+        let { plans } = await generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
         // Check if the new task can actually be scheduled by examining the study plan
-        const { plans: newPlans } = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
+        const { plans: newPlans } = await generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
         
         // Check if the new task has any unscheduled time (excluding skipped sessions)
         const newTaskScheduledHours: Record<string, number> = {};
@@ -672,7 +690,7 @@ function App() {
               `• Adjust your study window hours in Settings\n`
             );
             setTasks(tasks);
-            const { plans: restoredPlans } = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+            const { plans: restoredPlans } = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
             setStudyPlans(restoredPlans);
             setShowTaskInput(false);
             setLastPlanStaleReason("task");
@@ -684,7 +702,7 @@ function App() {
         setLastPlanStaleReason("task");
     };
 
-    const handleAddFixedCommitment = (commitmentData: Omit<FixedCommitment, 'id' | 'createdAt'>) => {
+    const handleAddFixedCommitment = async (commitmentData: Omit<FixedCommitment, 'id' | 'createdAt'>) => {
         const newCommitment: FixedCommitment = {
             ...commitmentData,
             id: Date.now().toString(),
@@ -734,7 +752,7 @@ function App() {
         
         // Regenerate study plan with new commitment
         if (tasks.length > 0) {
-            const { plans: newPlans } = generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
+            const { plans: newPlans } = await generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
             
             // Preserve session status from previous plan
             newPlans.forEach(plan => {
@@ -772,7 +790,7 @@ function App() {
         }
     };
 
-    const handleDeleteFixedCommitment = (commitmentId: string) => {
+    const handleDeleteFixedCommitment = async (commitmentId: string) => {
         // Find the commitment being deleted
         const commitmentToDelete = fixedCommitments.find(c => c.id === commitmentId);
 
@@ -1025,26 +1043,33 @@ function App() {
         setLastPlanStaleReason("task");
     };
 
-    const handleDeleteTask = (taskId: string) => {
+    const handleDeleteTask = async (taskId: string) => {
         const updatedTasks = tasks.filter(task => task.id !== taskId);
         setTasks(updatedTasks);
-        
+
         // Clean up study plans by removing all sessions for the deleted task
         const cleanedPlans = studyPlans.map(plan => ({
             ...plan,
             plannedTasks: plan.plannedTasks.filter(session => session.taskId !== taskId)
         })).filter(plan => plan.plannedTasks.length > 0); // Remove empty plans
-        
+
         if (currentTask?.id === taskId) {
             setCurrentTask(null);
         }
         setLastPlanStaleReason("task");
 
-        // Use aggressive redistribution after task deletion with the cleaned plans
-        const newPlans = redistributeAfterTaskDeletion(updatedTasks, settings, fixedCommitments, cleanedPlans);
-        setStudyPlans(newPlans);
-        setNotificationMessage('Study plan redistributed aggressively after deleting task.');
-        setTimeout(() => setNotificationMessage(null), 3000);
+        // Use unified redistribution system after task deletion
+        try {
+            const result = await generateNewStudyPlan(updatedTasks, settings, fixedCommitments, cleanedPlans);
+            setStudyPlans(result.plans);
+            setNotificationMessage('Study plan updated after deleting task.');
+            setTimeout(() => setNotificationMessage(null), 3000);
+        } catch (error) {
+            console.error('Error updating study plan after task deletion:', error);
+            setStudyPlans(cleanedPlans); // Fallback to cleaned plans
+            setNotificationMessage('Task deleted. Study plan may need manual adjustment.');
+            setTimeout(() => setNotificationMessage(null), 3000);
+        }
     };
 
     // Update handleSelectTask to also store planDate and sessionNumber if available
@@ -2122,7 +2147,7 @@ function App() {
                                 <div className="space-y-6">
                                     {/* Getting Started Section */}
                                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
-                                        <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-2">🚀 Getting Started</h3>
+                                        <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-2">��� Getting Started</h3>
                                         <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
                                             <li>1. Add your tasks with deadlines and time estimates</li>
                                             <li>2. Set your fixed commitments (classes, work, etc.)</li>
@@ -2483,7 +2508,7 @@ function App() {
                                         </h4>
                                         <div className="grid grid-cols-3 gap-2">
                                             {[
-                                                { amount: '₱50', emoji: '☕', desc: 'Coffee' },
+                                                { amount: '��50', emoji: '���', desc: 'Coffee' },
                                                 { amount: '₱100', emoji: '���', desc: 'Pizza' },
                                                 { amount: '₱200', emoji: '🎉', desc: 'Party' }
                                             ].map((item, index) => (
