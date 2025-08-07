@@ -211,22 +211,6 @@ export interface ConflictCheckResult {
   suggestedAlternatives?: TimeSlot[];
 }
 
-export interface RedistributionOptions {
-  prioritizeMissedSessions: boolean;
-  respectDailyLimits: boolean;
-  allowWeekendOverflow: boolean;
-  maxRedistributionDays: number;
-}
-
-export interface RedistributionResult {
-  redistributedSessions: StudySession[];
-  failedSessions: Array<{
-    session: StudySession;
-    reason: string;
-  }>;
-  conflictsResolved: number;
-  totalSessionsMoved: number;
-}
 
 export interface UserReschedule {
   id: string; // Unique identifier for this reschedule

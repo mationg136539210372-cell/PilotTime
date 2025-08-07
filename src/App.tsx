@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts } from './utils/scheduling';
-import { generateStudyPlanWithUnifiedRedistribution as generateNewStudyPlan, validateRedistributionResult, analyzeSessionStates } from './utils/scheduling-integration';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
@@ -463,7 +462,7 @@ function App() {
 
                 if (shouldPreserveReschedules) {
                     // Generate plan but preserve manual reschedules
-                    const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+                    const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
                     const newPlans = result.plans;
                     
                     // Enhanced preservation logic
@@ -515,18 +514,9 @@ function App() {
                 }
             }
 
-            // Generate new study plan with existing plans for progress calculation and missed session redistribution
-            const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+            // Generate new study plan
+            const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
             const newPlans = result.plans;
-
-            // Show redistribution feedback
-            if (result.redistributionResult?.success && result.redistributionResult.redistributedSessions.length > 0) {
-                setNotificationMessage(`Study plan generated! ${result.redistributionResult.redistributedSessions.length} missed sessions redistributed.`);
-                setTimeout(() => setNotificationMessage(''), 5000);
-            } else if (result.redistributionResult && !result.redistributionResult.success) {
-                setNotificationMessage(`Study plan generated! Some missed sessions could not be redistributed: ${result.redistributionResult.feedback}`);
-                setTimeout(() => setNotificationMessage(''), 7000);
-            }
             
             // Preserve session status from previous plan
             newPlans.forEach(plan => {
@@ -564,74 +554,18 @@ function App() {
         }
     };
 
-    // Enhanced redistribution handler with conflict prevention
-    const handleEnhancedRedistribution = async () => {
+
+    // Handle redistribution by regenerating the study plan
+    const handleRedistributeMissedSessions = () => {
         if (tasks.length > 0) {
             try {
-                // Use the new unified redistribution system
-                const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans, {
-                    prioritizeImportantTasks: true,
-                    respectDailyLimits: true,
-                    allowWeekendOverflow: false,
-                    maxRedistributionDays: 14,
-                    preserveSessionSize: true,
-                    enableRollback: true
-                });
-
-                setStudyPlans(result.plans);
-
-                if (result.redistributionResult?.success && result.redistributionResult.redistributedSessions.length > 0) {
-                    setNotificationMessage(
-                        `Enhanced redistribution complete: ${result.redistributionResult.redistributedSessions.length} sessions moved, ${result.redistributionResult.failedSessions.length} failed`
-                    );
-                } else if (result.redistributionResult?.failedSessions.length === 0) {
-                    setNotificationMessage('No missed sessions found to redistribute.');
-                } else {
-                    setNotificationMessage('Some sessions could not be redistributed. Check your schedule for available time slots.');
-                }
-
+                // Simply regenerate the study plan which will incorporate missed sessions
+                handleGenerateStudyPlan();
+                setNotificationMessage('Study plan regenerated successfully! Missed sessions have been incorporated into the new plan.');
                 setTimeout(() => setNotificationMessage(''), 5000);
             } catch (error) {
-                console.error('Enhanced redistribution failed:', error);
-                setNotificationMessage('Enhanced redistribution failed. Please try again.');
-                setTimeout(() => setNotificationMessage(''), 5000);
-            }
-        }
-    };
-
-    // Handle redistribution of missed sessions specifically using unified system
-    const handleRedistributeMissedSessions = async () => {
-        if (tasks.length > 0) {
-            try {
-                // Use the unified redistribution system for missed sessions only
-                const result = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans, {
-                    respectDailyLimits: true,
-                    allowWeekendOverflow: false,
-                    maxRedistributionDays: 14,
-                    prioritizeImportantTasks: true,
-                    preserveSessionSize: true,
-                    enableRollback: true
-                });
-
-                if (result.redistributionResult?.success) {
-                    setStudyPlans(result.plans);
-                    setNotificationMessage(result.redistributionResult.feedback);
-
-                    // Log detailed information for debugging
-                    console.log('Unified redistribution details:', result.redistributionResult);
-                } else {
-                    setNotificationMessage(result.redistributionResult?.feedback || 'Redistribution completed with no changes.');
-
-                    // Log any issues
-                    if (result.redistributionResult?.failedSessions.length) {
-                        console.warn('Some sessions could not be redistributed:', result.redistributionResult.failedSessions);
-                    }
-                }
-
-                setTimeout(() => setNotificationMessage(''), 5000);
-            } catch (error) {
-                console.error('Unified redistribution failed:', error);
-                setNotificationMessage('Redistribution failed. Please try again.');
+                console.error('Study plan regeneration failed:', error);
+                setNotificationMessage('Failed to regenerate study plan. Please try again.');
                 setTimeout(() => setNotificationMessage(''), 5000);
             }
         }
@@ -641,7 +575,7 @@ function App() {
       setAutoRemovedTasks(prev => prev.filter(title => title !== taskTitle));
     };
 
-    const handleAddTask = async (taskData: Omit<Task, 'id' | 'createdAt'>) => {
+    const handleAddTask = (taskData: Omit<Task, 'id' | 'createdAt'>) => {
         const newTask: Task = {
             ...taskData,
             id: Date.now().toString(),
@@ -649,9 +583,7 @@ function App() {
         };
         let updatedTasks = [...tasks, newTask];
         // Generate a study plan with the new task
-        let { plans } = await generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
-        // Check if the new task can actually be scheduled by examining the study plan
-        const { plans: newPlans } = await generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
+        const { plans: newPlans } = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
         
         // Check if the new task has any unscheduled time (excluding skipped sessions)
         const newTaskScheduledHours: Record<string, number> = {};
@@ -690,7 +622,7 @@ function App() {
               `• Adjust your study window hours in Settings\n`
             );
             setTasks(tasks);
-            const { plans: restoredPlans } = await generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+            const { plans: restoredPlans } = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
             setStudyPlans(restoredPlans);
             setShowTaskInput(false);
             setLastPlanStaleReason("task");
@@ -752,7 +684,7 @@ function App() {
         
         // Regenerate study plan with new commitment
         if (tasks.length > 0) {
-            const { plans: newPlans } = await generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
+            const { plans: newPlans } = generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
             
             // Preserve session status from previous plan
             newPlans.forEach(plan => {
@@ -1060,7 +992,7 @@ function App() {
 
         // Use unified redistribution system after task deletion
         try {
-            const result = await generateNewStudyPlan(updatedTasks, settings, fixedCommitments, cleanedPlans);
+            const result = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, cleanedPlans);
             setStudyPlans(result.plans);
             setNotificationMessage('Study plan updated after deleting task.');
             setTimeout(() => setNotificationMessage(null), 3000);
@@ -1284,42 +1216,16 @@ function App() {
                 );
                 
                 setTasks(updatedTasks);
-                
-                // Regenerate study plan with the updated task status
-                const { plans: newPlans } = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
-                
-                // Preserve session status from previous plan
-                newPlans.forEach(plan => {
-                    const prevPlan = studyPlans.find(p => p.date === plan.date);
-                    if (!prevPlan) return;
-                    
-                    // Preserve session status and properties
-                    plan.plannedTasks.forEach(session => {
-                        const prevSession = prevPlan.plannedTasks.find(s => s.taskId === session.taskId && s.sessionNumber === session.sessionNumber);
-                        if (prevSession) {
-                            // Preserve done sessions
-                            if (prevSession.done) {
-                                session.done = true;
-                                session.status = prevSession.status;
-                                session.actualHours = prevSession.actualHours;
-                                session.completedAt = prevSession.completedAt;
-                            }
-                            // Preserve skipped sessions
-                            else if (prevSession.status === 'skipped') {
-                                session.status = 'skipped';
-                            }
-                            // Preserve rescheduled sessions
-                            else if (prevSession.originalTime && prevSession.originalDate) {
-                                session.originalTime = prevSession.originalTime;
-                                session.originalDate = prevSession.originalDate;
-                                session.rescheduledAt = prevSession.rescheduledAt;
-                                session.isManualOverride = prevSession.isManualOverride;
-                            }
-                        }
-                    });
-                });
-                
-                setStudyPlans(newPlans);
+
+                // Don't regenerate study plan - just remove future sessions for this completed task
+                setStudyPlans(prevPlans =>
+                    prevPlans.map(plan => ({
+                        ...plan,
+                        plannedTasks: plan.plannedTasks.filter(session =>
+                            session.taskId !== taskId || session.done || session.status === 'completed' || session.status === 'skipped'
+                        )
+                    }))
+                );
                 
                 // Show completion notification
                 setNotificationMessage(`Task completed: ${task.title}`);
@@ -1364,6 +1270,39 @@ function App() {
         }
         
         return false; // Task was not handled
+    };
+
+    // Handler to mark a missed session as done
+    const handleMarkMissedSessionDone = (planDate: string, sessionNumber: number, taskId: string) => {
+        setStudyPlans(prevPlans => {
+            return prevPlans.map(plan => {
+                if (plan.date !== planDate) return plan;
+
+                return {
+                    ...plan,
+                    plannedTasks: plan.plannedTasks.map(session => {
+                        if (session.taskId === taskId && session.sessionNumber === sessionNumber) {
+                            return {
+                                ...session,
+                                done: true,
+                                status: 'completed' as const,
+                                actualHours: session.allocatedHours, // Assume full session time was completed
+                                completedAt: new Date().toISOString()
+                            };
+                        }
+                        return session;
+                    })
+                };
+            });
+        });
+
+        // Check if this completes the task (but don't regenerate study plan)
+        setTimeout(() => {
+            const wasHandled = checkAndHandleSkippedOnlyTask(taskId);
+            if (!wasHandled) {
+                checkAndCompleteTask(taskId);
+            }
+        }, 0);
     };
 
     // Handler to mark a session as done in studyPlans
@@ -2015,8 +1954,8 @@ function App() {
                             onAddFixedCommitment={handleAddFixedCommitment}
                             onSkipMissedSession={handleSkipMissedSession}
                 onRedistributeMissedSessions={handleRedistributeMissedSessions}
-                onEnhancedRedistribution={handleEnhancedRedistribution}
                             onUpdateTask={handleUpdateTask}
+                            onMarkMissedSessionDone={handleMarkMissedSessionDone}
                         />
                     )}
 

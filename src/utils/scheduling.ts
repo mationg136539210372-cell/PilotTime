@@ -1,5 +1,4 @@
-import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, RedistributionOptions, RedistributionResult, DateSpecificStudyWindow } from '../types';
-import { createEnhancedRedistributionEngine, createConflictChecker } from './enhanced-scheduling';
+import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, DateSpecificStudyWindow } from '../types';
 
 // Utility functions
 export const getLocalDateString = (): string => {
@@ -2114,24 +2113,6 @@ export const findNextAvailableStartTime = (
   return studyWindowStart;
 };
 
-/**
- * Enhanced redistribution function using the new conflict-free system
- */
-export const redistributeMissedSessionsEnhanced = (
-  studyPlans: StudyPlan[],
-  settings: UserSettings,
-  fixedCommitments: FixedCommitment[],
-  tasks: Task[],
-  options: RedistributionOptions = {
-    prioritizeMissedSessions: true,
-    respectDailyLimits: true,
-    allowWeekendOverflow: false,
-    maxRedistributionDays: 14
-  }
-): RedistributionResult => {
-  const engine = createEnhancedRedistributionEngine(settings, fixedCommitments);
-  return engine.redistributeMissedSessions(studyPlans, tasks, options);
-};
 
 /**
  * Enhanced skip session function with partial skip support
@@ -2403,8 +2384,24 @@ export const moveMissedSessions = (
       const newSession = {...session};
       newSession.originalTime = session.startTime;
       newSession.originalDate = planDate;
-      newSession.status = 'scheduled';
+      newSession.status = 'redistributed';  // Mark as redistributed to prevent it from appearing in missed sessions
       newSession.startTime = moveResult.targetTime;
+      newSession.rescheduledAt = new Date().toISOString();
+
+      // Add redistribution metadata to help with tracking
+      if (!newSession.schedulingMetadata) {
+        newSession.schedulingMetadata = { rescheduleHistory: [] };
+      }
+      if (!newSession.schedulingMetadata.rescheduleHistory) {
+        newSession.schedulingMetadata.rescheduleHistory = [];
+      }
+      newSession.schedulingMetadata.rescheduleHistory.push({
+        from: { date: planDate, startTime: session.startTime || '', endTime: session.endTime || '' },
+        to: { date: moveResult.targetDate, startTime: moveResult.targetTime, endTime: '' }, // endTime will be filled below
+        timestamp: new Date().toISOString(),
+        reason: 'redistribution',
+        success: true
+      });
       
       // Calculate end time
       const [startHour, startMinute] = (moveResult.targetTime || '00:00').split(':').map(Number);
@@ -2413,7 +2410,13 @@ export const moveMissedSessions = (
       const endHour = Math.floor(endTimeInMinutes / 60);
       const endMinute = endTimeInMinutes % 60;
       newSession.endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
-      
+
+      // Complete the redistribution metadata with the calculated end time
+      if (newSession.schedulingMetadata?.rescheduleHistory && newSession.schedulingMetadata.rescheduleHistory.length > 0) {
+        const lastReschedule = newSession.schedulingMetadata.rescheduleHistory[newSession.schedulingMetadata.rescheduleHistory.length - 1];
+        lastReschedule.to.endTime = newSession.endTime;
+      }
+
       console.log(`Moving session to: ${moveResult.targetDate} at ${moveResult.targetTime}, original date: ${planDate}`);
       
       // Find or create target plan
@@ -3417,283 +3420,4 @@ const combineSessionsOnSameDayWithValidation = (studyPlans: StudyPlan[], setting
     plan.plannedTasks = combinedSessions;
     plan.totalStudyHours = combinedSessions.reduce((sum, session) => sum + session.allocatedHours, 0);
   }
-};
-
-// Enhanced redistribution function with detailed feedback
-export const redistributeMissedSessionsWithFeedback = (
-  studyPlans: StudyPlan[],
-  settings: UserSettings,
-  fixedCommitments: FixedCommitment[],
-  tasks: Task[]
-): {
-  updatedPlans: StudyPlan[];
-  movedSessions: StudySession[];
-  failedSessions: StudySession[];
-  feedback: {
-    success: boolean;
-    message: string;
-    details: {
-      totalMissed: number;
-      successfullyMoved: number;
-      failedToMove: number;
-      remainingMissed: number;
-      conflictsDetected: boolean;
-      priorityOrderUsed: boolean;
-      issues: string[];
-      suggestions: string[];
-    };
-  };
-} => {
-  // Check edge cases first
-  const edgeCaseCheck = handleRedistributionEdgeCases(studyPlans, settings, fixedCommitments, tasks);
-  
-  if (!edgeCaseCheck.canRedistribute) {
-    return {
-      updatedPlans: studyPlans,
-      movedSessions: [],
-      failedSessions: [],
-      feedback: {
-        success: false,
-        message: `Cannot redistribute missed sessions: ${edgeCaseCheck.issues.join(', ')}`,
-        details: {
-          totalMissed: 0,
-          successfullyMoved: 0,
-          failedToMove: 0,
-          remainingMissed: 0,
-          conflictsDetected: true,
-          priorityOrderUsed: false,
-          issues: edgeCaseCheck.issues,
-          suggestions: edgeCaseCheck.suggestions
-        }
-      }
-    };
-  }
-  
-  const result = moveMissedSessions(studyPlans, settings, fixedCommitments, tasks);
-  
-  // Count total missed sessions
-  const totalMissed = studyPlans.reduce((count, plan) => {
-    return count + plan.plannedTasks.filter(session => {
-      const status = checkSessionStatus(session, plan.date);
-      return status === 'missed';
-    }).length;
-  }, 0);
-  
-  // Count remaining missed sessions after redistribution (excluding overdue sessions from today)
-  const remainingMissedSessions = result.updatedPlans.reduce((count, plan) => {
-    return count + plan.plannedTasks.filter(session => {
-      const status = checkSessionStatus(session, plan.date);
-      // Only count as missed if it's from a past date, not today's overdue sessions
-      return status === 'missed' && plan.date < getLocalDateString();
-    }).length;
-  }, 0);
-  
-  // Generate detailed feedback
-  const feedback = {
-    success: result.movedSessions.length > 0,
-    message: '',
-    details: {
-      totalMissed,
-      successfullyMoved: result.movedSessions.length,
-      failedToMove: result.failedSessions.length,
-      remainingMissed: remainingMissedSessions,
-      conflictsDetected: result.failedSessions.length > 0 && result.movedSessions.length === 0,
-      priorityOrderUsed: true,
-      issues: [],
-      suggestions: []
-    }
-  };
-  
-  // Generate appropriate message
-  if (result.movedSessions.length > 0 && result.failedSessions.length === 0 && remainingMissedSessions === 0) {
-    feedback.message = `Successfully redistributed all ${result.movedSessions.length} missed sessions!`;
-  } else if (result.movedSessions.length > 0 && (result.failedSessions.length > 0 || remainingMissedSessions > 0)) {
-    feedback.message = `Partially successful: moved ${result.movedSessions.length} sessions, but ${result.failedSessions.length} could not be redistributed and ${remainingMissedSessions} remain missed.`;
-  } else if (result.failedSessions.length > 0) {
-    feedback.message = `Could not redistribute any missed sessions. All ${result.failedSessions.length} sessions have conflicts or no available time slots.`;
-  } else if (remainingMissedSessions > 0) {
-    feedback.message = `Redistribution completed but ${remainingMissedSessions} missed sessions remain. This may be due to session conflicts or insufficient time slots.`;
-  } else {
-    feedback.message = 'No missed sessions found to redistribute.';
-  }
-  
-  return {
-    ...result,
-    feedback
-  };
-};
-
-// Handle edge cases and provide error recovery
-const handleRedistributionEdgeCases = (
-  studyPlans: StudyPlan[],
-  settings: UserSettings,
-  fixedCommitments: FixedCommitment[],
-  tasks: Task[]
-): {
-  canRedistribute: boolean;
-  issues: string[];
-  suggestions: string[];
-} => {
-  const issues: string[] = [];
-  const suggestions: string[] = [];
-  
-  // Check if there are any missed sessions
-  const missedSessions = studyPlans.reduce((count, plan) => {
-    return count + plan.plannedTasks.filter(session => {
-      const status = checkSessionStatus(session, plan.date);
-      return status === 'missed';
-    }).length;
-  }, 0);
-  
-  if (missedSessions === 0) {
-    issues.push('No missed sessions found');
-    return { canRedistribute: false, issues, suggestions };
-  }
-  
-  // Check available time slots
-  const today = getLocalDateString();
-  let totalAvailableHours = 0;
-  let availableDays = 0;
-  
-  for (let dayOffset = 0; dayOffset <= 7; dayOffset++) {
-    const targetDate = new Date(today);
-    targetDate.setDate(targetDate.getDate() + dayOffset);
-    const targetDateString = targetDate.toISOString().split('T')[0];
-    
-    if (settings.workDays.includes(targetDate.getDay())) {
-      const availableSlots = getDailyAvailableTimeSlots(
-        targetDate,
-        settings.dailyAvailableHours,
-        fixedCommitments,
-        settings.workDays,
-        settings.studyWindowStartHour || 6,
-        settings.studyWindowEndHour || 23
-      );
-      
-      const dayHours = availableSlots.reduce((sum, slot) => {
-        return sum + (slot.end.getTime() - slot.start.getTime()) / (1000 * 60 * 60);
-      }, 0);
-      
-      totalAvailableHours += dayHours;
-      if (dayHours > 0) availableDays++;
-    }
-  }
-  
-  // Calculate total missed hours
-  const totalMissedHours = studyPlans.reduce((sum, plan) => {
-    return sum + plan.plannedTasks.filter(session => {
-      const status = checkSessionStatus(session, plan.date);
-      return status === 'missed';
-    }).reduce((planSum, session) => planSum + session.allocatedHours, 0);
-  }, 0);
-  
-  if (totalMissedHours > totalAvailableHours) {
-    issues.push(`Insufficient available time: ${totalMissedHours.toFixed(1)} hours needed, ${totalAvailableHours.toFixed(1)} hours available`);
-    suggestions.push('Consider increasing daily available hours in settings');
-    suggestions.push('Consider adjusting your study window hours');
-    suggestions.push('Consider removing some fixed commitments');
-  }
-  
-  if (availableDays === 0) {
-    issues.push('No available work days in the next 7 days');
-    suggestions.push('Check your work days settings');
-  }
-  
-  // Check for tasks with very short deadlines (but not past deadlines)
-  const urgentTasks = tasks.filter(task => {
-    const daysUntilDeadline = (new Date(task.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
-    // Only consider tasks with deadlines in the future (positive daysUntilDeadline)
-    return daysUntilDeadline > 0 && daysUntilDeadline <= 1 && task.status === 'pending';
-  });
-  
-  if (urgentTasks.length > 0) {
-    issues.push(`${urgentTasks.length} urgent task(s) with deadline within 1 day`);
-    suggestions.push('Consider extending deadlines for urgent tasks');
-  }
-  
-  // Check for tasks with past deadlines (these should be handled differently)
-  const pastDeadlineTasks = tasks.filter(task => {
-    const daysUntilDeadline = (new Date(task.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
-    return daysUntilDeadline < 0 && task.status === 'pending';
-  });
-  
-  if (pastDeadlineTasks.length > 0) {
-    // Don't block redistribution for past deadlines, just log a warning
-    console.warn(`${pastDeadlineTasks.length} task(s) have deadlines in the past:`, 
-      pastDeadlineTasks.map(t => `${t.title} (${t.deadline})`));
-  }
-  
-  return {
-    canRedistribute: issues.length === 0,
-    issues,
-    suggestions
-  };
-};
-
-// Test function to verify redistribution implementation
-export const testRedistributionImplementation = (
-  studyPlans: StudyPlan[],
-  settings: UserSettings,
-  fixedCommitments: FixedCommitment[],
-  tasks: Task[]
-): {
-  testResults: {
-    edgeCaseCheck: boolean;
-    conflictDetection: boolean;
-    prioritySorting: boolean;
-    sessionCombination: boolean;
-    validation: boolean;
-  };
-  issues: string[];
-} => {
-  const testResults = {
-    edgeCaseCheck: false,
-    conflictDetection: false,
-    prioritySorting: false,
-    sessionCombination: false,
-    validation: false
-  };
-  const issues: string[] = [];
-  
-  try {
-    // Test edge case handling
-    const edgeCaseCheck = handleRedistributionEdgeCases(studyPlans, settings, fixedCommitments, tasks);
-    testResults.edgeCaseCheck = true;
-    
-    // Test conflict detection
-    const hasConflicts = validateStudyPlanConflicts(studyPlans, settings, fixedCommitments);
-    testResults.conflictDetection = true;
-    
-    // Test priority sorting (simulate missed sessions)
-    const missedSessions = studyPlans.reduce((count, plan) => {
-      return count + plan.plannedTasks.filter(session => {
-        const status = checkSessionStatus(session, plan.date);
-        return status === 'missed';
-      }).length;
-    }, 0);
-    
-    if (missedSessions > 0) {
-      // Test the actual redistribution
-      const result = redistributeMissedSessionsWithFeedback(studyPlans, settings, fixedCommitments, tasks);
-      testResults.prioritySorting = true;
-      testResults.sessionCombination = true;
-      testResults.validation = true;
-      
-      console.log('Redistribution test results:', {
-        totalMissed: result.feedback.details.totalMissed,
-        successfullyMoved: result.feedback.details.successfullyMoved,
-        failedToMove: result.feedback.details.failedToMove,
-        conflictsDetected: result.feedback.details.conflictsDetected
-      });
-    } else {
-      testResults.prioritySorting = true;
-      testResults.sessionCombination = true;
-      testResults.validation = true;
-    }
-    
-  } catch (error) {
-    issues.push(`Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-  
-  return { testResults, issues };
 };
