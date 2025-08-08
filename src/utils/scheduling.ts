@@ -1146,48 +1146,6 @@ export const generateNewStudyPlan = (
       }
     }
     
-    // REDISTRIBUTE MISSED SESSIONS
-    // After normal scheduling is complete, try to redistribute missed sessions
-    if (Object.keys(missedSessionHoursByTask).length > 0) {
-      console.log('Attempting to redistribute missed sessions...');
-      
-      // Sort tasks with missed sessions by importance and deadline
-      const tasksWithMissedSessions = Object.keys(missedSessionHoursByTask)
-        .map(taskId => tasksEven.find(t => t.id === taskId))
-        .filter(task => task !== undefined)
-        .sort((a, b) => {
-          if (!a || !b) return 0;
-          if (a.importance !== b.importance) return a.importance ? -1 : 1;
-          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-        });
-      
-      for (const task of tasksWithMissedSessions) {
-        if (!task) continue;
-        
-        const missedHours = missedSessionHoursByTask[task.id];
-        if (missedHours <= 0) continue;
-        
-        // Get deadline for this task
-        const deadline = new Date(task.deadline);
-        if (settings.bufferDays > 0) {
-          deadline.setDate(deadline.getDate() - settings.bufferDays);
-        }
-        const deadlineDateStr = deadline.toISOString().split('T')[0];
-        const daysForTask = availableDays.filter(d => d <= deadlineDateStr);
-        
-        // Try to redistribute missed session hours
-        const finalUnscheduledHours = redistributeUnscheduledHours(task, missedHours, daysForTask);
-        
-        if (finalUnscheduledHours < missedHours) {
-          console.log(`Successfully redistributed ${missedHours - finalUnscheduledHours} hours for task "${task.title}"`);
-        } else {
-          console.log(`Could not redistribute ${missedHours} hours for task "${task.title}"`);
-        }
-      }
-      
-      // Combine sessions again after missed session redistribution
-      combineSessionsOnSameDay(studyPlans);
-    }
 
     // Step 3: Schedule no-deadline tasks in remaining available time
     if (noDeadlineTasks.length > 0) {
