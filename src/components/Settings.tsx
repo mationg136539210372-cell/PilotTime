@@ -147,23 +147,6 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
 
-  const validateRescheduledSessions = () => {
-    // Check for rescheduled/redistributed sessions across all study plans
-    const rescheduledSessions = studyPlans.flatMap(plan => 
-      plan.plannedTasks.filter(session => {
-        // Check if session is manually rescheduled or redistributed
-        return session.isManualOverride === true || (!!session.originalTime && !!session.originalDate);
-      })
-    );
-
-    if (rescheduledSessions.length > 0) {
-      return {
-        isValid: false,
-        message: `You have ${rescheduledSessions.length} rescheduled session${rescheduledSessions.length > 1 ? 's' : ''}. Please go to the Study Plan tab to handle these sessions before changing settings.`
-      };
-    }
-    return { isValid: true, message: "" };
-  };
 
   const getValidationMessages = () => {
     const messages = [];
