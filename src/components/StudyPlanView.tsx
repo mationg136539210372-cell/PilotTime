@@ -742,6 +742,62 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
         </div>
       )}
 
+      {/* Refresh Confirmation Modal */}
+      {showRefreshConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center space-x-2">
+                  <AlertTriangle className="text-orange-500" size={24} />
+                  <span>Refresh Study Plan?</span>
+                </h2>
+                <button
+                  onClick={() => setShowRefreshConfirmation(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <p className="text-gray-600 dark:text-gray-300">
+                  You have manually rescheduled sessions. Refreshing the study plan will affect these changes.
+                </p>
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    <strong>Choose an option:</strong>
+                  </p>
+                  <ul className="text-sm text-yellow-700 dark:text-yellow-300 mt-1 space-y-1">
+                    <li>• <strong>Preserve reschedules:</strong> Keep your manual changes and optimize around them</li>
+                    <li>• <strong>Start fresh:</strong> Reset all sessions to optimally calculated times</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="flex flex-col space-y-2 mt-6">
+                <button
+                  onClick={() => handleRefreshConfirm(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-green-600 text-white rounded-lg hover:from-blue-600 hover:to-green-700 transition-colors"
+                >
+                  Preserve My Manual Reschedules
+                </button>
+                <button
+                  onClick={() => handleRefreshConfirm(false)}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-colors"
+                >
+                  Start Fresh (Reset All)
+                </button>
+                <button
+                  onClick={() => setShowRefreshConfirmation(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Reschedule Options Modal */}
       
 
