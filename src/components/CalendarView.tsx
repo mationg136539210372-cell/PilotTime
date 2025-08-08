@@ -134,6 +134,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   });
   const [selectedManualSession, setSelectedManualSession] = useState<FixedCommitment | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragFeedback, setDragFeedback] = useState<string>('');
 
 
   // Mobile detection
