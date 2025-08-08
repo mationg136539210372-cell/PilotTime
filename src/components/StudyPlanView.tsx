@@ -430,7 +430,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     Sessions for overdue tasks (deadline passed):
                   </h3>
                   <span className="text-xs text-orange-600 dark:text-orange-400">
-                    Redistribution not available
+                    Tasks past deadline
                   </span>
                 </div>
                 {overdueMissedSessions.map(({planDate, session, task}, idx) => (
