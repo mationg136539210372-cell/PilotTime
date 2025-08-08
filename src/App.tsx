@@ -571,6 +571,97 @@ function App() {
         }
     };
 
+    // Handle refresh study plan with preserve option (no browser dialog)
+    const handleRefreshStudyPlan = (preserveManualReschedules: boolean) => {
+        if (tasks.length > 0) {
+            try {
+                // Generate new study plan
+                const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+                const newPlans = result.plans;
+
+                if (preserveManualReschedules) {
+                    // Enhanced preservation logic
+                    newPlans.forEach(plan => {
+                        const prevPlan = studyPlans.find(p => p.date === plan.date);
+                        if (!prevPlan) return;
+
+                        plan.plannedTasks.forEach(session => {
+                            const prevSession = prevPlan.plannedTasks.find(s =>
+                                s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+                            );
+                            if (prevSession) {
+                                // Preserve done sessions
+                                if (prevSession.done) {
+                                    session.done = true;
+                                    session.status = prevSession.status;
+                                    session.actualHours = prevSession.actualHours;
+                                    session.completedAt = prevSession.completedAt;
+                                }
+                                // Preserve skipped sessions
+                                else if (prevSession.status === 'skipped') {
+                                    session.status = 'skipped';
+                                }
+                                // Preserve manual reschedules
+                                else if (prevSession.originalTime && prevSession.originalDate && prevSession.isManualOverride) {
+                                    session.originalTime = prevSession.originalTime;
+                                    session.originalDate = prevSession.originalDate;
+                                    session.startTime = prevSession.startTime;
+                                    session.endTime = prevSession.endTime;
+                                    session.rescheduledAt = prevSession.rescheduledAt;
+                                    session.isManualOverride = prevSession.isManualOverride;
+                                }
+                                // Preserve other rescheduled sessions (but allow regeneration of times)
+                                else if (prevSession.originalTime && prevSession.originalDate) {
+                                    session.originalTime = prevSession.originalTime;
+                                    session.originalDate = prevSession.originalDate;
+                                    session.rescheduledAt = prevSession.rescheduledAt;
+                                    session.isManualOverride = prevSession.isManualOverride;
+                                }
+                            }
+                        });
+                    });
+                } else {
+                    // Only preserve done and skipped sessions, reset manual reschedules
+                    newPlans.forEach(plan => {
+                        const prevPlan = studyPlans.find(p => p.date === plan.date);
+                        if (!prevPlan) return;
+
+                        plan.plannedTasks.forEach(session => {
+                            const prevSession = prevPlan.plannedTasks.find(s =>
+                                s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+                            );
+                            if (prevSession) {
+                                // Preserve done sessions
+                                if (prevSession.done) {
+                                    session.done = true;
+                                    session.status = prevSession.status;
+                                    session.actualHours = prevSession.actualHours;
+                                    session.completedAt = prevSession.completedAt;
+                                }
+                                // Preserve skipped sessions
+                                else if (prevSession.status === 'skipped') {
+                                    session.status = 'skipped';
+                                }
+                            }
+                        });
+                    });
+                }
+
+                setStudyPlans(newPlans);
+                setLastPlanStaleReason("task");
+                setNotificationMessage(preserveManualReschedules ?
+                    'Study plan refreshed! Manual reschedules preserved.' :
+                    'Study plan refreshed! All sessions optimally rescheduled.'
+                );
+                setTimeout(() => setNotificationMessage(''), 5000);
+            } catch (error) {
+                console.error('Study plan refresh failed:', error);
+                setNotificationMessage('Failed to refresh study plan. Please try again.');
+                setTimeout(() => setNotificationMessage(''), 5000);
+            }
+        }
+    };
+
     const handleDismissAutoRemovedTask = (taskTitle: string) => {
       setAutoRemovedTasks(prev => prev.filter(title => title !== taskTitle));
     };
