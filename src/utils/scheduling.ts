@@ -617,11 +617,6 @@ export const generateNewStudyPlan = (
     // Use deadline tasks for now (we'll add no-deadline scheduling later)
     const tasksEven = deadlineTasks;
 
-    // Create a map of missed session hours per task for separate redistribution
-    const missedSessionHoursByTask: { [taskId: string]: number } = {};
-    missedSessionsToRedistribute.forEach(({session, task}) => {
-      missedSessionHoursByTask[task.id] = (missedSessionHoursByTask[task.id] || 0) + session.allocatedHours;
-    });
 
     // Step 1: Create a map of available study days
     const now = new Date();
