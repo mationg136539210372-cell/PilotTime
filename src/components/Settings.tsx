@@ -189,20 +189,6 @@ const Settings: React.FC<SettingsProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check for missed sessions before saving
-    const missedSessionsValidation = validateMissedSessions();
-    if (!missedSessionsValidation.isValid) {
-      // Don't save settings if there are missed sessions
-      return;
-    }
-    
-    // Check for rescheduled sessions before saving
-    const rescheduledSessionsValidation = validateRescheduledSessions();
-    if (!rescheduledSessionsValidation.isValid) {
-      // Don't save settings if there are rescheduled sessions
-      return;
-    }
-    
     onUpdateSettings({
       dailyAvailableHours,
       workDays,
