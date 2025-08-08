@@ -2198,68 +2198,6 @@ export const validateTimeSlot = (
 };
 
 
-// New validation function to check for conflicts
-const validateStudyPlanConflicts = (
-  studyPlans: StudyPlan[],
-  settings: UserSettings,
-  fixedCommitments: FixedCommitment[]
-): boolean => {
-  for (const plan of studyPlans) {
-    const sessions = plan.plannedTasks.filter(session => session.status !== 'skipped');
-    
-    // Check for overlapping sessions
-    for (let i = 0; i < sessions.length; i++) {
-      for (let j = i + 1; j < sessions.length; j++) {
-        const sessionA = sessions[i];
-        const sessionB = sessions[j];
-        
-        if (sessionA.startTime && sessionA.endTime && sessionB.startTime && sessionB.endTime) {
-          const [aStartHour, aStartMinute] = sessionA.startTime.split(':').map(Number);
-          const [aEndHour, aEndMinute] = sessionA.endTime.split(':').map(Number);
-          const [bStartHour, bStartMinute] = sessionB.startTime.split(':').map(Number);
-          const [bEndHour, bEndMinute] = sessionB.endTime.split(':').map(Number);
-          
-          const aStart = (aStartHour || 0) * 60 + (aStartMinute || 0);
-          const aEnd = (aEndHour || 0) * 60 + (aEndMinute || 0);
-          const bStart = (bStartHour || 0) * 60 + (bStartMinute || 0);
-          const bEnd = (bEndHour || 0) * 60 + (bEndMinute || 0);
-          
-          if (aStart < bEnd && aEnd > bStart) {
-            console.error(`Session overlap detected on ${plan.date}`);
-            return true;
-          }
-        }
-      }
-    }
-    
-    // Check daily hour limits (excluding missed and redistributed sessions)
-    const regularSessions = sessions.filter(session => !isMissedOrRedistributedSession(session, plan.date));
-    const totalRegularHours = regularSessions.reduce((sum, session) => sum + session.allocatedHours, 0);
-    
-    if (totalRegularHours > settings.dailyAvailableHours) {
-      console.error(`Daily limit exceeded on ${plan.date}: ${totalRegularHours} > ${settings.dailyAvailableHours}`);
-      return true;
-    }
-    
-    // Check session length constraints (excluding missed and redistributed sessions)
-    const minSessionLength = (settings.minSessionLength || 15) / 60;
-    const maxSessionLength = Math.min(4, settings.dailyAvailableHours);
-    
-    for (const session of sessions) {
-      // Skip length validation for missed and redistributed sessions
-      if (isMissedOrRedistributedSession(session, plan.date)) {
-        continue;
-      }
-      
-      if (session.allocatedHours < minSessionLength || session.allocatedHours > maxSessionLength) {
-        console.error(`Session length constraint violated: ${session.allocatedHours} hours`);
-        return true;
-      }
-    }
-  }
-  
-  return false;
-};
 
 
 
