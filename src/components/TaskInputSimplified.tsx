@@ -159,6 +159,8 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       maxSessionLength: 2,
       isOneTimeTask: false,
     });
+    // Hide the form after successful submission
+    onCancel?.();
   };
 
   const handleTimeEstimationUpdate = (hours: string, minutes: string, taskType: string) => {
