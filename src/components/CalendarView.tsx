@@ -1095,7 +1095,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         }}
         className="calendar-grid-container dark:bg-gray-900 dark:bg-opacity-95"
       >
-        <Calendar
+        <DragAndDropCalendar
           localizer={localizer}
           events={events}
           startAccessor="start"
@@ -1126,6 +1126,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           }}
           rtl={false}
           dayLayoutAlgorithm="no-overlap"
+          draggableAccessor={(event) => event.resource.type === 'study'}
+          resizable={true}
+          onEventDrop={handleEventDrop}
+          onEventResize={handleEventResize}
+          onDragStart={handleDragStart}
         />
       </div>
       {/* Add custom CSS for thicker interval lines and better spacing */}
