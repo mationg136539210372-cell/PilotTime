@@ -629,7 +629,7 @@ function App() {
             return;
         }
         setTasks(updatedTasks);
-        setStudyPlans(plans);
+        setStudyPlans(newPlans);
         setShowTaskInput(false);
         setLastPlanStaleReason("task");
     };
