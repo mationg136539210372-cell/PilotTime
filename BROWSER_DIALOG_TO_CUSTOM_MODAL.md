@@ -72,7 +72,21 @@ const shouldPreserveReschedules = window.confirm(
 {showRefreshConfirmation && (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full mx-4">
-      {/* Modal content with two action buttons */}
+      <div className="p-6">
+        <h2 className="text-xl font-bold">Refresh Study Plan?</h2>
+        <p>You have manually rescheduled sessions...</p>
+        <div className="flex flex-col space-y-2 mt-6">
+          <button onClick={() => handleRefreshConfirm(true)}>
+            Preserve My Manual Reschedules
+          </button>
+          <button onClick={() => handleRefreshConfirm(false)}>
+            Start Fresh (Reset All)
+          </button>
+          <button onClick={() => setShowRefreshConfirmation(false)}>
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 )}
