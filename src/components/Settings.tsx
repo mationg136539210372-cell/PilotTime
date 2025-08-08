@@ -146,23 +146,6 @@ const Settings: React.FC<SettingsProps> = ({
     return { isValid: true, message: "" };
   };
 
-  const validateMissedSessions = () => {
-    // Check for missed sessions across all study plans
-    const missedSessions = studyPlans.flatMap(plan => 
-      plan.plannedTasks.filter(session => {
-        const status = checkSessionStatus(session, plan.date);
-        return status === 'missed';
-      })
-    );
-
-    if (missedSessions.length > 0) {
-      return {
-        isValid: false,
-        message: `You have ${missedSessions.length} missed session${missedSessions.length > 1 ? 's' : ''}. Please go to the Study Plan tab to redistribute or skip these sessions before changing settings.`
-      };
-    }
-    return { isValid: true, message: "" };
-  };
 
   const validateRescheduledSessions = () => {
     // Check for rescheduled/redistributed sessions across all study plans
