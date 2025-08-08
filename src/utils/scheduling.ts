@@ -594,21 +594,6 @@ export const generateNewStudyPlan = (
   fixedCommitments: FixedCommitment[],
   existingStudyPlans: StudyPlan[] = []
 ): { plans: StudyPlan[]; suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> } => {
-  // Collect missed sessions from existing plans for redistribution
-  const missedSessionsToRedistribute: Array<{session: StudySession, planDate: string, task: Task}> = [];
-  if (existingStudyPlans.length > 0) {
-    existingStudyPlans.forEach(plan => {
-      plan.plannedTasks.forEach(session => {
-        const status = checkSessionStatus(session, plan.date);
-        if (status === 'missed') {
-          const task = tasks.find(t => t.id === session.taskId);
-          if (task && task.status === 'pending') {
-            missedSessionsToRedistribute.push({session, planDate: plan.date, task});
-          }
-        }
-      });
-    });
-  }
 
   if (settings.studyPlanMode === 'even') {
     // EVEN DISTRIBUTION LOGIC
