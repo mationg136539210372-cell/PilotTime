@@ -1,10 +1,14 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
+import withDragAndDrop, { withDragAndDropProps } from 'react-big-calendar/lib/addons/dragAndDrop';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { StudyPlan, FixedCommitment, Task } from '../types';
+import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
+import { StudyPlan, FixedCommitment, Task, StudySession, UserSettings } from '../types';
 import { BookOpen, Clock, Settings, X } from 'lucide-react';
-import { checkSessionStatus } from '../utils/scheduling';
+import { checkSessionStatus, validateTimeSlot, doesCommitmentApplyToDate } from '../utils/scheduling';
 import { getLocalDateString } from '../utils/scheduling';
 import MobileCalendarView from './MobileCalendarView';
 
