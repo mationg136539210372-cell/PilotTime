@@ -242,7 +242,8 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   const isImpactValid = formData.impact !== '';
   const isCustomCategoryValid = !showCustomCategory || (formData.customCategory && formData.customCategory.trim().length > 0 && formData.customCategory.trim().length <= 50);
 
-  const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid && isDeadlineNotPast && 
+  const isOneSittingTooLong = formData.isOneTimeTask && totalTime > userSettings.dailyAvailableHours;
+  const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid && isDeadlineNotPast &&
                      isEstimatedValid && isEstimatedReasonable && isImpactValid && isCustomCategoryValid;
 
   // Enhanced validation messages
@@ -274,6 +275,14 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
     }
     
     return errors;
+  };
+
+  const getValidationWarnings = () => {
+    const warnings = [];
+    if (isOneSittingTooLong) {
+      warnings.push(`⚠️ This one-sitting task (${totalTime}h) exceeds your daily available hours (${userSettings.dailyAvailableHours}h). Consider reducing the estimated time, increasing your daily hours in settings, or unchecking "one-sitting" to allow splitting.`);
+    }
+    return warnings;
   };
 
   // --- Add warning for low-priority urgent tasks ---
@@ -841,6 +850,18 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
             <span>
               <strong>Warning:</strong> This task is <span className="font-semibold">low priority</span> but has an <span className="font-semibold">urgent deadline</span>. It may not be scheduled if you have more important urgent tasks.
             </span>
+          </div>
+        )}
+
+        {/* One-sitting task warnings */}
+        {getValidationWarnings().length > 0 && (
+          <div className="text-yellow-600 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded mt-2 flex items-start gap-2 dark:bg-yellow-900/20 dark:text-yellow-200 dark:border-yellow-600">
+            <Info className="mt-0.5" size={18} />
+            <div>
+              {getValidationWarnings().map((warning, index) => (
+                <div key={index}>{warning}</div>
+              ))}
+            </div>
           </div>
         )}
         {/* Buttons */}
