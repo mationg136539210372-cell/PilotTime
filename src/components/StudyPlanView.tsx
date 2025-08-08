@@ -29,6 +29,8 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [] = useState<{ taskTitle: string; unscheduledMinutes: number } | null>(null);
   const [showRegenerateConfirmation, setShowRegenerateConfirmation] = useState(false);
+  const [showRefreshConfirmation, setShowRefreshConfirmation] = useState(false);
+  const [hasManualReschedules, setHasManualReschedules] = useState(false);
   // Resched UI state
   const [reschedModal, setReschedModal] = useState<{ open: boolean; task: any | null }>({ open: false, task: null });
   const [reschedDate, setReschedDate] = useState<string>("");
