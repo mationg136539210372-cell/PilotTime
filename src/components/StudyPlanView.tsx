@@ -298,6 +298,32 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
 
   return (
     <div className="space-y-6 relative study-plan-container">
+      {/* Study Plan Header with Refresh Button */}
+      {studyPlans.length > 0 && (
+        <div className="bg-white rounded-xl shadow-lg p-6 dark:bg-gray-900 dark:shadow-gray-900">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Study Plan</h2>
+            </div>
+            <button
+              onClick={() => {
+                if (onRedistributeMissedSessions) {
+                  onRedistributeMissedSessions();
+                }
+              }}
+              className="px-4 py-2 bg-gradient-to-r from-green-500 to-blue-600 text-white text-sm rounded-lg hover:from-green-600 hover:to-blue-700 transition-colors flex items-center space-x-2"
+              title="Refresh and regenerate your study plan"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Refresh Plan</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Missed Sessions Section */}
       {(missedSessions.length > 0 || overdueMissedSessions.length > 0) && (
         <div className={`bg-white rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900 border-l-4 ${(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}>
