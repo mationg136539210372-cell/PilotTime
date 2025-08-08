@@ -613,6 +613,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       return;
     }
 
+    // Get the original plan date where the session was dragged from
+    const originalPlanDate = event.resource.data.planDate;
+
     // Update the study plans
     const updatedPlans = studyPlans.map(plan => {
       if (plan.date === targetDate) {
@@ -622,7 +625,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           startTime: moment(availableSlot.start).format('HH:mm'),
           endTime: moment(availableSlot.end).format('HH:mm'),
           originalTime: session.originalTime || session.startTime,
-          originalDate: session.originalDate || event.resource.data.planDate,
+          originalDate: session.originalDate || originalPlanDate,
           rescheduledAt: new Date().toISOString(),
           isManualOverride: true
         };
@@ -644,12 +647,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             plannedTasks: [...plan.plannedTasks, newSession]
           };
         }
-      } else {
-        // Remove session from original date if it exists
+      } else if (plan.date === originalPlanDate) {
+        // Remove session ONLY from the original plan date (where it was dragged from)
         const updatedTasks = plan.plannedTasks.filter(s =>
           !(s.taskId === session.taskId && s.sessionNumber === session.sessionNumber)
         );
         return { ...plan, plannedTasks: updatedTasks };
+      } else {
+        // For all other plans, leave them unchanged
+        return plan;
       }
     });
 
