@@ -299,6 +299,37 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
     setTimeout(() => setNotificationMessage(null), 3000);
   };
 
+  // Function to check if there are manual reschedules
+  const checkForManualReschedules = () => {
+    return studyPlans.some(plan =>
+      plan.plannedTasks.some(session =>
+        session.originalTime && session.originalDate && session.isManualOverride
+      )
+    );
+  };
+
+  // Handle refresh button click
+  const handleRefreshClick = () => {
+    const hasReschedules = checkForManualReschedules();
+    if (hasReschedules) {
+      setHasManualReschedules(true);
+      setShowRefreshConfirmation(true);
+    } else {
+      // No manual reschedules, directly refresh
+      if (onRefreshStudyPlan) {
+        onRefreshStudyPlan(false);
+      }
+    }
+  };
+
+  // Handle refresh confirmation
+  const handleRefreshConfirm = (preserveReschedules: boolean) => {
+    setShowRefreshConfirmation(false);
+    if (onRefreshStudyPlan) {
+      onRefreshStudyPlan(preserveReschedules);
+    }
+  };
+
   return (
     <div className="space-y-6 relative study-plan-container">
       {/* Study Plan Header with Refresh Button */}
