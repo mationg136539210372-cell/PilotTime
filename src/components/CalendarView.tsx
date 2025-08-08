@@ -1257,6 +1257,47 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         .dark .rbc-timeslot-group.rbc-past {
           background-color: #1f2937 !important;
         }
+
+        /* Drag and Drop Styles */
+        .rbc-addons-dnd-drag-preview {
+          background-color: rgba(59, 130, 246, 0.1) !important;
+          border: 2px dashed #3b82f6 !important;
+          opacity: 0.7 !important;
+        }
+
+        .rbc-addons-dnd-over {
+          background-color: rgba(34, 197, 94, 0.1) !important;
+          border: 2px solid #22c55e !important;
+        }
+
+        .rbc-event.rbc-addons-dnd-dragged-event {
+          opacity: 0.5 !important;
+          cursor: grabbing !important;
+        }
+
+        .rbc-event:hover {
+          cursor: grab !important;
+        }
+
+        /* Resize handles */
+        .rbc-addons-dnd-resize-south-anchor,
+        .rbc-addons-dnd-resize-north-anchor {
+          background-color: #3b82f6 !important;
+          height: 6px !important;
+          width: 100% !important;
+          opacity: 0 !important;
+          transition: opacity 0.2s !important;
+        }
+
+        .rbc-event:hover .rbc-addons-dnd-resize-south-anchor,
+        .rbc-event:hover .rbc-addons-dnd-resize-north-anchor {
+          opacity: 1 !important;
+        }
+
+        /* Only allow drag on study sessions */
+        .rbc-event[data-event-type="commitment"] {
+          cursor: default !important;
+        }
       `}</style>
 
       {/* Color Settings Modal */}
