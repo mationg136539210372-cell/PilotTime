@@ -13,14 +13,17 @@ import { getLocalDateString } from '../utils/scheduling';
 import MobileCalendarView from './MobileCalendarView';
 
 const localizer = momentLocalizer(moment);
+const DragAndDropCalendar = withDragAndDrop(Calendar);
 
 interface CalendarViewProps {
   studyPlans: StudyPlan[];
   fixedCommitments: FixedCommitment[];
   tasks: Task[];
+  settings?: UserSettings;
   onSelectTask?: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
   onStartManualSession?: (commitment: FixedCommitment, durationSeconds: number) => void;
   onDeleteFixedCommitment?: (commitmentId: string) => void;
+  onUpdateStudyPlans?: (updatedPlans: StudyPlan[]) => void;
 }
 
 interface CalendarEvent {
