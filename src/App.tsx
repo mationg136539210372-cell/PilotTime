@@ -456,11 +456,8 @@ function App() {
             );
 
             if (hasManualReschedules) {
-                const shouldPreserveReschedules = window.confirm(
-                    "You have manually rescheduled sessions. Regenerating the study plan will move them back to their original times. Would you like to preserve your manual reschedules?"
-                );
-
-                if (shouldPreserveReschedules) {
+                // For regular study plan generation, preserve manual reschedules by default
+                // Use the refresh function for options to reset reschedules
                     // Generate plan but preserve manual reschedules
                     const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
                     const newPlans = result.plans;
@@ -511,7 +508,6 @@ function App() {
                     setStudyPlans(newPlans);
                     setLastPlanStaleReason("task");
                     return;
-                }
             }
 
             // Generate new study plan
