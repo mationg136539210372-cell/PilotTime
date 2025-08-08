@@ -667,7 +667,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         startTime: moment(availableSlot.start).format('HH:mm'),
         endTime: moment(availableSlot.end).format('HH:mm'),
         originalTime: session.originalTime || session.startTime,
-        originalDate: session.originalDate || event.resource.data.planDate,
+        originalDate: session.originalDate || originalPlanDate,
         rescheduledAt: new Date().toISOString(),
         isManualOverride: true
       };
@@ -680,6 +680,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         isOverloaded: false,
         availableHours: settings.dailyAvailableHours
       });
+
+      // Also remove from original plan if it exists
+      const originalPlanIndex = updatedPlans.findIndex(plan => plan.date === originalPlanDate);
+      if (originalPlanIndex >= 0) {
+        const originalPlan = updatedPlans[originalPlanIndex];
+        const updatedOriginalTasks = originalPlan.plannedTasks.filter(s =>
+          !(s.taskId === session.taskId && s.sessionNumber === session.sessionNumber)
+        );
+        updatedPlans[originalPlanIndex] = { ...originalPlan, plannedTasks: updatedOriginalTasks };
+      }
     }
 
     onUpdateStudyPlans(updatedPlans);
