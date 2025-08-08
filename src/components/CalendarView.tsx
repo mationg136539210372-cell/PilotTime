@@ -497,6 +497,236 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
   };
 
+  // Utility function to find available time slots
+  const findNearestAvailableSlot = (targetStart: Date, sessionDuration: number, targetDate: string): { start: Date; end: Date } | null => {
+    if (!settings) return null;
+
+    // Get all busy slots for the target date
+    const busySlots: Array<{ start: Date; end: Date }> = [];
+
+    // Add existing study sessions
+    studyPlans.forEach(plan => {
+      if (plan.date === targetDate) {
+        plan.plannedTasks.forEach(session => {
+          if (session.status !== 'skipped' && session.startTime && session.endTime) {
+            const sessionStart = moment(targetDate + ' ' + session.startTime).toDate();
+            const sessionEnd = moment(targetDate + ' ' + session.endTime).toDate();
+            busySlots.push({ start: sessionStart, end: sessionEnd });
+          }
+        });
+      }
+    });
+
+    // Add fixed commitments
+    fixedCommitments.forEach(commitment => {
+      if (doesCommitmentApplyToDate(commitment, targetDate) && commitment.startTime && commitment.endTime) {
+        const commitmentStart = moment(targetDate + ' ' + commitment.startTime).toDate();
+        const commitmentEnd = moment(targetDate + ' ' + commitment.endTime).toDate();
+        busySlots.push({ start: commitmentStart, end: commitmentEnd });
+      }
+    });
+
+    // Sort busy slots by start time
+    busySlots.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    // Set study window boundaries
+    const dayStart = moment(targetDate).hour(settings.studyWindowStartHour || 6).minute(0).second(0).toDate();
+    const dayEnd = moment(targetDate).hour(settings.studyWindowEndHour || 23).minute(0).second(0).toDate();
+
+    const sessionDurationMs = sessionDuration * 60 * 60 * 1000;
+    const bufferTimeMs = (settings.bufferTimeBetweenSessions || 0) * 60 * 1000; // Convert minutes to ms
+
+    // Function to check if a slot is valid
+    const isSlotValid = (slotStart: Date, slotEnd: Date) => {
+      // Check if within study window
+      if (slotStart < dayStart || slotEnd > dayEnd) return false;
+
+      // Check if it conflicts with any busy slot
+      for (const busySlot of busySlots) {
+        const adjustedStart = new Date(slotStart.getTime() - bufferTimeMs);
+        const adjustedEnd = new Date(slotEnd.getTime() + bufferTimeMs);
+
+        if (adjustedStart < busySlot.end && adjustedEnd > busySlot.start) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    // Try to find the nearest available slot to the target time
+    const gridSize = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+    // Round target time to nearest 15-minute interval
+    const roundedTarget = new Date(Math.round(targetStart.getTime() / gridSize) * gridSize);
+
+    // Search for available slots starting from the rounded target time
+    for (let offset = 0; offset <= 12 * 60 * 60 * 1000; offset += gridSize) { // Search within 12 hours
+      // Try both directions from target time
+      for (const direction of [1, -1]) {
+        const testStart = new Date(roundedTarget.getTime() + (direction * offset));
+        const testEnd = new Date(testStart.getTime() + sessionDurationMs);
+
+        if (isSlotValid(testStart, testEnd)) {
+          return { start: testStart, end: testEnd };
+        }
+      }
+    }
+
+    return null;
+  };
+
+  // Handle drag start
+  const handleDragStart = () => {
+    setIsDragging(true);
+    setDragFeedback('');
+  };
+
+  // Handle event drop
+  const handleEventDrop = ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    setIsDragging(false);
+
+    // Only allow dragging study sessions, not commitments
+    if (event.resource.type !== 'study' || !onUpdateStudyPlans || !settings) {
+      setDragFeedback('Only study sessions can be moved');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    const session = event.resource.data as StudySession;
+    const targetDate = moment(start).format('YYYY-MM-DD');
+    const sessionDuration = session.allocatedHours;
+
+    // Check if target day is a work day
+    const targetDayOfWeek = moment(start).day();
+    if (!settings.workDays.includes(targetDayOfWeek)) {
+      setDragFeedback(`Cannot move session to ${moment(start).format('dddd')} - not a work day`);
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Find the nearest available slot
+    const availableSlot = findNearestAvailableSlot(start, sessionDuration, targetDate);
+
+    if (!availableSlot) {
+      setDragFeedback('No available time slot found for this session');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Update the study plans
+    const updatedPlans = studyPlans.map(plan => {
+      if (plan.date === targetDate) {
+        // Add session to target date
+        const newSession = {
+          ...session,
+          startTime: moment(availableSlot.start).format('HH:mm'),
+          endTime: moment(availableSlot.end).format('HH:mm'),
+          originalTime: session.originalTime || session.startTime,
+          originalDate: session.originalDate || event.resource.data.planDate,
+          rescheduledAt: new Date().toISOString(),
+          isManualOverride: true
+        };
+
+        // Check if session already exists in this plan
+        const existingSessionIndex = plan.plannedTasks.findIndex(s =>
+          s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+        );
+
+        if (existingSessionIndex >= 0) {
+          // Update existing session
+          const updatedTasks = [...plan.plannedTasks];
+          updatedTasks[existingSessionIndex] = newSession;
+          return { ...plan, plannedTasks: updatedTasks };
+        } else {
+          // Add new session
+          return {
+            ...plan,
+            plannedTasks: [...plan.plannedTasks, newSession]
+          };
+        }
+      } else {
+        // Remove session from original date if it exists
+        const updatedTasks = plan.plannedTasks.filter(s =>
+          !(s.taskId === session.taskId && s.sessionNumber === session.sessionNumber)
+        );
+        return { ...plan, plannedTasks: updatedTasks };
+      }
+    });
+
+    // If target date doesn't exist in plans, create it
+    const targetPlanExists = updatedPlans.some(plan => plan.date === targetDate);
+    if (!targetPlanExists) {
+      const newSession = {
+        ...session,
+        startTime: moment(availableSlot.start).format('HH:mm'),
+        endTime: moment(availableSlot.end).format('HH:mm'),
+        originalTime: session.originalTime || session.startTime,
+        originalDate: session.originalDate || event.resource.data.planDate,
+        rescheduledAt: new Date().toISOString(),
+        isManualOverride: true
+      };
+
+      updatedPlans.push({
+        id: `plan-${targetDate}`,
+        date: targetDate,
+        plannedTasks: [newSession],
+        totalStudyHours: sessionDuration,
+        isOverloaded: false,
+        availableHours: settings.dailyAvailableHours
+      });
+    }
+
+    onUpdateStudyPlans(updatedPlans);
+
+    const snappedTime = moment(availableSlot.start).format('HH:mm');
+    setDragFeedback(`Session moved to ${moment(targetDate).format('MMM D')} at ${snappedTime}`);
+    setTimeout(() => setDragFeedback(''), 3000);
+  };
+
+  // Handle event resize
+  const handleEventResize = ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    // Only allow resizing study sessions
+    if (event.resource.type !== 'study' || !onUpdateStudyPlans) {
+      setDragFeedback('Only study sessions can be resized');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    const session = event.resource.data as StudySession;
+    const newDuration = moment(end).diff(moment(start), 'hours', true);
+
+    // Validate minimum duration (15 minutes)
+    if (newDuration < 0.25) {
+      setDragFeedback('Session must be at least 15 minutes long');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Update the study plans
+    const updatedPlans = studyPlans.map(plan => {
+      return {
+        ...plan,
+        plannedTasks: plan.plannedTasks.map(s => {
+          if (s.taskId === session.taskId && s.sessionNumber === session.sessionNumber) {
+            return {
+              ...s,
+              startTime: moment(start).format('HH:mm'),
+              endTime: moment(end).format('HH:mm'),
+              allocatedHours: newDuration,
+              rescheduledAt: new Date().toISOString(),
+              isManualOverride: true
+            };
+          }
+          return s;
+        })
+      };
+    });
+
+    onUpdateStudyPlans(updatedPlans);
+    setDragFeedback(`Session resized to ${newDuration.toFixed(1)} hours`);
+    setTimeout(() => setDragFeedback(''), 3000);
+  };
+
 
   // Custom event style for modern look, now color-coded by priority or type
   const eventStyleGetter = (event: CalendarEvent, start: Date, _end: Date, isSelected: boolean) => {
