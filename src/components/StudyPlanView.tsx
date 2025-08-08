@@ -329,7 +329,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     <span>Regenerating...</span>
                   </div>
                 ) : (
-                  'Redistribute Sessions'
+                  'Regenerate Study Plan'
                 )}
               </button>
             </div>
