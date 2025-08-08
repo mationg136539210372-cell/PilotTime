@@ -555,13 +555,13 @@ function App() {
     };
 
 
-    // Handle redistribution by regenerating the study plan
+    // Handle study plan regeneration (redistribution functionality has been removed)
     const handleRedistributeMissedSessions = () => {
         if (tasks.length > 0) {
             try {
-                // Simply regenerate the study plan which will incorporate missed sessions
+                // Simply regenerate the study plan
                 handleGenerateStudyPlan();
-                setNotificationMessage('Study plan regenerated successfully! Missed sessions have been incorporated into the new plan.');
+                setNotificationMessage('Study plan regenerated successfully!');
                 setTimeout(() => setNotificationMessage(''), 5000);
             } catch (error) {
                 console.error('Study plan regeneration failed:', error);
