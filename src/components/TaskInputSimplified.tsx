@@ -92,8 +92,10 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const isCustomCategoryValid = !showCustomCategory || (formData.customCategory && formData.customCategory.trim().length > 0 && formData.customCategory.trim().length <= 50);
 
   const isDeadlineRequiredForOneSitting = formData.isOneTimeTask && (!formData.deadline || formData.deadline.trim() === '');
-  const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid && 
-                   isEstimatedValid && isEstimatedReasonable && isImpactValid && 
+  const estimatedDecimalHours = convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
+  const isOneSittingTooLong = formData.isOneTimeTask && estimatedDecimalHours > userSettings.dailyAvailableHours;
+  const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid &&
+                   isEstimatedValid && isEstimatedReasonable && isImpactValid &&
                    isCustomCategoryValid && !isDeadlineRequiredForOneSitting;
 
   const getValidationErrors = (): string[] => {
@@ -107,6 +109,14 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     if (!isCustomCategoryValid) errors.push('Custom category must be between 1-50 characters');
     if (isDeadlineRequiredForOneSitting) errors.push('One-sitting tasks require a deadline to be scheduled properly');
     return errors;
+  };
+
+  const getValidationWarnings = (): string[] => {
+    const warnings: string[] = [];
+    if (isOneSittingTooLong) {
+      warnings.push(`⚠️ This one-sitting task (${estimatedDecimalHours}h) exceeds your daily available hours (${userSettings.dailyAvailableHours}h). Consider reducing the estimated time, increasing your daily hours in settings, or unchecking "one-sitting" to allow splitting.`);
+    }
+    return warnings;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -525,6 +535,21 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                   <li key={index} className="flex items-start gap-2">
                     <span className="text-red-500 mt-0.5">•</span>
                     <span>{error}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Validation Warnings */}
+          {getValidationWarnings().length > 0 && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2 dark:bg-yellow-900/20 dark:border-yellow-700">
+              <div className="text-yellow-800 dark:text-yellow-200 font-medium mb-2">⚠️ Warnings:</div>
+              <ul className="text-yellow-700 dark:text-yellow-300 text-sm space-y-1">
+                {getValidationWarnings().map((warning, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="text-yellow-500 mt-0.5">•</span>
+                    <span>{warning}</span>
                   </li>
                 ))}
               </ul>
