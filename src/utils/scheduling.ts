@@ -925,30 +925,72 @@ export const generateNewStudyPlan = (
 
       // Assign sessions to available days, distributing optimally
       let unscheduledHours = 0;
-      for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
-        const date = daysForTask[i];
-        let dayPlan = studyPlans.find(p => p.date === date)!;
-        let availableHours = dailyRemainingHours[date];
-        const thisSessionLength = Math.min(sessionLengths[i], availableHours);
-        
-        if (thisSessionLength > 0) {
-          const roundedSessionLength = Math.round(thisSessionLength * 60) / 60;
-          dayPlan.plannedTasks.push({
-            taskId: task.id,
-            scheduledTime: `${date}`,
-            startTime: '',
-            endTime: '',
-            allocatedHours: roundedSessionLength,
-            sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
-            isFlexible: true,
-            status: 'scheduled'
-          });
-          dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
-          dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
-          totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
-        } else {
-          // Track unscheduled hours for redistribution
-          unscheduledHours += sessionLengths[i];
+
+      // Special handling for one-sitting tasks
+      if (task.isOneTimeTask && sessionLengths.length === 1) {
+        // For one-sitting tasks, try to find a day that can accommodate the full session
+        let scheduledOneSitting = false;
+        const fullSessionLength = sessionLengths[0];
+
+        // First try the deadline day (or closest to deadline)
+        for (let i = daysForTask.length - 1; i >= 0; i--) {
+          const date = daysForTask[i];
+          let availableHours = dailyRemainingHours[date];
+
+          if (availableHours >= fullSessionLength) {
+            // Found a day that can accommodate the full session
+            let dayPlan = studyPlans.find(p => p.date === date)!;
+            const roundedSessionLength = Math.round(fullSessionLength * 60) / 60;
+
+            dayPlan.plannedTasks.push({
+              taskId: task.id,
+              scheduledTime: `${date}`,
+              startTime: '',
+              endTime: '',
+              allocatedHours: roundedSessionLength,
+              sessionNumber: 1,
+              isFlexible: true,
+              status: 'scheduled'
+            });
+            dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
+            dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
+            totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+            scheduledOneSitting = true;
+            break;
+          }
+        }
+
+        if (!scheduledOneSitting) {
+          // If we couldn't schedule as one sitting, track all hours as unscheduled
+          unscheduledHours += totalHours;
+        }
+      } else {
+        // Regular task scheduling (can be split)
+        for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
+          const date = daysForTask[i];
+          let dayPlan = studyPlans.find(p => p.date === date)!;
+          let availableHours = dailyRemainingHours[date];
+          const thisSessionLength = Math.min(sessionLengths[i], availableHours);
+
+          if (thisSessionLength > 0) {
+            const roundedSessionLength = Math.round(thisSessionLength * 60) / 60;
+            dayPlan.plannedTasks.push({
+              taskId: task.id,
+              scheduledTime: `${date}`,
+              startTime: '',
+              endTime: '',
+              allocatedHours: roundedSessionLength,
+              sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
+              isFlexible: true,
+              status: 'scheduled'
+            });
+            dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
+            dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
+            totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+          } else {
+            // Track unscheduled hours for redistribution
+            unscheduledHours += sessionLengths[i];
+          }
         }
       }
       
@@ -1722,8 +1764,14 @@ export const generateNewStudyPlan = (
       // For one-time tasks, schedule all remaining hours at once if possible
       let hoursToSchedule;
       if (task.isOneTimeTask && taskScheduledHours[task.id] === 0) {
-        // One-time task: try to schedule all hours at once
-        hoursToSchedule = remainingTaskHours <= availableHours ? remainingTaskHours : 0;
+        // One-time task: try to schedule all hours at once, but if not possible on this day,
+        // skip to try other days instead of failing completely
+        if (remainingTaskHours <= availableHours) {
+          hoursToSchedule = remainingTaskHours;
+        } else {
+          // Continue to next day to find one that can accommodate the full session
+          continue;
+        }
       } else {
         // Regular task: can be split across sessions
         hoursToSchedule = Math.min(remainingTaskHours, availableHours);
