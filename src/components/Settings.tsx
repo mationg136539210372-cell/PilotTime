@@ -180,16 +180,6 @@ const Settings: React.FC<SettingsProps> = ({
     if (!bufferValidation.isValid) {
       messages.push({ type: 'warning', message: bufferValidation.message });
     }
-
-    const missedSessionsValidation = validateMissedSessions();
-    if (!missedSessionsValidation.isValid) {
-      messages.push({ type: 'error', message: missedSessionsValidation.message });
-    }
-    
-    const rescheduledSessionsValidation = validateRescheduledSessions();
-    if (!rescheduledSessionsValidation.isValid) {
-      messages.push({ type: 'error', message: rescheduledSessionsValidation.message });
-    }
     
     return messages;
   };
