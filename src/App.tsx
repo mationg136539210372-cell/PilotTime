@@ -1691,67 +1691,135 @@ function App() {
 
                 <div className="min-h-screen relative">
                 {/* Enhanced Glassmorphic Header */}
-                <header className="sticky-header w-full flex items-center justify-between px-4 sm:px-6 py-6 backdrop-blur-xl bg-gradient-to-r from-white/80 via-blue-50/70 to-indigo-50/70 dark:from-gray-900/90 dark:via-blue-900/30 dark:to-indigo-900/30 shadow-xl shadow-blue-500/5 dark:shadow-blue-900/10 border-b border-gradient-to-r from-blue-200/20 via-indigo-200/20 to-purple-200/20 dark:from-blue-800/20 dark:via-indigo-800/20 dark:to-purple-800/20">
-                    <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
-                            <span className="text-white font-bold text-xl drop-shadow-sm">⚡</span>
+                <header className="sticky-header w-full backdrop-blur-xl bg-gradient-to-r from-white/80 via-blue-50/70 to-indigo-50/70 dark:from-gray-900/90 dark:via-blue-900/30 dark:to-indigo-900/30 shadow-xl shadow-blue-500/5 dark:shadow-blue-900/10 border-b border-gradient-to-r from-blue-200/20 via-indigo-200/20 to-purple-200/20 dark:from-blue-800/20 dark:via-indigo-800/20 dark:to-purple-800/20">
+                    {/* Mobile Layout */}
+                    <div className="flex sm:hidden items-center justify-between px-4 py-4">
+                        <div className="flex items-center space-x-2">
+                            <button
+                                className={`flex items-center rounded-xl p-2 backdrop-blur-lg transition-all duration-300 z-50 border-2 ${
+                                  hasUnscheduled ?
+                                    notificationPriority === 'critical' ? 'bg-red-500/15 border-red-400/40 shadow-xl shadow-red-500/20 animate-pulse hover:bg-red-500/25' :
+                                    notificationPriority === 'high' ? 'bg-orange-500/15 border-orange-400/40 shadow-xl shadow-orange-500/20 animate-bounce hover:bg-orange-500/25' :
+                                    'bg-yellow-500/15 border-yellow-400/40 shadow-xl shadow-yellow-500/20 hover:bg-yellow-500/25'
+                                  : 'bg-white/15 border-white/30 dark:bg-gray-800/20 dark:border-gray-600/30'
+                                } ${
+                                  hasUnscheduled ?
+                                    notificationPriority === 'critical' ? 'text-red-600 dark:text-red-400' :
+                                    notificationPriority === 'high' ? 'text-orange-600 dark:text-orange-400' :
+                                    'text-yellow-600 dark:text-yellow-400'
+                                  : 'text-gray-500 dark:text-gray-400'
+                                } ${hasUnscheduled ? 'hover:scale-105 hover:shadow-2xl' : 'opacity-50 pointer-events-none cursor-not-allowed'}`}
+                                title={showSuggestionsPanel ? 'Hide Study Plan Optimization' :
+                                  hasUnscheduled ?
+                                    `Show Study Plan Optimization (${unscheduledTasks.length} task${unscheduledTasks.length > 1 ? 's' : ''} need attention)` :
+                                    'No optimization suggestions'
+                                }
+                                onClick={() => hasUnscheduled && setShowSuggestionsPanel(v => !v)}
+                                style={{ outline: 'none', border: 'none' }}
+                                disabled={!hasUnscheduled}
+                            >
+                                <Lightbulb className="w-4 h-4" fill={hasUnscheduled ?
+                                  notificationPriority === 'critical' ? '#dc2626' :
+                                  notificationPriority === 'high' ? '#ea580c' :
+                                  '#fde047'
+                                : 'none'} />
+                            </button>
+                            <button
+                                className="relative p-2 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                                onClick={() => setShowGamificationPanel(!showGamificationPanel)}
+                                title="Progress & Achievements"
+                            >
+                                <Trophy className="w-4 h-4" />
+                            </button>
+                            <button
+                                className="p-2 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                                onClick={() => setShowHelpModal(true)}
+                                title="Help & FAQ"
+                            >
+                                <HelpCircle className="w-4 h-4" />
+                            </button>
+                            <button
+                                className={`p-2 backdrop-blur-lg border-2 rounded-xl text-gray-600 dark:text-gray-300 transition-all duration-300 hover:scale-105 hover:shadow-xl ${
+                                    mobileMenuOpen
+                                        ? 'bg-blue-500/20 dark:bg-blue-600/25 border-blue-400/50 dark:border-blue-500/50 text-blue-700 dark:text-blue-300'
+                                        : 'bg-white/15 dark:bg-gray-800/20 border-white/30 dark:border-gray-600/30 hover:bg-white/25 dark:hover:bg-gray-700/30'
+                                }`}
+                                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            >
+                                {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                            </button>
                         </div>
-                        <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
+                        <div className="flex items-center space-x-2">
+                            <div className="w-8 h-8 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
+                                <span className="text-white font-bold text-sm drop-shadow-sm">⚡</span>
+                            </div>
+                            <div className="text-lg font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
+                        </div>
                     </div>
-                    <div className="flex items-center space-x-4">
-                        <button
-                            className={`flex items-center rounded-2xl p-3 backdrop-blur-lg transition-all duration-300 z-50 border-2 ${
-                              hasUnscheduled ?
-                                notificationPriority === 'critical' ? 'bg-red-500/15 border-red-400/40 shadow-xl shadow-red-500/20 animate-pulse hover:bg-red-500/25' :
-                                notificationPriority === 'high' ? 'bg-orange-500/15 border-orange-400/40 shadow-xl shadow-orange-500/20 animate-bounce hover:bg-orange-500/25' :
-                                'bg-yellow-500/15 border-yellow-400/40 shadow-xl shadow-yellow-500/20 hover:bg-yellow-500/25'
-                              : 'bg-white/15 border-white/30 dark:bg-gray-800/20 dark:border-gray-600/30'
-                            } ${
-                              hasUnscheduled ?
-                                notificationPriority === 'critical' ? 'text-red-600 dark:text-red-400' :
-                                notificationPriority === 'high' ? 'text-orange-600 dark:text-orange-400' :
-                                'text-yellow-600 dark:text-yellow-400'
-                              : 'text-gray-500 dark:text-gray-400'
-                            } ${hasUnscheduled ? 'hover:scale-105 hover:shadow-2xl' : 'opacity-50 pointer-events-none cursor-not-allowed'}`}
-                            title={showSuggestionsPanel ? 'Hide Study Plan Optimization' :
-                              hasUnscheduled ?
-                                `Show Study Plan Optimization (${unscheduledTasks.length} task${unscheduledTasks.length > 1 ? 's' : ''} need attention)` :
-                                'No optimization suggestions'
-                            }
-                            onClick={() => hasUnscheduled && setShowSuggestionsPanel(v => !v)}
-                            style={{ outline: 'none', border: 'none' }}
-                            disabled={!hasUnscheduled}
-                        >
-                            <Lightbulb className={`w-5 h-5 sm:w-6 sm:h-6`} fill={hasUnscheduled ?
-                              notificationPriority === 'critical' ? '#dc2626' :
-                              notificationPriority === 'high' ? '#ea580c' :
-                              '#fde047'
-                            : 'none'} />
-                        </button>
-                        <button
-                            className="relative p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
-                            onClick={() => setShowGamificationPanel(!showGamificationPanel)}
-                            title="Progress & Achievements"
-                        >
-                            <Trophy size={20} />
-                        </button>
-                        <button
-                            className="p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
-                            onClick={() => setShowHelpModal(true)}
-                            title="Help & FAQ"
-                        >
-                            <HelpCircle size={20} />
-                        </button>
-                        <button
-                            className={`lg:hidden p-3 backdrop-blur-lg border-2 rounded-2xl text-gray-600 dark:text-gray-300 transition-all duration-300 hover:scale-105 hover:shadow-xl ${
-                                mobileMenuOpen 
-                                    ? 'bg-blue-500/20 dark:bg-blue-600/25 border-blue-400/50 dark:border-blue-500/50 text-blue-700 dark:text-blue-300' 
-                                    : 'bg-white/15 dark:bg-gray-800/20 border-white/30 dark:border-gray-600/30 hover:bg-white/25 dark:hover:bg-gray-700/30'
-                            }`}
-                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                        >
-                            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-                        </button>
+
+                    {/* Desktop Layout */}
+                    <div className="hidden sm:flex items-center justify-between px-4 sm:px-6 py-6">
+                        <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
+                                <span className="text-white font-bold text-xl drop-shadow-sm">⚡</span>
+                            </div>
+                            <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
+                        </div>
+                        <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4">
+                            <button
+                                className={`flex items-center rounded-xl sm:rounded-2xl p-2 sm:p-3 backdrop-blur-lg transition-all duration-300 z-50 border-2 ${
+                                  hasUnscheduled ?
+                                    notificationPriority === 'critical' ? 'bg-red-500/15 border-red-400/40 shadow-xl shadow-red-500/20 animate-pulse hover:bg-red-500/25' :
+                                    notificationPriority === 'high' ? 'bg-orange-500/15 border-orange-400/40 shadow-xl shadow-orange-500/20 animate-bounce hover:bg-orange-500/25' :
+                                    'bg-yellow-500/15 border-yellow-400/40 shadow-xl shadow-yellow-500/20 hover:bg-yellow-500/25'
+                                  : 'bg-white/15 border-white/30 dark:bg-gray-800/20 dark:border-gray-600/30'
+                                } ${
+                                  hasUnscheduled ?
+                                    notificationPriority === 'critical' ? 'text-red-600 dark:text-red-400' :
+                                    notificationPriority === 'high' ? 'text-orange-600 dark:text-orange-400' :
+                                    'text-yellow-600 dark:text-yellow-400'
+                                  : 'text-gray-500 dark:text-gray-400'
+                                } ${hasUnscheduled ? 'hover:scale-105 hover:shadow-2xl' : 'opacity-50 pointer-events-none cursor-not-allowed'}`}
+                                title={showSuggestionsPanel ? 'Hide Study Plan Optimization' :
+                                  hasUnscheduled ?
+                                    `Show Study Plan Optimization (${unscheduledTasks.length} task${unscheduledTasks.length > 1 ? 's' : ''} need attention)` :
+                                    'No optimization suggestions'
+                                }
+                                onClick={() => hasUnscheduled && setShowSuggestionsPanel(v => !v)}
+                                style={{ outline: 'none', border: 'none' }}
+                                disabled={!hasUnscheduled}
+                            >
+                                <Lightbulb className={`w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6`} fill={hasUnscheduled ?
+                                  notificationPriority === 'critical' ? '#dc2626' :
+                                  notificationPriority === 'high' ? '#ea580c' :
+                                  '#fde047'
+                                : 'none'} />
+                            </button>
+                            <button
+                                className="relative p-2 sm:p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-xl sm:rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                                onClick={() => setShowGamificationPanel(!showGamificationPanel)}
+                                title="Progress & Achievements"
+                            >
+                                <Trophy className="w-4 h-4 sm:w-5 sm:h-5" />
+                            </button>
+                            <button
+                                className="p-2 sm:p-3 backdrop-blur-lg bg-white/15 dark:bg-gray-800/20 border-2 border-white/30 dark:border-gray-600/30 rounded-xl sm:rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-white/25 dark:hover:bg-gray-700/30 transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                                onClick={() => setShowHelpModal(true)}
+                                title="Help & FAQ"
+                            >
+                                <HelpCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                            </button>
+                            <button
+                                className={`lg:hidden p-2 sm:p-3 backdrop-blur-lg border-2 rounded-xl sm:rounded-2xl text-gray-600 dark:text-gray-300 transition-all duration-300 hover:scale-105 hover:shadow-xl ${
+                                    mobileMenuOpen
+                                        ? 'bg-blue-500/20 dark:bg-blue-600/25 border-blue-400/50 dark:border-blue-500/50 text-blue-700 dark:text-blue-300'
+                                        : 'bg-white/15 dark:bg-gray-800/20 border-white/30 dark:border-gray-600/30 hover:bg-white/25 dark:hover:bg-gray-700/30'
+                                }`}
+                                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                            >
+                                {mobileMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
+                            </button>
+                        </div>
                     </div>
                 </header>
 
