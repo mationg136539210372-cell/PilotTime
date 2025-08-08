@@ -2032,6 +2032,7 @@ function App() {
                             studyPlans={studyPlans}
                             fixedCommitments={fixedCommitments}
                             tasks={tasks}
+                            settings={settings}
                             onSelectTask={handleSelectTask}
                             onStartManualSession={(commitment, durationSeconds) => {
                                 setGlobalTimer({
@@ -2057,6 +2058,7 @@ function App() {
                                 setActiveTab('timer');
                             }}
                             onDeleteFixedCommitment={handleDeleteFixedCommitment}
+                            onUpdateStudyPlans={setStudyPlans}
                         />
                     )}
 
@@ -2376,7 +2378,7 @@ function App() {
                                                         <ul className="ml-4 mt-1 space-y-1">
                                                             <li>• Check your schedule each morning and adjust if needed</li>
                                                             <li>• Use the timer to track actual study time</li>
-                                                            <li>• Mark sessions as complete or missed accurately</li>
+                                                            <li>�� Mark sessions as complete or missed accurately</li>
                                                             <li>• Regenerate your plan if you add new tasks or commitments</li>
                                                         </ul>
                                                     </div>
