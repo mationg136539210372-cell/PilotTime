@@ -341,11 +341,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Study Plan</h2>
             </div>
             <button
-              onClick={() => {
-                if (onRedistributeMissedSessions) {
-                  onRedistributeMissedSessions();
-                }
-              }}
+              onClick={handleRefreshClick}
               className="px-4 py-2 bg-gradient-to-r from-green-500 to-blue-600 text-white text-sm rounded-lg hover:from-green-600 hover:to-blue-700 transition-colors flex items-center space-x-2"
               title="Refresh and regenerate your study plan"
             >
