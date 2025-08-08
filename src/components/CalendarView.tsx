@@ -97,9 +97,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   studyPlans,
   fixedCommitments,
   tasks,
+  settings,
   onSelectTask,
   onStartManualSession,
   onDeleteFixedCommitment,
+  onUpdateStudyPlans,
 }) => {
   const [timeInterval, setTimeInterval] = useState(() => {
     const saved = localStorage.getItem('timepilot-calendar-interval');
