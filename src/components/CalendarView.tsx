@@ -1017,20 +1017,28 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   }
 
   return (
-    <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-2xl shadow-xl p-6 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 dark:shadow-gray-900 dark:text-gray-100">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-2 dark:text-white">
-          <BookOpen className="text-blue-600 dark:text-blue-400" size={28} />
-          <span>Smart Calendar</span>
-        </h2>
-        <button
-          onClick={() => setShowColorSettings(true)}
-          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
-          title="Customize Colors"
-        >
-          <Settings size={20} className="text-gray-600 dark:text-gray-300" />
-        </button>
-      </div>
+    <DndProvider backend={HTML5Backend}>
+      <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-2xl shadow-xl p-6 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 dark:shadow-gray-900 dark:text-gray-100">
+        {/* Drag feedback notification */}
+        {dragFeedback && (
+          <div className="fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+            {dragFeedback}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-2 dark:text-white">
+            <BookOpen className="text-blue-600 dark:text-blue-400" size={28} />
+            <span>Smart Calendar {isDragging && <span className="text-sm text-blue-500">(Dragging...)</span>}</span>
+          </h2>
+          <button
+            onClick={() => setShowColorSettings(true)}
+            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+            title="Customize Colors"
+          >
+            <Settings size={20} className="text-gray-600 dark:text-gray-300" />
+          </button>
+        </div>
       {/* Legends */}
       <div className="mb-4 flex flex-wrap gap-4">
         {/* Task Category Legends - Only show default categories that exist in tasks */}
@@ -1470,7 +1478,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       )}
 
-    </div>
+      </div>
+    </DndProvider>
   );
 };
 
