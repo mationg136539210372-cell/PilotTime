@@ -2108,7 +2108,8 @@ function App() {
                             settings={settings}
                             onAddFixedCommitment={handleAddFixedCommitment}
                             onSkipMissedSession={handleSkipMissedSession}
-                onRedistributeMissedSessions={handleRedistributeMissedSessions}
+                            onRedistributeMissedSessions={handleRedistributeMissedSessions}
+                            onRefreshStudyPlan={handleRefreshStudyPlan}
                             onUpdateTask={handleUpdateTask}
                             onMarkMissedSessionDone={handleMarkMissedSessionDone}
                         />
