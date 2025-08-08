@@ -340,10 +340,10 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               <>
                 <p>You have missed study sessions. Available actions:</p>
                 <ul className="mt-2 space-y-1">
-                  <li>• <strong>Skip</strong> any missed session (marks as completed, won't be redistributed)</li>
+                  <li>• <strong>Skip</strong> any missed session (marks as completed)</li>
                   <li>• <strong>Start studying</strong> any missed session now</li>
                   {missedSessions.length > 0 && (
-                    <li>• <strong>Redistribute Sessions</strong> regenerates your study plan to incorporate missed sessions</li>
+                    <li>• <strong>Redistribute Sessions</strong> regenerates your study plan</li>
                   )}
                   {overdueMissedSessions.length > 0 && (
                     <>
