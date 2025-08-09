@@ -554,9 +554,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     };
 
     // Try to find the nearest available slot to the target time
-    const gridSize = 15 * 60 * 1000; // 15 minutes in milliseconds
+    // Use buffer time from settings, with 15 minutes as fallback minimum
+    const bufferMinutes = Math.max(settings.bufferTimeBetweenSessions || 15, 5); // Minimum 5 minutes
+    const gridSize = bufferMinutes * 60 * 1000; // Convert minutes to milliseconds
 
-    // Round target time to nearest 15-minute interval
+    // Round target time to nearest buffer interval
     const roundedTarget = new Date(Math.round(targetStart.getTime() / gridSize) * gridSize);
 
     // Search for available slots starting from the rounded target time
@@ -594,9 +596,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     const session = event.resource.data as StudySession;
     const targetDate = moment(start).format('YYYY-MM-DD');
+    const originalDate = session.planDate || event.resource.data.planDate;
     const sessionDuration = session.allocatedHours;
 
-    // Check if target day is a work day
+    // Restrict movement to same day only
+    if (targetDate !== originalDate) {
+      setDragFeedback('Sessions can only be moved within the same day');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Check if target day is a work day (keeping this for consistency)
     const targetDayOfWeek = moment(start).day();
     if (!settings.workDays.includes(targetDayOfWeek)) {
       setDragFeedback(`Cannot move session to ${moment(start).format('dddd')} - not a work day`);
@@ -699,49 +709,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     setTimeout(() => setDragFeedback(''), 3000);
   };
 
-  // Handle event resize
-  const handleEventResize = ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
-    // Only allow resizing study sessions
-    if (event.resource.type !== 'study' || !onUpdateStudyPlans) {
-      setDragFeedback('Only study sessions can be resized');
-      setTimeout(() => setDragFeedback(''), 3000);
-      return;
-    }
-
-    const session = event.resource.data as StudySession;
-    const newDuration = moment(end).diff(moment(start), 'hours', true);
-
-    // Validate minimum duration (15 minutes)
-    if (newDuration < 0.25) {
-      setDragFeedback('Session must be at least 15 minutes long');
-      setTimeout(() => setDragFeedback(''), 3000);
-      return;
-    }
-
-    // Update the study plans
-    const updatedPlans = studyPlans.map(plan => {
-      return {
-        ...plan,
-        plannedTasks: plan.plannedTasks.map(s => {
-          if (s.taskId === session.taskId && s.sessionNumber === session.sessionNumber) {
-            return {
-              ...s,
-              startTime: moment(start).format('HH:mm'),
-              endTime: moment(end).format('HH:mm'),
-              allocatedHours: newDuration,
-              rescheduledAt: new Date().toISOString(),
-              isManualOverride: true
-            };
-          }
-          return s;
-        })
-      };
-    });
-
-    onUpdateStudyPlans(updatedPlans);
-    setDragFeedback(`Session resized to ${newDuration.toFixed(1)} hours`);
-    setTimeout(() => setDragFeedback(''), 3000);
-  };
 
 
   // Custom event style for modern look, now color-coded by priority or type
@@ -1151,9 +1118,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           rtl={false}
           dayLayoutAlgorithm="no-overlap"
           draggableAccessor={(event) => event.resource.type === 'study'}
-          resizable={true}
+          resizable={false}
           onEventDrop={handleEventDrop}
-          onEventResize={handleEventResize}
           onDragStart={handleDragStart}
         />
       </div>
@@ -1295,19 +1261,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           cursor: grab !important;
         }
 
-        /* Resize handles */
+        /* Resize handles disabled */
         .rbc-addons-dnd-resize-south-anchor,
         .rbc-addons-dnd-resize-north-anchor {
-          background-color: #3b82f6 !important;
-          height: 6px !important;
-          width: 100% !important;
-          opacity: 0 !important;
-          transition: opacity 0.2s !important;
-        }
-
-        .rbc-event:hover .rbc-addons-dnd-resize-south-anchor,
-        .rbc-event:hover .rbc-addons-dnd-resize-north-anchor {
-          opacity: 1 !important;
+          display: none !important;
         }
 
         /* Only allow drag on study sessions */
