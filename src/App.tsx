@@ -27,12 +27,10 @@ import FixedCommitmentEdit from './components/FixedCommitmentEdit';
 import CommitmentsList from './components/CommitmentsList';
 import GamificationPanel from './components/GamificationPanel';
 import AchievementNotification, { MotivationalToast } from './components/AchievementNotification';
-import OptimizationModal from './components/OptimizationModal';
+import SuggestionsPanel from './components/SuggestionsPanel';
 import InteractiveTutorial from './components/InteractiveTutorial';
 import TutorialButton from './components/TutorialButton';
 import ErrorBoundary from './components/ErrorBoundary';
-import OfflineIndicator from './components/OfflineIndicator';
-import PWAInstallPrompt from './components/PWAInstallPrompt';
 import './utils/test-data-setup'; // Import test data setup for testing
 
 function App() {
@@ -464,18 +462,18 @@ function App() {
                     const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
                     const newPlans = result.plans;
                     
-                    // SIMPLIFIED: Only preserve completed, skipped, and manual reschedules
+                    // Enhanced preservation logic
                     newPlans.forEach(plan => {
                         const prevPlan = studyPlans.find(p => p.date === plan.date);
                         if (!prevPlan) return;
-
+                        
                         plan.plannedTasks.forEach(session => {
-                            const prevSession = prevPlan.plannedTasks.find(s =>
+                            const prevSession = prevPlan.plannedTasks.find(s => 
                                 s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
                             );
                             if (prevSession) {
-                                // Preserve completed sessions
-                                if (prevSession.done || prevSession.status === 'completed') {
+                                // Preserve done sessions
+                                if (prevSession.done) {
                                     session.done = true;
                                     session.status = prevSession.status;
                                     session.actualHours = prevSession.actualHours;
@@ -485,15 +483,16 @@ function App() {
                                 else if (prevSession.status === 'skipped') {
                                     session.status = 'skipped';
                                 }
-                                // Preserve manual reschedules only (not automatic reschedules)
+                                // Preserve manual reschedules with their new times
                                 else if (prevSession.originalTime && prevSession.originalDate && prevSession.isManualOverride) {
                                     session.originalTime = prevSession.originalTime;
                                     session.originalDate = prevSession.originalDate;
                                     session.rescheduledAt = prevSession.rescheduledAt;
                                     session.isManualOverride = prevSession.isManualOverride;
+                                    // Keep the rescheduled times
                                     session.startTime = prevSession.startTime;
                                     session.endTime = prevSession.endTime;
-                                    // Move to rescheduled date if different
+                                    // Move session to the rescheduled date if different
                                     if (prevSession.originalDate !== plan.date) {
                                         const targetPlan = newPlans.find(p => p.date === prevSession.originalDate);
                                         if (targetPlan) {
@@ -502,7 +501,6 @@ function App() {
                                         }
                                     }
                                 }
-                                // Missed sessions and automatic reschedules are NOT preserved - fresh start
                             }
                         });
                     });
@@ -516,17 +514,17 @@ function App() {
             const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
             const newPlans = result.plans;
             
-            // SIMPLIFIED: Only preserve completed and skipped sessions
-            // All other sessions (missed, rescheduled) are regenerated fresh
+            // Preserve session status from previous plan
             newPlans.forEach(plan => {
                 const prevPlan = studyPlans.find(p => p.date === plan.date);
                 if (!prevPlan) return;
-
+                
+                // Preserve session status and properties
                 plan.plannedTasks.forEach(session => {
                     const prevSession = prevPlan.plannedTasks.find(s => s.taskId === session.taskId && s.sessionNumber === session.sessionNumber);
                     if (prevSession) {
-                        // Preserve completed sessions
-                        if (prevSession.done || prevSession.status === 'completed') {
+                        // Preserve done sessions
+                        if (prevSession.done) {
                             session.done = true;
                             session.status = prevSession.status;
                             session.actualHours = prevSession.actualHours;
@@ -536,7 +534,13 @@ function App() {
                         else if (prevSession.status === 'skipped') {
                             session.status = 'skipped';
                         }
-                        // All other sessions (missed, rescheduled) are regenerated fresh
+                        // Preserve rescheduled sessions (but allow regeneration of times)
+                        else if (prevSession.originalTime && prevSession.originalDate) {
+                            session.originalTime = prevSession.originalTime;
+                            session.originalDate = prevSession.originalDate;
+                            session.rescheduledAt = prevSession.rescheduledAt;
+                            session.isManualOverride = prevSession.isManualOverride;
+                        }
                     }
                 });
             });
@@ -593,7 +597,7 @@ function App() {
                                 else if (prevSession.status === 'skipped') {
                                     session.status = 'skipped';
                                 }
-                                // Preserve manual reschedules only
+                                // Preserve manual reschedules
                                 else if (prevSession.originalTime && prevSession.originalDate && prevSession.isManualOverride) {
                                     session.originalTime = prevSession.originalTime;
                                     session.originalDate = prevSession.originalDate;
@@ -602,7 +606,13 @@ function App() {
                                     session.rescheduledAt = prevSession.rescheduledAt;
                                     session.isManualOverride = prevSession.isManualOverride;
                                 }
-                                // All other sessions (missed, automatic reschedules) get fresh start
+                                // Preserve other rescheduled sessions (but allow regeneration of times)
+                                else if (prevSession.originalTime && prevSession.originalDate) {
+                                    session.originalTime = prevSession.originalTime;
+                                    session.originalDate = prevSession.originalDate;
+                                    session.rescheduledAt = prevSession.rescheduledAt;
+                                    session.isManualOverride = prevSession.isManualOverride;
+                                }
                             }
                         });
                     });
@@ -633,21 +643,11 @@ function App() {
                     });
                 }
 
-                // IMPORTANT: Preserve missed sessions from past dates that won't be in newPlans
-                const today = new Date().toISOString().split('T')[0];
-                const pastPlansWithMissedSessions = studyPlans.filter(plan =>
-                    plan.date < today &&
-                    plan.plannedTasks.some(session => session.status === 'missed')
-                );
-
-                // Add past plans with missed sessions to the new plans
-                const finalPlans = [...pastPlansWithMissedSessions, ...newPlans];
-
-                setStudyPlans(finalPlans);
+                setStudyPlans(newPlans);
                 setLastPlanStaleReason("task");
                 setNotificationMessage(preserveManualReschedules ?
-                    'Study plan refreshed! Manual reschedules preserved. Missed sessions preserved.' :
-                    'Study plan refreshed! All sessions optimally rescheduled. Missed sessions preserved.'
+                    'Study plan refreshed! Manual reschedules preserved.' :
+                    'Study plan refreshed! All sessions optimally rescheduled.'
                 );
                 setTimeout(() => setNotificationMessage(''), 5000);
             } catch (error) {
@@ -702,11 +702,11 @@ function App() {
             setNotificationMessage(
               `Task "${newTask.title}" ${reason} with your current settings.\n` +
               `Try one or more of the following:\n` +
-              `• Reduce the estimated hours for this task\n` +
-              `• Adjust the deadline to allow more time\n` +
-              `• Increase your daily available study hours in Settings\n` +
-              `• Remove or reschedule other tasks\n` +
-              `• Adjust your study window hours in Settings\n`
+              ` Reduce the estimated hours for this task\n` +
+              ` Adjust the deadline to allow more time\n` +
+              ` Increase your daily available study hours in Settings\n` +
+              ` Remove or reschedule other tasks\n` +
+              ` Adjust your study window hours in Settings\n`
             );
             setTasks(tasks);
             const { plans: restoredPlans } = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
@@ -1716,7 +1716,6 @@ function App() {
 
     const handleRestartTutorial = () => {
         localStorage.removeItem('timepilot-interactive-tutorial-complete');
-        localStorage.removeItem('timepilot-tutorial-minimized');
         setShowInteractiveTutorial(true);
         setNotificationMessage('Interactive tutorial restarted! Follow the guided steps.');
         setTimeout(() => setNotificationMessage(null), 3000);
@@ -1768,8 +1767,6 @@ function App() {
 
     return (
         <ErrorBoundary>
-            <OfflineIndicator />
-            <PWAInstallPrompt />
                             <div className="min-h-screen bg-gray-50 dark:bg-gray-900 overflow-x-hidden">
                 {/* Animated background with particles */}
                 <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -1841,7 +1838,7 @@ function App() {
                         </div>
                         <div className="flex items-center space-x-2">
                             <div className="w-8 h-8 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
-                                <span className="text-white font-bold text-sm drop-shadow-sm">⚡</span>
+                                <span className="text-white font-bold text-sm drop-shadow-sm"></span>
                             </div>
                             <div className="text-lg font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
                         </div>
@@ -1851,7 +1848,7 @@ function App() {
                     <div className="hidden sm:flex items-center justify-between px-4 sm:px-6 py-6">
                         <div className="flex items-center space-x-4">
                             <div className="w-12 h-12 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
-                                <span className="text-white font-bold text-xl drop-shadow-sm">⚡</span>
+                                <span className="text-white font-bold text-xl drop-shadow-sm"></span>
                             </div>
                             <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
                         </div>
@@ -1975,16 +1972,17 @@ function App() {
                 {/* Main Content */}
                 <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 relative overflow-x-auto">
                     {/* Toggle Suggestions Panel Button */}
-                    {/* Optimization Modal */}
-                    <OptimizationModal
-                        tasks={tasks}
-                        studyPlans={studyPlans}
-                        settings={settings}
-                        fixedCommitments={fixedCommitments}
-                        isOpen={showSuggestionsPanel && hasUnscheduled}
-                        onClose={() => setShowSuggestionsPanel(false)}
-                        onUpdateSettings={handleUpdateSettingsFromSuggestions}
-                    />
+                    {/* Suggestions Panel */}
+                    {showSuggestionsPanel && hasUnscheduled && (
+                        <SuggestionsPanel 
+                            tasks={tasks}
+                            studyPlans={studyPlans}
+                            settings={settings}
+                            fixedCommitments={fixedCommitments}
+                            // Removed suggestions prop
+                            onUpdateSettings={handleUpdateSettingsFromSuggestions}
+                        />
+                    )}
                     {notificationMessage && (
                         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-sm sm:max-w-md lg:max-w-2xl px-4">
                             {notificationMessage.includes("can't be added due to schedule conflicts") ? (
@@ -2011,19 +2009,19 @@ function App() {
                                                         <h4 className="font-medium text-orange-800 dark:text-orange-200 mb-2">Try these solutions:</h4>
                                                         <ul className="space-y-1 text-sm text-orange-700 dark:text-orange-300">
                                                             <li className="flex items-start space-x-2">
-                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5">•</span>
+                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5"></span>
                                                                 <span>Reduce the estimated hours for this task</span>
                                                             </li>
                                                             <li className="flex items-start space-x-2">
-                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5">•</span>
+                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5"></span>
                                                                 <span>Adjust the deadline to allow more time</span>
                                                             </li>
                                                             <li className="flex items-start space-x-2">
-                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5">•</span>
+                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5"></span>
                                                                 <span>Increase your daily available study hours in Settings</span>
                                                             </li>
                                                             <li className="flex items-start space-x-2">
-                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5">•</span>
+                                                                <span className="text-orange-500 dark:text-orange-400 mt-0.5"></span>
                                                                 <span>Remove or reschedule other tasks</span>
                                                             </li>
                                                         </ul>
@@ -2086,14 +2084,7 @@ function App() {
                                 + Add Task
                             </button>
                                     {showTaskInput && (
-          <TaskInput
-            onAddTask={handleAddTask}
-            onCancel={() => setShowTaskInput(false)}
-            userSettings={settings}
-            existingTasks={tasks}
-            studyPlans={studyPlans}
-            commitments={fixedCommitments}
-          />
+          <TaskInput onAddTask={handleAddTask} onCancel={() => setShowTaskInput(false)} userSettings={settings} />
                             )}
                             <TaskList
                                 tasks={tasks}
@@ -2254,7 +2245,7 @@ function App() {
                                 <div className="space-y-6">
                                     {/* Getting Started Section */}
                                     <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
-                                        <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-2">��� Getting Started</h3>
+                                        <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-2"> Getting Started</h3>
                                         <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
                                             <li>1. Add your tasks with deadlines and time estimates</li>
                                             <li>2. Set your fixed commitments (classes, work, etc.)</li>
@@ -2278,19 +2269,19 @@ function App() {
                                                     <div>
                                                         <strong className="text-green-600 dark:text-green-400">Tasks</strong> are study activities that need to be completed:
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Have deadlines and estimated hours</li>
-                                                            <li>• Are broken into study sessions by TimePilot</li>
-                                                            <li>• Can be marked as important/urgent for prioritization</li>
-                                                            <li>• Examples: "Math assignment", "Read chapter 5", "Prepare presentation"</li>
+                                                            <li> Have deadlines and estimated hours</li>
+                                                            <li> Are broken into study sessions by TimePilot</li>
+                                                            <li> Can be marked as important/urgent for prioritization</li>
+                                                            <li> Examples: "Math assignment", "Read chapter 5", "Prepare presentation"</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-blue-600 dark:text-blue-400">Commitments</strong> are fixed time blocks that cannot be moved:
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Block time in your schedule (classes, work, appointments)</li>
-                                                            <li>• TimePilot schedules study sessions around them</li>
-                                                            <li>• Can be recurring (every Monday) or one-time events</li>
-                                                            <li>• Examples: "Chemistry class", "Work shift", "Doctor appointment"</li>
+                                                            <li> Block time in your schedule (classes, work, appointments)</li>
+                                                            <li> TimePilot schedules study sessions around them</li>
+                                                            <li> Can be recurring (every Monday) or one-time events</li>
+                                                            <li> Examples: "Chemistry class", "Work shift", "Doctor appointment"</li>
                                                         </ul>
                                                     </div>
                                                 </div>
@@ -2334,27 +2325,27 @@ function App() {
                                                     <div>
                                                         <strong className="text-red-600 dark:text-red-400">Missed Sessions:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Automatically marked as "missed" when the scheduled time passes</li>
-                                                            <li>• Hours are automatically redistributed to future available time slots</li>
-                                                            <li>• TimePilot tries to maintain deadline compliance when redistributing</li>
-                                                            <li>• You can manually mark a session as completed if you studied at a different time</li>
+                                                            <li> Automatically marked as "missed" when the scheduled time passes</li>
+                                                            <li> Hours are automatically redistributed to future available time slots</li>
+                                                            <li> TimePilot tries to maintain deadline compliance when redistributing</li>
+                                                            <li> You can manually mark a session as completed if you studied at a different time</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-blue-600 dark:text-blue-400">Rescheduled Sessions:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Drag and drop sessions to new time slots in the calendar</li>
-                                                            <li>• TimePilot checks for conflicts and validates the new time</li>
-                                                            <li>• Reschedule history is tracked for each session</li>
-                                                            <li>• You can reschedule as many times as needed</li>
+                                                            <li> Drag and drop sessions to new time slots in the calendar</li>
+                                                            <li> TimePilot checks for conflicts and validates the new time</li>
+                                                            <li> Reschedule history is tracked for each session</li>
+                                                            <li> You can reschedule as many times as needed</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-purple-600 dark:text-purple-400">Skipped Sessions:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Use the "Skip Session" button to intentionally skip a session</li>
-                                                            <li>• Skipped sessions are removed from your schedule and don't count toward task completion</li>
-                                                            <li>• Helpful when you realize you don't need all the scheduled hours</li>
+                                                            <li> Use the "Skip Session" button to intentionally skip a session</li>
+                                                            <li> Skipped sessions are removed from your schedule and don't count toward task completion</li>
+                                                            <li> Helpful when you realize you don't need all the scheduled hours</li>
                                                         </ul>
                                                     </div>
                                                 </div>
@@ -2374,33 +2365,33 @@ function App() {
                                                     <div>
                                                         <strong className="text-blue-600 dark:text-blue-400">Study Plan Mode:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• <strong>Even:</strong> Distributes study hours evenly across available days</li>
-                                                            <li>• <strong>Eisenhower:</strong> Front-loads important tasks closer to deadlines</li>
-                                                            <li>• <strong>Balanced:</strong> Mixes both approaches for optimal results</li>
+                                                            <li> <strong>Even:</strong> Distributes study hours evenly across available days</li>
+                                                            <li> <strong>Eisenhower:</strong> Front-loads important tasks closer to deadlines</li>
+                                                            <li> <strong>Balanced:</strong> Mixes both approaches for optimal results</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-green-600 dark:text-green-400">Time Management:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• <strong>Daily Available Hours:</strong> How many hours you can study per day</li>
-                                                            <li>• <strong>Study Window:</strong> Earliest and latest times you want to study</li>
-                                                            <li>• <strong>Work Days:</strong> Which days of the week you want to study</li>
-                                                            <li>• <strong>Buffer Days:</strong> Complete tasks this many days before deadline</li>
+                                                            <li> <strong>Daily Available Hours:</strong> How many hours you can study per day</li>
+                                                            <li> <strong>Study Window:</strong> Earliest and latest times you want to study</li>
+                                                            <li> <strong>Work Days:</strong> Which days of the week you want to study</li>
+                                                            <li> <strong>Buffer Days:</strong> Complete tasks this many days before deadline</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-purple-600 dark:text-purple-400">Session Settings:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• <strong>Minimum Session Length:</strong> Shortest study session (prevents tiny sessions)</li>
-                                                            <li>• <strong>Buffer Time:</strong> Rest time between back-to-back sessions</li>
+                                                            <li> <strong>Minimum Session Length:</strong> Shortest study session (prevents tiny sessions)</li>
+                                                            <li> <strong>Buffer Time:</strong> Rest time between back-to-back sessions</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-orange-600 dark:text-orange-400">Advanced:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• <strong>Dark Mode:</strong> Toggle between light and dark themes</li>
-                                                            <li>• <strong>Auto-complete Sessions:</strong> Automatically mark timer sessions as complete</li>
-                                                            <li>• <strong>Notifications:</strong> Enable study reminders (browser notifications)</li>
+                                                            <li> <strong>Dark Mode:</strong> Toggle between light and dark themes</li>
+                                                            <li> <strong>Auto-complete Sessions:</strong> Automatically mark timer sessions as complete</li>
+                                                            <li> <strong>Notifications:</strong> Enable study reminders (browser notifications)</li>
                                                         </ul>
                                                     </div>
                                                 </div>
@@ -2418,10 +2409,10 @@ function App() {
                                                 <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
                                                     <p>TimePilot includes an <strong>Estimation Helper</strong> to help you make accurate time estimates:</p>
                                                     <ul className="ml-4 space-y-1">
-                                                        <li>• Choose task types (Writing, Learning, Research, etc.)</li>
-                                                        <li>• Select complexity levels and difficulty factors</li>
-                                                        <li>• Get personalized time estimates based on your input</li>
-                                                        <li>• Learn from actual completion times to improve future estimates</li>
+                                                        <li> Choose task types (Writing, Learning, Research, etc.)</li>
+                                                        <li> Select complexity levels and difficulty factors</li>
+                                                        <li> Get personalized time estimates based on your input</li>
+                                                        <li> Learn from actual completion times to improve future estimates</li>
                                                     </ul>
                                                     <p className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded border-l-4 border-blue-400">
                                                         <strong>Tip:</strong> Start with conservative estimates and adjust based on your actual completion times. Better to overestimate than scramble at the last minute!
@@ -2441,13 +2432,13 @@ function App() {
                                                 <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
                                                     <p>TimePilot goes beyond simple to-do lists and basic calendars:</p>
                                                     <ul className="ml-4 space-y-1">
-                                                        <li>• <strong>Intelligent conflict avoidance:</strong> Never schedules study time over commitments</li>
-                                                        <li>• <strong>Automatic redistribution:</strong> Handles missed sessions without manual rescheduling</li>
-                                                        <li>• <strong>Priority-based scheduling:</strong> Important and urgent tasks get scheduled first</li>
-                                                        <li>• <strong>Deadline awareness:</strong> Ensures tasks are completed before their deadlines</li>
-                                                        <li>• <strong>Adaptive learning:</strong> Improves estimates based on your actual completion patterns</li>
-                                                        <li>• <strong>Real-time optimization:</strong> Provides suggestions to improve your study schedule</li>
-                                                        <li>• <strong>Comprehensive tracking:</strong> Monitors progress across all tasks and sessions</li>
+                                                        <li> <strong>Intelligent conflict avoidance:</strong> Never schedules study time over commitments</li>
+                                                        <li> <strong>Automatic redistribution:</strong> Handles missed sessions without manual rescheduling</li>
+                                                        <li> <strong>Priority-based scheduling:</strong> Important and urgent tasks get scheduled first</li>
+                                                        <li> <strong>Deadline awareness:</strong> Ensures tasks are completed before their deadlines</li>
+                                                        <li> <strong>Adaptive learning:</strong> Improves estimates based on your actual completion patterns</li>
+                                                        <li> <strong>Real-time optimization:</strong> Provides suggestions to improve your study schedule</li>
+                                                        <li> <strong>Comprehensive tracking:</strong> Monitors progress across all tasks and sessions</li>
                                                     </ul>
                                                 </div>
                                             </div>
@@ -2465,27 +2456,27 @@ function App() {
                                                     <div>
                                                         <strong className="text-green-600 dark:text-green-400">Setting Up:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Add all your fixed commitments first (classes, work, recurring appointments)</li>
-                                                            <li>• Be realistic about your daily available hours and study window</li>
-                                                            <li>• Mark truly important tasks as "Important" for better prioritization</li>
+                                                            <li> Add all your fixed commitments first (classes, work, recurring appointments)</li>
+                                                            <li> Be realistic about your daily available hours and study window</li>
+                                                            <li> Mark truly important tasks as "Important" for better prioritization</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-blue-600 dark:text-blue-400">Daily Usage:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Check your schedule each morning and adjust if needed</li>
-                                                            <li>• Use the timer to track actual study time</li>
-                                                            <li>�� Mark sessions as complete or missed accurately</li>
-                                                            <li>• Regenerate your plan if you add new tasks or commitments</li>
+                                                            <li> Check your schedule each morning and adjust if needed</li>
+                                                            <li> Use the timer to track actual study time</li>
+                                                            <li> Mark sessions as complete or missed accurately</li>
+                                                            <li> Regenerate your plan if you add new tasks or commitments</li>
                                                         </ul>
                                                     </div>
                                                     <div>
                                                         <strong className="text-purple-600 dark:text-purple-400">Optimization:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
-                                                            <li>• Review the Suggestions panel for schedule improvements</li>
-                                                            <li>• Adjust time estimates based on your completion patterns</li>
-                                                            <li>• Experiment with different Study Plan Modes to find what works best</li>
-                                                            <li>• Use the Progress Dashboard to track your productivity trends</li>
+                                                            <li> Review the Suggestions panel for schedule improvements</li>
+                                                            <li> Adjust time estimates based on your completion patterns</li>
+                                                            <li> Experiment with different Study Plan Modes to find what works best</li>
+                                                            <li> Use the Progress Dashboard to track your productivity trends</li>
                                                         </ul>
                                                     </div>
                                                 </div>
@@ -2497,9 +2488,9 @@ function App() {
                                     <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
                                         <div className="text-center space-y-4">
                                             <div className="flex items-center justify-center space-x-2">
-                                                <span className="text-2xl">☕</span>
+                                                <span className="text-2xl"></span>
                                                 <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Support TimePilot</h3>
-                                                <span className="text-2xl">🚀</span>
+                                                <span className="text-2xl"></span>
                                             </div>
                                             <p className="text-sm text-gray-600 dark:text-gray-400">
                                                 If TimePilot has helped you manage your time better, consider supporting its development!
@@ -2509,21 +2500,21 @@ function App() {
                                                     onClick={() => setShowGCashModal(true)}
                                                     className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                                                 >
-                                                    <span className="text-lg">📱</span>
+                                                    <span className="text-lg"></span>
                                                     <span>GCash</span>
                                                 </button>
                                                 <button
                                                     onClick={() => window.open('https://paypal.me/yourusername', '_blank')}
                                                     className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                                                 >
-                                                    <span className="text-lg">💙</span>
+                                                    <span className="text-lg"></span>
                                                     <span>PayPal</span>
                                                 </button>
                                                 <button
                                                     onClick={() => window.open('https://ko-fi.com/yourusername', '_blank')}
                                                     className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                                                 >
-                                                    <span className="text-lg">☕</span>
+                                                    <span className="text-lg"></span>
                                                     <span>Ko-fi</span>
                                                 </button>
                                             </div>
@@ -2560,7 +2551,7 @@ function App() {
                             <div className="p-6">
                                 <div className="flex items-center justify-between mb-6">
                                     <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center space-x-2">
-                                        <span className="text-2xl">📱</span>
+                                        <span className="text-2xl"></span>
                                         <span>Support via GCash</span>
                                     </h2>
                                     <button
@@ -2574,7 +2565,7 @@ function App() {
                                 <div className="space-y-4">
                                     {/* Motivational Message */}
                                     <div className="text-center space-y-2">
-                                        <div className="text-3xl mb-1">🚀</div>
+                                        <div className="text-3xl mb-1"></div>
                                         <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
                                             Help TimePilot Soar Higher!
                                         </h3>
@@ -2587,7 +2578,7 @@ function App() {
                                     <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700 rounded-lg p-3">
                                         <div className="text-center space-y-2">
                                             <div className="flex items-center justify-center space-x-2">
-                                                <span className="text-lg">📱</span>
+                                                <span className="text-lg"></span>
                                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Scan GCash QR Code</span>
                                             </div>
                                             <div className="bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
@@ -2603,7 +2594,7 @@ function App() {
                                                 />
                                             </div>
                                             <div className="text-xs text-gray-600 dark:text-gray-400">
-                                                Open GCash app → Scan QR → Send any amount
+                                                Open GCash app  Scan QR  Send any amount
                                             </div>
                                         </div>
                                     </div>
@@ -2615,16 +2606,16 @@ function App() {
                                         </h4>
                                         <div className="grid grid-cols-3 gap-2">
                                             {[
-                                                { amount: '��50', emoji: '���', desc: 'Coffee' },
-                                                { amount: '₱100', emoji: '���', desc: 'Pizza' },
-                                                { amount: '₱200', emoji: '🎉', desc: 'Party' }
+                                                { amount: '50', emoji: '', desc: 'Coffee' },
+                                                { amount: '100', emoji: '', desc: 'Pizza' },
+                                                { amount: '200', emoji: '', desc: 'Party' }
                                             ].map((item, index) => (
                                                 <div
                                                     key={index}
                                                     className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-center border border-gray-200 dark:border-gray-600 hover:border-green-300 dark:hover:border-green-600 transition-colors cursor-pointer"
                                                     onClick={() => {
                                                         // Show success message for QR scan
-                                                        setNotificationMessage(`✅ Scan the QR code above with GCash app → Send ${item.amount} for ${item.desc} 🚀`);
+                                                        setNotificationMessage(` Scan the QR code above with GCash app  Send ${item.amount} for ${item.desc} `);
                                                         setShowGCashModal(false);
                                                     }}
                                                 >
@@ -2643,15 +2634,15 @@ function App() {
                                         </h4>
                                         <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-green-500">✓</span>
+                                                <span className="text-green-500"></span>
                                                 <span>New features and improvements</span>
                                             </div>
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-green-500">✓</span>
+                                                <span className="text-green-500"></span>
                                                 <span>Keep TimePilot free for everyone</span>
                                             </div>
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-green-500">✓</span>
+                                                <span className="text-green-500"></span>
                                                 <span>Better performance and reliability</span>
                                             </div>
                                         </div>
@@ -2660,7 +2651,7 @@ function App() {
                                     {/* Thank You Message */}
                                     <div className="text-center pt-3 border-t border-gray-200 dark:border-gray-700">
                                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            Thank you for supporting TimePilot! 🙏
+                                            Thank you for supporting TimePilot! 
                                         </p>
                                     </div>
                                 </div>
