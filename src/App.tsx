@@ -1716,6 +1716,7 @@ function App() {
 
     const handleRestartTutorial = () => {
         localStorage.removeItem('timepilot-interactive-tutorial-complete');
+        localStorage.removeItem('timepilot-tutorial-minimized');
         setShowInteractiveTutorial(true);
         setNotificationMessage('Interactive tutorial restarted! Follow the guided steps.');
         setTimeout(() => setNotificationMessage(null), 3000);

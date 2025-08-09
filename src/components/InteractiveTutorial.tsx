@@ -47,7 +47,24 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
   const [initialCommitmentsCount, setInitialCommitmentsCount] = useState(commitmentsCount);
   const [initialStudyPlanMode, setInitialStudyPlanMode] = useState<string | null>(null);
   const [completedRequirements, setCompletedRequirements] = useState<Set<string>>(new Set());
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(() => {
+    // Initialize minimized state from localStorage
+    const saved = localStorage.getItem('timepilot-tutorial-minimized');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // Persist minimized state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('timepilot-tutorial-minimized', JSON.stringify(isMinimized));
+  }, [isMinimized]);
+
+  // Clear minimized state when tutorial is no longer active
+  useEffect(() => {
+    if (!isActive) {
+      setIsMinimized(false);
+      localStorage.removeItem('timepilot-tutorial-minimized');
+    }
+  }, [isActive]);
 
   const tutorialSteps: TutorialStep[] = [
     // Welcome & Overview
