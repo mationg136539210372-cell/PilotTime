@@ -663,20 +663,20 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             <div>
               <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">🧪 Testing Mode</h3>
               <p className="text-xs text-yellow-600 dark:text-yellow-300 mt-1">
-                Click to create test data with missed sessions to test the enhanced redistribution system
+                Click to create realistic test data with proper deadlines, mixed session results, and overdue tasks
               </p>
             </div>
             <button
               onClick={() => {
-                if ((window as any).setupTestData) {
-                  (window as any).setupTestData();
+                if ((window as any).setupRealisticTestData) {
+                  (window as any).setupRealisticTestData();
                 } else {
-                  setNotificationMessage('Test data setup not available');
+                  setNotificationMessage('Realistic test data setup not available');
                 }
               }}
               className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
             >
-              Setup Test Data
+              Setup Realistic Test Data
             </button>
           </div>
         </div>
@@ -1000,6 +1000,12 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             const currentStatusColors = statusColors[currentSessionStatus as keyof typeof statusColors];
             const importanceLevel = task.importance ? 'high' : 'low';
             const importanceStyle = importanceColors[importanceLevel];
+
+            // Calculate task progress (similar to Dashboard)
+            const allSessionsForTask = studyPlans.flatMap(plan => plan.plannedTasks).filter(s => s.taskId === task.id);
+            const completedSessions = allSessionsForTask.filter(s => s.done || s.status === 'completed');
+            const totalSessions = allSessionsForTask.length;
+            const sessionNumber = session.sessionNumber || 1;
             
                           return (
                 <div
@@ -1035,6 +1041,11 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                       <TrendingUp size={16} />
                       <span>
                         {formatTime(session.allocatedHours)}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <span className="text-xs">
+                        Session {sessionNumber}/{totalSessions}
                       </span>
                     </div>
                     {isRescheduled && session.originalTime && (
