@@ -55,6 +55,17 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
     localStorage.setItem('timepilot-showWarnings', newVal ? 'true' : 'false');
   };
 
+  // Persist showMissedSessions in localStorage
+  const [showMissedSessions, setShowMissedSessionsRaw] = useState(() => {
+    const saved = localStorage.getItem('timepilot-showMissedSessions');
+    return saved === null ? true : saved === 'true'; // Default to showing missed sessions
+  });
+  const setShowMissedSessions = (val: boolean | ((prev: boolean) => boolean)) => {
+    const newVal = typeof val === 'function' ? val(showMissedSessions) : val;
+    setShowMissedSessionsRaw(newVal);
+    localStorage.setItem('timepilot-showMissedSessions', newVal ? 'true' : 'false');
+  };
+
   // Hide the warning notification on mount (e.g., when switching tabs)
   useEffect(() => {
     setShowCompromisedWarning(false);
@@ -263,7 +274,9 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
     try {
       // Trigger study plan regeneration instead of redistribution
       onGenerateStudyPlan();
-      setNotificationMessage('Study plan regenerated successfully! Missed sessions have been incorporated into the new plan.');
+
+      // Simple feedback for fresh start approach
+      setNotificationMessage('Fresh study plan created! All missed sessions remain here for manual handling.');
     } catch (error) {
       console.error('Study plan regeneration failed:', error);
       setNotificationMessage('Failed to regenerate study plan. Please try again.');
@@ -332,239 +345,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
 
   return (
     <div className="space-y-6 relative study-plan-container">
-      {/* Study Plan Header with Refresh Button */}
-      {studyPlans.length > 0 && (
-        <div className="bg-white rounded-xl shadow-lg p-6 dark:bg-gray-900 dark:shadow-gray-900">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Study Plan</h2>
-            </div>
-            <button
-              onClick={handleRefreshClick}
-              className="px-4 py-2 bg-gradient-to-r from-green-500 to-blue-600 text-white text-sm rounded-lg hover:from-green-600 hover:to-blue-700 transition-colors flex items-center space-x-2"
-              title="Refresh and regenerate your study plan"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span>Refresh Plan</span>
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* Missed Sessions Section */}
-      {(missedSessions.length > 0 || overdueMissedSessions.length > 0) && (
-        <div className={`bg-white rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900 border-l-4 ${(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className={`${(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`} size={24} />
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Missed Sessions</h2>
-              {missedSessions.length > 0 && (
-                <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
-                  {missedSessions.length} can redistribute
-                </span>
-              )}
-              {overdueMissedSessions.length > 0 && (
-                <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">
-                  {overdueMissedSessions.length} overdue
-                </span>
-              )}
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={handleRedistribution}
-                disabled={redistributionInProgress || !canRedistribute}
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm rounded-lg hover:from-blue-600 hover:to-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={canRedistribute ? "Regenerate study plan to incorporate missed sessions" : "Redistribution disabled - no sessions with future deadlines to redistribute"}
-              >
-                {redistributionInProgress ? (
-                  <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Regenerating...</span>
-                  </div>
-                ) : (
-                  'Regenerate Study Plan'
-                )}
-              </button>
-            </div>
-          </div>
-          
-          <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
-            {(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? (
-              <>
-                <p>You have missed study sessions. Available actions:</p>
-                <ul className="mt-2 space-y-1">
-                  <li>• <strong>Skip</strong> any missed session (marks as completed)</li>
-                  <li>• <strong>Start studying</strong> any missed session now</li>
-                  {missedSessions.length > 0 && (
-                    <li>• <strong>Regenerate Study Plan</strong> creates a new study plan</li>
-                  )}
-                  {overdueMissedSessions.length > 0 && (
-                    <>
-                    </>
-                  )}
-                </ul>
-                {hasOverdueSessions && (
-                  <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700">
-                    <p className="text-orange-800 dark:text-orange-200 text-xs">
-                      <strong>Note:</strong> Sessions for tasks with passed deadlines cannot be redistributed.
-                      You can either work on them now, skip the sessions, or mark the entire task as completed.
-                    </p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p>No missed sessions found. All past study sessions have been completed or are up to date.</p>
-            )}
-          </div>
-
-
-          <div className="space-y-3">
-            {/* Redistributable Sessions */}
-            {missedSessions.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Sessions that can be redistributed:
-                </h3>
-                {missedSessions.map(({planDate, session, task}, idx) => (
-                  <div key={`missed-${planDate}-${session.sessionNumber || 0}-${task.id}-${session.startTime || ''}-${idx}`}
-                       className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <BookOpen className="text-blue-500 dark:text-blue-400" size={18} />
-                        <h3 className="font-medium text-gray-800 dark:text-white">{task.title}</h3>
-                        {task.category && (
-                          <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-300">
-                            {task.category}
-                          </span>
-                        )}
-                        <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full dark:bg-green-900 dark:text-green-300">
-                          Due: {new Date(task.deadline).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                        <span className="flex items-center space-x-1">
-                          <Calendar size={14} />
-                          <span>{planDate}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <Clock size={14} />
-                          <span>{session.startTime} - {session.endTime}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <TrendingUp size={14} />
-                          <span>{formatTime(session.allocatedHours)}</span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => onSelectTask(task, { allocatedHours: session.allocatedHours, planDate, sessionNumber: session.sessionNumber })}
-                        className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors duration-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
-                      >
-                        Start Now
-                      </button>
-                      <button
-                        onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
-                        className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
-                      >
-                        Skip
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Overdue Sessions */}
-            {overdueMissedSessions.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-orange-700 dark:text-orange-300 mb-2">
-                    Sessions for overdue tasks (deadline passed):
-                  </h3>
-                  <span className="text-xs text-orange-600 dark:text-orange-400">
-                    Tasks past deadline
-                  </span>
-                </div>
-                {overdueMissedSessions.map(({planDate, session, task}, idx) => (
-                  <div key={`overdue-${planDate}-${session.sessionNumber || 0}-${task.id}-${session.startTime || ''}-${idx}`}
-                       className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-700 hover:shadow-md transition-all duration-200">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <BookOpen className="text-orange-500 dark:text-orange-400" size={18} />
-                        <h3 className="font-medium text-gray-800 dark:text-white">{task.title}</h3>
-                        {task.category && (
-                          <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full dark:bg-orange-900 dark:text-orange-300">
-                            {task.category}
-                          </span>
-                        )}
-                        <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full dark:bg-red-900 dark:text-red-300">
-                          Overdue: {new Date(task.deadline).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                        <span className="flex items-center space-x-1">
-                          <Calendar size={14} />
-                          <span>{planDate}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <Clock size={14} />
-                          <span>{session.startTime} - {session.endTime}</span>
-                        </span>
-                        <span className="flex items-center space-x-1">
-                          <TrendingUp size={14} />
-                          <span>{formatTime(session.allocatedHours)}</span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => onSelectTask(task, { allocatedHours: session.allocatedHours, planDate, sessionNumber: session.sessionNumber })}
-                        className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors duration-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
-                      >
-                        Start Now
-                      </button>
-                      <button
-                        onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
-                        className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
-                      >
-                        Skip
-                      </button>
-                      <button
-                        onClick={() => handleMarkMissedSessionDone(planDate, session.sessionNumber || 0, task.id)}
-                        className="px-3 py-1 text-xs bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200 transition-colors duration-200 dark:bg-purple-900 dark:text-purple-200 dark:hover:bg-purple-800"
-                        title="Mark this session as completed"
-                      >
-                        Mark Done
-                      </button>
-                      {onUpdateTask && (
-                        <button
-                          onClick={() => handleMarkTaskAsCompleted(task.id)}
-                          className="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors duration-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800"
-                          title="Mark the entire task as completed"
-                        >
-                          Mark Task Done
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* No sessions found */}
-            {missedSessions.length === 0 && overdueMissedSessions.length === 0 && (
-              <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                <CheckCircle className="text-green-500 dark:text-green-400 mx-auto mb-2" size={24} />
-                <p>All past sessions are up to date!</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
       {/* Resched Modal */}
       {reschedModal.open && reschedModal.task && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -842,12 +623,14 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
               <span>Today's Sessions</span>
               {suggestions.length > 0 && (
-                <button 
-                  onClick={() => setShowSmartAssistant(!showSmartAssistant)}
-                  className="ml-2 p-1.5 bg-yellow-100 hover:bg-yellow-200 rounded-full transition-colors duration-200 dark:bg-yellow-900 dark:hover:bg-yellow-800"
-                  title="Smart Assistant Tips"
+                <button
+                  onClick={() => setShowSmartAssistant(true)}
+                  className="ml-2 px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 rounded-lg transition-colors duration-200 dark:bg-yellow-900 dark:hover:bg-yellow-800 text-sm flex items-center space-x-1"
+                  title="View optimization suggestions"
                 >
                   <Lightbulb className="text-yellow-600 dark:text-yellow-400" size={16} />
+                  <span className="text-yellow-800 dark:text-yellow-200 font-medium">{suggestions.length}</span>
+                  <span className="text-yellow-700 dark:text-yellow-300">tips</span>
                 </button>
               )}
             </h2>
@@ -877,42 +660,6 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             </div>
           </div>
           
-          {/* Smart Assistant Content */}
-          {showSmartAssistant && suggestions.length > 0 && (
-            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg dark:bg-yellow-900/20 dark:border-yellow-800">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200 flex items-center space-x-2">
-                  <Lightbulb className="text-yellow-600 dark:text-yellow-400" size={16} />
-                  <span>Smart Assistant Tips</span>
-                </h3>
-                <button 
-                  onClick={() => setShowSmartAssistant(false)}
-                  className="text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-200"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="space-y-2">
-                {suggestions.map((suggestion, index) => (
-                  <div key={index} className={`p-3 rounded-lg border-l-3 ${
-                    suggestion.type === 'warning' ? 'border-l-red-400 bg-red-50 dark:bg-red-900/20 dark:border-l-red-600' :
-                    suggestion.type === 'celebration' ? 'border-l-green-400 bg-green-50 dark:bg-green-900/20 dark:border-l-green-600' :
-                    'border-l-blue-400 bg-blue-50 dark:bg-blue-900/20 dark:border-l-blue-600'
-                  }`}>
-                    <div className="flex items-start space-x-2">
-                      {getSuggestionIcon(suggestion.type)}
-                      <div>
-                        <p className="text-sm font-medium text-gray-800 dark:text-white">{suggestion.message}</p>
-                        {suggestion.action && (
-                          <p className="text-xs text-gray-600 mt-1 dark:text-gray-300">💡 {suggestion.action}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
           
           {todaysPlan.plannedTasks
             .filter(session => session.status !== 'skipped') // Hide skipped sessions from UI
@@ -1233,11 +980,305 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
         </div>
       )}
 
+      {/* Study Plan Header with Refresh Button and Missed Sessions */}
+      {studyPlans.length > 0 && (
+        <div className="bg-white rounded-xl shadow-lg p-6 dark:bg-gray-900 dark:shadow-gray-900">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Study Plan</h2>
+            </div>
+            <button
+              onClick={handleRefreshClick}
+              className="px-4 py-2 bg-gradient-to-r from-green-500 to-blue-600 text-white text-sm rounded-lg hover:from-green-600 hover:to-blue-700 transition-colors flex items-center space-x-2"
+              title="Refresh and regenerate your study plan"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Refresh Plan</span>
+            </button>
+          </div>
+
+          {/* Missed Sessions Section - Integrated */}
+          {(missedSessions.length > 0 || overdueMissedSessions.length > 0) && (
+            <div className="border-t pt-4 mt-4 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setShowMissedSessions(!showMissedSessions)}
+                  className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
+                >
+                  <AlertTriangle className="text-red-500 dark:text-red-400" size={20} />
+                  <h3 className="text-lg font-medium text-gray-800 dark:text-white">Missed Sessions</h3>
+                  <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                    {missedSessions.length + overdueMissedSessions.length} total
+                  </span>
+                  {missedSessions.length > 0 && (
+                    <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300">
+                      {missedSessions.length} redistributable
+                    </span>
+                  )}
+                  {overdueMissedSessions.length > 0 && (
+                    <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300">
+                      {overdueMissedSessions.length} overdue
+                    </span>
+                  )}
+                  <div className={`transform transition-transform ${showMissedSessions ? 'rotate-90' : ''}`}>
+                    <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+                {!showMissedSessions && (
+                  <div className="text-sm text-gray-600 dark:text-gray-400 italic">
+                    Click to {missedSessions.length + overdueMissedSessions.length > 0 ? 'manage missed sessions' : 'view details'}
+                  </div>
+                )}
+              </div>
+
+              {showMissedSessions && (
+                <>
+                  <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+                    {(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? (
+                      <>
+                        <p>You have missed study sessions. Available actions:</p>
+                        <ul className="mt-2 space-y-1">
+                          <li>• <strong>Start Now</strong> - work on any missed session immediately</li>
+                          <li>• <strong>Skip</strong> - mark session as completed (forget about it)</li>
+                          <li>• <strong>Mark Task Done</strong> - complete entire task (for overdue tasks)</li>
+                          <li>• <strong>Refresh Plan</strong> - generate new optimal schedule (missed sessions stay here)</li>
+                        </ul>
+                        {(missedSessions.length > 0 || overdueMissedSessions.length > 0) && (
+                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                            <p className="text-blue-800 dark:text-blue-200 text-xs">
+                              <strong>How Refresh Works:</strong> Refreshing creates a fresh study plan for your active tasks.
+                              All missed sessions will remain here for you to handle manually.
+                            </p>
+                            <p className="text-blue-700 dark:text-blue-300 text-xs mt-2">
+                              <strong>Your choice:</strong> Start missed sessions now, skip them, mark tasks complete, or ignore them and focus on your new plan.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p>No missed sessions found. All past study sessions have been completed or are up to date.</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* Redistributable Sessions */}
+                    {missedSessions.length > 0 && (
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Sessions that can be handled:
+                        </h4>
+                        {missedSessions.map(({planDate, session, task}, idx) => (
+                          <div key={`missed-${planDate}-${session.sessionNumber || 0}-${task.id}-${session.startTime || ''}-${idx}`}
+                               className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all duration-200">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <BookOpen className="text-blue-500 dark:text-blue-400" size={18} />
+                                <h3 className="font-medium text-gray-800 dark:text-white">{task.title}</h3>
+                                {task.category && (
+                                  <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-300">
+                                    {task.category}
+                                  </span>
+                                )}
+                                <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full dark:bg-green-900 dark:text-green-300">
+                                  Due: {new Date(task.deadline).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                                <span className="flex items-center space-x-1">
+                                  <Calendar size={14} />
+                                  <span>{planDate}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <Clock size={14} />
+                                  <span>{session.startTime} - {session.endTime}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <TrendingUp size={14} />
+                                  <span>{formatTime(session.allocatedHours)}</span>
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => onSelectTask(task, { allocatedHours: session.allocatedHours, planDate, sessionNumber: session.sessionNumber })}
+                                className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors duration-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
+                              >
+                                Start Now
+                              </button>
+                              <button
+                                onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
+                                className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
+                              >
+                                Skip
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Overdue Sessions */}
+                    {overdueMissedSessions.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300 mb-2">
+                            Sessions for overdue tasks (deadline passed):
+                          </h4>
+                          <span className="text-xs text-orange-600 dark:text-orange-400">
+                            Tasks past deadline
+                          </span>
+                        </div>
+                        {overdueMissedSessions.map(({planDate, session, task}, idx) => (
+                          <div key={`overdue-${planDate}-${session.sessionNumber || 0}-${task.id}-${session.startTime || ''}-${idx}`}
+                               className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-700 hover:shadow-md transition-all duration-200">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <BookOpen className="text-orange-500 dark:text-orange-400" size={18} />
+                                <h3 className="font-medium text-gray-800 dark:text-white">{task.title}</h3>
+                                {task.category && (
+                                  <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full dark:bg-orange-900 dark:text-orange-300">
+                                    {task.category}
+                                  </span>
+                                )}
+                                <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full dark:bg-red-900 dark:text-red-300">
+                                  Overdue: {new Date(task.deadline).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                                <span className="flex items-center space-x-1">
+                                  <Calendar size={14} />
+                                  <span>{planDate}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <Clock size={14} />
+                                  <span>{session.startTime} - {session.endTime}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <TrendingUp size={14} />
+                                  <span>{formatTime(session.allocatedHours)}</span>
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => onSelectTask(task, { allocatedHours: session.allocatedHours, planDate, sessionNumber: session.sessionNumber })}
+                                className="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-lg hover:bg-green-200 transition-colors duration-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
+                              >
+                                Start Now
+                              </button>
+                              <button
+                                onClick={() => handleSkipMissedSession(planDate, session.sessionNumber || 0, task.id)}
+                                className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
+                              >
+                                Skip
+                              </button>
+                              <button
+                                onClick={() => handleMarkMissedSessionDone(planDate, session.sessionNumber || 0, task.id)}
+                                className="px-3 py-1 text-xs bg-purple-100 text-purple-800 rounded-lg hover:bg-purple-200 transition-colors duration-200 dark:bg-purple-900 dark:text-purple-200 dark:hover:bg-purple-800"
+                                title="Mark this session as completed"
+                              >
+                                Mark Done
+                              </button>
+                              {onUpdateTask && (
+                                <button
+                                  onClick={() => handleMarkTaskAsCompleted(task.id)}
+                                  className="px-3 py-1 text-xs bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors duration-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800"
+                                  title="Mark the entire task as completed"
+                                >
+                                  Mark Task Done
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No sessions found */}
+                    {missedSessions.length === 0 && overdueMissedSessions.length === 0 && (
+                      <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                        <CheckCircle className="text-green-500 dark:text-green-400 mx-auto mb-2" size={24} />
+                        <p>All past sessions are up to date!</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {studyPlans.length === 0 && (
         <div className="bg-white rounded-xl shadow-lg p-6 text-center dark:bg-gray-900 dark:shadow-gray-900">
           <BookOpen size={48} className="mx-auto mb-4 text-gray-300 dark:text-gray-700" />
           <h2 className="text-xl font-semibold text-gray-800 mb-2 dark:text-white">Ready to Get Started?</h2>
           <p className="text-gray-500 dark:text-gray-300">Add some tasks and I'll create your perfect study schedule! 🎯</p>
+        </div>
+      )}
+
+      {/* Smart Assistant Modal */}
+      {showSmartAssistant && suggestions.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center space-x-2">
+                  <Lightbulb className="text-yellow-500" size={24} />
+                  <span>Smart Assistant Tips</span>
+                  <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full dark:bg-yellow-900 dark:text-yellow-200">
+                    {suggestions.length} suggestions
+                  </span>
+                </h2>
+                <button
+                  onClick={() => setShowSmartAssistant(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="max-h-[60vh] overflow-y-auto">
+                <div className="space-y-3">
+                  {suggestions.map((suggestion, index) => (
+                    <div key={index} className={`p-4 rounded-lg border-l-4 ${
+                      suggestion.type === 'warning' ? 'border-l-red-400 bg-red-50 dark:bg-red-900/20' :
+                      suggestion.type === 'celebration' ? 'border-l-green-400 bg-green-50 dark:bg-green-900/20' :
+                      'border-l-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                    }`}>
+                      <div className="flex items-start space-x-3">
+                        {getSuggestionIcon(suggestion.type)}
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-800 dark:text-white mb-1">{suggestion.message}</p>
+                          {suggestion.action && (
+                            <p className="text-xs text-gray-600 dark:text-gray-300">
+                              <span className="font-medium">💡 Tip:</span> {suggestion.action}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowSmartAssistant(false)}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+                  >
+                    Got it!
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
