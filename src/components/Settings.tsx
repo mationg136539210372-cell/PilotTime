@@ -679,57 +679,6 @@ const Settings: React.FC<SettingsProps> = ({
                   <option value="even">⚖️ Evenly Distributed - Frequency Friendly</option>
                   <option value="balanced">🔄 Balanced Priority - Smart Mix</option>
                 </select>
-
-                {/* Mode Description */}
-                <div className="mt-3 p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                  {studyPlanMode === 'eisenhower' && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">🎯 Eisenhower Matrix</span>
-                        <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full">Priority Focus</span>
-                      </div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                        Prioritizes important & urgent tasks first. Best for deadline-heavy workloads.
-                      </p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-gray-500 dark:text-gray-400">Frequency preferences:</span>
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ Not applied</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {studyPlanMode === 'even' && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">⚖️ Evenly Distributed</span>
-                        <span className="px-2 py-0.5 text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full">Frequency Friendly</span>
-                      </div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                        Spreads all tasks equally across available time. Respects your frequency preferences.
-                      </p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-gray-500 dark:text-gray-400">Frequency preferences:</span>
-                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Fully respected</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {studyPlanMode === 'balanced' && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">🔄 Balanced Priority</span>
-                        <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded-full">Smart Mix</span>
-                      </div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                        Combines priority-based scheduling with even distribution within priority tiers.
-                      </p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-gray-500 dark:text-gray-400">Frequency preferences:</span>
-                        <span className="text-red-600 dark:text-red-400 font-medium">❌ Not applied</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
               </div>
 
 
@@ -806,7 +755,7 @@ const Settings: React.FC<SettingsProps> = ({
                   : 'bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-105'
               }`}
           >
-            {validationMessages.some(msg => msg.type === 'error') && (validateMissedSessions().isValid === false || validateRescheduledSessions().isValid === false)
+            {validationMessages.some(msg => msg.type === 'error')
               ? 'Handle Sessions First'
               : 'Save Settings'
             }
