@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowRight, ArrowLeft, CheckCircle, Info, Clock, Calendar, Settings, BookOpen, Users, AlertTriangle, Target, Lightbulb, TrendingUp, Zap } from 'lucide-react';
+import { X, ArrowRight, ArrowLeft, CheckCircle, Info, Clock, Calendar, Settings, BookOpen, Users, AlertTriangle, Target, Lightbulb, TrendingUp, Zap, Maximize2, Minimize2 } from 'lucide-react';
 
 interface TutorialStep {
   id: string;
@@ -47,6 +47,7 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
   const [initialCommitmentsCount, setInitialCommitmentsCount] = useState(commitmentsCount);
   const [initialStudyPlanMode, setInitialStudyPlanMode] = useState<string | null>(null);
   const [completedRequirements, setCompletedRequirements] = useState<Set<string>>(new Set());
+  const [isMinimized, setIsMinimized] = useState(false);
 
   const tutorialSteps: TutorialStep[] = [
     // Welcome & Overview
@@ -58,10 +59,10 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       action: 'observe',
       requiresAction: false,
       customContent: (
-        <div className="space-y-3 text-sm">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
-            <p className="font-medium text-blue-800 dark:text-blue-200 mb-2">What TimePilot Does:</p>
-            <ul className="space-y-1 text-blue-700 dark:text-blue-300">
+        <div className="space-y-2 text-xs">
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
+            <p className="font-medium text-blue-800 dark:text-blue-200 mb-1">What TimePilot Does:</p>
+            <ul className="space-y-0.5 text-blue-700 dark:text-blue-300">
               <li>• Automatically schedules study sessions</li>
               <li>• Considers your existing commitments</li>
               <li>• Adapts to deadline priorities</li>
@@ -81,28 +82,28 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       action: 'observe',
       requiresAction: false,
       customContent: (
-        <div className="space-y-3 text-sm">
-          <div className="grid grid-cols-1 gap-3">
-            <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border-l-4 border-green-500">
-              <div className="flex items-center space-x-2 mb-2">
-                <BookOpen className="text-green-600 dark:text-green-400" size={16} />
+        <div className="space-y-2 text-xs">
+          <div className="grid grid-cols-1 gap-2">
+            <div className="bg-green-50 dark:bg-green-900/20 p-2 rounded-lg border-l-4 border-green-500">
+              <div className="flex items-center space-x-2 mb-1">
+                <BookOpen className="text-green-600 dark:text-green-400" size={14} />
                 <span className="font-semibold text-green-800 dark:text-green-200">TASKS</span>
               </div>
-              <p className="text-green-700 dark:text-green-300 mb-2">Work you need to accomplish (flexible timing)</p>
-              <ul className="text-xs text-green-600 dark:text-green-400 space-y-1">
+              <p className="text-green-700 dark:text-green-300 mb-1">Work you need to accomplish (flexible timing)</p>
+              <ul className="text-xs text-green-600 dark:text-green-400 space-y-0.5">
                 <li>• Study for Math exam</li>
                 <li>• Write essay for English</li>
                 <li>• Complete programming assignment</li>
               </ul>
             </div>
             
-            <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg border-l-4 border-orange-500">
-              <div className="flex items-center space-x-2 mb-2">
-                <Users className="text-orange-600 dark:text-orange-400" size={16} />
+            <div className="bg-orange-50 dark:bg-orange-900/20 p-2 rounded-lg border-l-4 border-orange-500">
+              <div className="flex items-center space-x-2 mb-1">
+                <Users className="text-orange-600 dark:text-orange-400" size={14} />
                 <span className="font-semibold text-orange-800 dark:text-orange-200">COMMITMENTS</span>
               </div>
-              <p className="text-orange-700 dark:text-orange-300 mb-2">Fixed appointments (cannot be moved)</p>
-              <ul className="text-xs text-orange-600 dark:text-orange-400 space-y-1">
+              <p className="text-orange-700 dark:text-orange-300 mb-1">Fixed appointments (cannot be moved)</p>
+              <ul className="text-xs text-orange-600 dark:text-orange-400 space-y-0.5">
                 <li>• Class lectures at 9:00 AM</li>
                 <li>• Work shifts</li>
                 <li>• Doctor appointments</li>
@@ -124,13 +125,13 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       highlightTab: true,
       requiresAction: false,
       customContent: (
-        <div className="space-y-2 text-sm">
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg">
-            <div className="flex items-center space-x-2 mb-2">
-              <AlertTriangle className="text-yellow-600 dark:text-yellow-400" size={16} />
+        <div className="space-y-2 text-xs">
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded-lg">
+            <div className="flex items-center space-x-2 mb-1">
+              <AlertTriangle className="text-yellow-600 dark:text-yellow-400" size={14} />
               <span className="font-semibold text-yellow-800 dark:text-yellow-200">Pro Tips for Tasks:</span>
             </div>
-            <ul className="text-yellow-700 dark:text-yellow-300 space-y-1 text-xs">
+            <ul className="text-yellow-700 dark:text-yellow-300 space-y-0.5 text-xs">
               <li>✅ <strong>DO:</strong> Break large tasks into smaller chunks (2-4 hours max)</li>
               <li>✅ <strong>DO:</strong> Be realistic with time estimates</li>
               <li>✅ <strong>DO:</strong> Mark truly important tasks as "Important"</li>
@@ -153,10 +154,10 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       waitFor: 'task-added',
       requiresAction: true,
       customContent: (
-        <div className="space-y-2 text-sm">
+        <div className="space-y-2 text-xs">
           <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
             <p className="font-medium text-blue-800 dark:text-blue-200 mb-1">Example Task:</p>
-            <ul className="text-blue-700 dark:text-blue-300 text-xs space-y-1">
+            <ul className="text-blue-700 dark:text-blue-300 text-xs space-y-0.5">
               <li><strong>Title:</strong> "Study Chapter 5 - Physics"</li>
               <li><strong>Estimated Hours:</strong> 3 hours</li>
               <li><strong>Deadline:</strong> Next Friday</li>
@@ -188,10 +189,10 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       highlightTab: true,
       requiresAction: true,
       customContent: (
-        <div className="space-y-2 text-sm">
-          <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
-            <div className="flex items-center space-x-2 mb-2">
-              <Info className="text-purple-600 dark:text-purple-400" size={16} />
+        <div className="space-y-2 text-xs">
+          <div className="bg-purple-50 dark:bg-purple-900/20 p-2 rounded-lg">
+            <div className="flex items-center space-x-2 mb-1">
+              <Info className="text-purple-600 dark:text-purple-400" size={14} />
               <span className="font-semibold text-purple-800 dark:text-purple-200">Why Commitments Matter:</span>
             </div>
             <p className="text-purple-700 dark:text-purple-300 text-xs">
@@ -210,18 +211,18 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       action: 'observe',
       requiresAction: false,
       customContent: (
-        <div className="space-y-3 text-sm">
-          <div className="space-y-2">
-            <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg">
-              <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">📅 <strong>One-time:</strong></p>
+        <div className="space-y-2 text-xs">
+          <div className="space-y-1.5">
+            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg">
+              <p className="font-medium text-gray-800 dark:text-gray-200 mb-0.5">📅 <strong>One-time:</strong></p>
               <p className="text-gray-600 dark:text-gray-400 text-xs">Doctor appointment, job interview</p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg">
-              <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">🔄 <strong>Recurring:</strong></p>
+            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg">
+              <p className="font-medium text-gray-800 dark:text-gray-200 mb-0.5">🔄 <strong>Recurring:</strong></p>
               <p className="text-gray-600 dark:text-gray-400 text-xs">Weekly classes, work shifts, gym sessions</p>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg">
-              <p className="font-medium text-gray-800 dark:text-gray-200 mb-1">🌙 <strong>Block scheduling:</strong></p>
+            <div className="bg-gray-50 dark:bg-gray-800 p-1.5 rounded-lg">
+              <p className="font-medium text-gray-800 dark:text-gray-200 mb-0.5">🌙 <strong>Block scheduling:</strong></p>
               <p className="text-gray-600 dark:text-gray-400 text-xs">Sleep time, meals, commute time</p>
             </div>
           </div>
@@ -817,6 +818,10 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
     onSkip();
   };
 
+  const handleMinimize = () => {
+    setIsMinimized(!isMinimized);
+  };
+
   // Check if Next button should be enabled
   const canProceed = () => {
     if (!currentStep.requiresAction) return true;
@@ -834,13 +839,13 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
         isCurrentlyMet = commitmentsCount > initialCommitmentsCount;
         break;
       case 'tab-changed':
-        isCurrentlyMet = currentStep.targetTab && currentTab === currentStep.targetTab;
+        isCurrentlyMet = Boolean(currentStep.targetTab && currentTab === currentStep.targetTab);
         break;
       case 'study-plan-mode-changed':
-        isCurrentlyMet = initialStudyPlanMode && currentStudyPlanMode && initialStudyPlanMode !== currentStudyPlanMode;
+        isCurrentlyMet = Boolean(initialStudyPlanMode && currentStudyPlanMode && initialStudyPlanMode !== currentStudyPlanMode);
         break;
       case 'timer-session-active':
-        isCurrentlyMet = currentStep.targetTab && currentTab === currentStep.targetTab && hasActiveTimerSession;
+        isCurrentlyMet = Boolean(currentStep.targetTab && currentTab === currentStep.targetTab && hasActiveTimerSession);
         break;
       default:
         isCurrentlyMet = true;
@@ -864,112 +869,138 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
     return 'fixed bottom-4 right-4 z-50';
   };
 
+  // If minimized, show just the icon button
+  if (isMinimized) {
+    return (
+      <div className={getTooltipPosition()}>
+        <button
+          onClick={handleMinimize}
+          className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+          title="Expand Tutorial"
+        >
+          <Maximize2 size={20} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Tutorial tooltip - positioned in right corner */}
       <div className={getTooltipPosition()}>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-sm w-80 p-4 relative border border-gray-200 dark:border-gray-700">
-          {/* Close button */}
-          <button
-            onClick={handleSkip}
-            className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-          >
-            <X size={16} />
-          </button>
-
-          {/* Progress indicator */}
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-sm w-80 p-3 relative border border-gray-200 dark:border-gray-700">
+          {/* Header with minimize and close buttons */}
+          <div className="flex items-center justify-between mb-2">
             <div className="flex space-x-1">
               {tutorialSteps.map((_, index) => (
                 <div
                   key={index}
-                  className={`w-1.5 h-1.5 rounded-full ${
+                  className={`w-1 h-1 rounded-full ${
                     index <= currentStepIndex ? 'bg-blue-500' : 'bg-gray-300'
                   }`}
                 />
               ))}
             </div>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={handleMinimize}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
+                title="Minimize Tutorial"
+              >
+                <Minimize2 size={14} />
+              </button>
+              <button
+                onClick={handleSkip}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Progress indicator */}
+          <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {currentStepIndex + 1} of {tutorialSteps.length}
             </span>
           </div>
 
           {/* Content */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="flex items-center space-x-2">
               <div className="flex-shrink-0">
-                {currentStep.id.includes('welcome') && <Zap className="text-blue-500" size={20} />}
-                {currentStep.id.includes('core-concepts') && <Target className="text-purple-500" size={20} />}
-                {currentStep.id.includes('task') && <BookOpen className="text-green-500" size={20} />}
-                {currentStep.id.includes('commitment') && <Users className="text-orange-500" size={20} />}
-                {currentStep.id.includes('study-plan') && <Calendar className="text-purple-500" size={20} />}
-                {currentStep.id.includes('suggestions') && <Lightbulb className="text-yellow-500" size={20} />}
-                {currentStep.id.includes('calendar') && <Calendar className="text-blue-500" size={20} />}
-                {currentStep.id.includes('settings') && <Settings className="text-orange-500" size={20} />}
-                {currentStep.id.includes('missed') && <AlertTriangle className="text-red-500" size={20} />}
-                {currentStep.id.includes('session') && <BookOpen className="text-green-500" size={20} />}
-                {currentStep.id.includes('timer') && <Clock className="text-red-500" size={20} />}
-                {currentStep.id.includes('advanced') && <TrendingUp className="text-indigo-500" size={20} />}
-                {currentStep.id.includes('dashboard') && <TrendingUp className="text-emerald-500" size={20} />}
-                {currentStep.id.includes('complete') && <CheckCircle className="text-green-500" size={20} />}
+                {currentStep.id.includes('welcome') && <Zap className="text-blue-500" size={18} />}
+                {currentStep.id.includes('core-concepts') && <Target className="text-purple-500" size={18} />}
+                {currentStep.id.includes('task') && <BookOpen className="text-green-500" size={18} />}
+                {currentStep.id.includes('commitment') && <Users className="text-orange-500" size={18} />}
+                {currentStep.id.includes('study-plan') && <Calendar className="text-purple-500" size={18} />}
+                {currentStep.id.includes('suggestions') && <Lightbulb className="text-yellow-500" size={18} />}
+                {currentStep.id.includes('calendar') && <Calendar className="text-blue-500" size={18} />}
+                {currentStep.id.includes('settings') && <Settings className="text-orange-500" size={18} />}
+                {currentStep.id.includes('missed') && <AlertTriangle className="text-red-500" size={18} />}
+                {currentStep.id.includes('session') && <BookOpen className="text-green-500" size={18} />}
+                {currentStep.id.includes('timer') && <Clock className="text-red-500" size={18} />}
+                {currentStep.id.includes('advanced') && <TrendingUp className="text-indigo-500" size={18} />}
+                {currentStep.id.includes('dashboard') && <TrendingUp className="text-emerald-500" size={18} />}
+                {currentStep.id.includes('complete') && <CheckCircle className="text-green-500" size={18} />}
               </div>
-              <h3 className="text-base font-semibold text-gray-800 dark:text-white">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-white leading-tight">
                 {currentStep.title}
               </h3>
             </div>
 
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
               {currentStep.description}
             </p>
 
             {currentStep.customContent && (
-              <div className="mt-3">
+              <div className="mt-2">
                 {currentStep.customContent}
               </div>
             )}
 
             {/* Action buttons */}
-            <div className="flex justify-between pt-3">
+            <div className="flex justify-between pt-2">
               <button
                 onClick={handlePrevious}
                 disabled={currentStepIndex === 0}
-                className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
               >
-                <ArrowLeft size={12} />
+                <ArrowLeft size={10} />
                 <span>Previous</span>
               </button>
 
               <div className="flex space-x-1">
                 <button
                   onClick={handleSkip}
-                  className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  className="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                 >
                   Skip
                 </button>
                 <button
                   onClick={handleNext}
                   disabled={!isNextButtonEnabled}
-                  className={`flex items-center space-x-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  className={`flex items-center space-x-1 px-2 py-1 text-xs font-medium rounded-lg transition-all ${
                     isNextButtonEnabled 
                       ? 'text-white bg-blue-600 hover:bg-blue-700' 
                       : 'text-gray-400 bg-gray-300 cursor-not-allowed dark:bg-gray-600 dark:text-gray-500'
                   }`}
                 >
                   <span>{currentStepIndex === tutorialSteps.length - 1 ? 'Finish' : 'Next'}</span>
-                  <ArrowRight size={12} />
+                  <ArrowRight size={10} />
                 </button>
               </div>
             </div>
 
             {/* Action required indicator */}
             {currentStep.requiresAction && !isNextButtonEnabled && (
-              <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg dark:bg-yellow-900/20 dark:border-yellow-700">
+              <div className="mt-2 p-1.5 bg-yellow-50 border border-yellow-200 rounded-lg dark:bg-yellow-900/20 dark:border-yellow-700">
                 <div className="flex items-center space-x-2 text-xs text-yellow-700 dark:text-yellow-300">
                   <span>⚠️</span>
                   <span>
                     {currentStep.waitFor === 'task-added' && 'Please add a task to continue'}
                     {currentStep.waitFor === 'commitment-added' && 'Please add a commitment to continue'}
-                    {currentStep.waitFor === 'tab-changed' && `Please navigate to the "${currentStep.targetTab}" tab to continue`}
+                    {currentStep.waitFor === 'tab-changed' && currentStep.targetTab && `Please navigate to the "${currentStep.targetTab}" tab to continue`}
                     {currentStep.waitFor === 'study-plan-mode-changed' && 'Please switch the study plan mode to continue'}
                     {currentStep.waitFor === 'timer-session-active' && 'Please click on a study session to start the timer'}
                   </span>
