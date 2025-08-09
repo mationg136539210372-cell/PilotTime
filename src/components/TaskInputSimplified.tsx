@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Info, HelpCircle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { Plus, Info, HelpCircle, ChevronDown, ChevronUp, Clock, X } from 'lucide-react';
 import { Task, UserSettings } from '../types';
 import { checkFrequencyDeadlineConflict } from '../utils/scheduling';
 import TimeEstimationModal from './TimeEstimationModal';
@@ -37,6 +37,18 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const today = new Date().toISOString().split('T')[0];
+  
+  // Quick time presets
+  const [showTimePresets, setShowTimePresets] = useState(false);
+  const timePresets = [
+    { label: '15m', hours: '0', minutes: '15' },
+    { label: '30m', hours: '0', minutes: '30' },
+    { label: '45m', hours: '0', minutes: '45' },
+    { label: '1h', hours: '1', minutes: '0' },
+    { label: '1h 30m', hours: '1', minutes: '30' },
+    { label: '2h', hours: '2', minutes: '0' },
+    { label: '3h', hours: '3', minutes: '0' },
+  ];
 
   // Auto-detect deadline type based on whether deadline is set
   useEffect(() => {
@@ -245,13 +257,26 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                 ))}
               </select>
               {showCustomCategory && (
-                <input
-                  type="text"
-                  value={formData.customCategory}
-                  onChange={e => setFormData(f => ({ ...f, customCategory: e.target.value }))}
-                  className="w-full border border-white/30 dark:border-white/20 rounded-xl px-3 py-2 mt-2 text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                  placeholder="Enter custom category"
-                />
+                <div className="relative mt-2">
+                  <input
+                    type="text"
+                    value={formData.customCategory}
+                    onChange={e => setFormData(f => ({ ...f, customCategory: e.target.value }))}
+                    className="w-full border border-white/30 dark:border-white/20 rounded-xl px-3 py-2 pr-9 text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                    placeholder="Enter custom category"
+                  />
+                  {formData.customCategory && (
+                    <button
+                      type="button"
+                      aria-label="Clear custom category"
+                      title="Clear"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                      onClick={() => setFormData(f => ({ ...f, customCategory: '' }))}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -272,6 +297,47 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                   Deadline cannot be in the past. Please select today or a future date.
                 </div>
               )}
+              {/* Quick deadline shortcuts */}
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                  onClick={() => setFormData(f => ({ ...f, deadline: today }))}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 1);
+                    const iso = d.toISOString().split('T')[0];
+                    setFormData(f => ({ ...f, deadline: iso }));
+                  }}
+                >
+                  Tomorrow
+                </button>
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 7);
+                    const iso = d.toISOString().split('T')[0];
+                    setFormData(f => ({ ...f, deadline: iso }));
+                  }}
+                >
+                  Next week
+                </button>
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                  onClick={() => setFormData(f => ({ ...f, deadline: '' }))}
+                >
+                  Clear
+                </button>
+              </div>
             </div>
           </div>
 
@@ -282,8 +348,34 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
             </label>
             <div className="flex items-center space-x-3">
               <div className="flex-1 p-3 border border-white/30 dark:border-white/20 rounded-xl bg-white/70 dark:bg-black/20">
-                <div className="text-lg font-medium text-gray-800 dark:text-white">
-                  {totalTime > 0 ? formatTimeDisplay(formData.estimatedHours, formData.estimatedMinutes) : 'Not set'}
+                <div className="flex items-center justify-between">
+                  <div className="text-lg font-medium text-gray-800 dark:text-white">
+                    {totalTime > 0 ? formatTimeDisplay(formData.estimatedHours, formData.estimatedMinutes) : 'Not set'}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {formData.estimatedHours && (
+                      <button
+                        type="button"
+                        aria-label="Clear hours"
+                        title="Clear hours"
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        onClick={() => setFormData(f => ({ ...f, estimatedHours: '' }))}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                    {(formData.estimatedMinutes && formData.estimatedMinutes !== '0') && (
+                      <button
+                        type="button"
+                        aria-label="Clear minutes"
+                        title="Clear minutes"
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        onClick={() => setFormData(f => ({ ...f, estimatedMinutes: '0' }))}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {formData.taskType && (
                   <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -300,6 +392,46 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                 <span>Estimate</span>
               </button>
             </div>
+          </div>
+          <div className="mt-1">
+            <button
+              type="button"
+              onClick={() => setShowTimeEstimationModal(true)}
+              className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
+            >
+              Need help estimating?
+            </button>
+          </div>
+          {/* Time Presets - Hidden by default */}
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowTimePresets(!showTimePresets)}
+              className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
+            >
+              {showTimePresets ? 'Hide quick presets' : 'Show quick presets'}
+            </button>
+            {showTimePresets && (
+              <div className="mt-1">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Quick presets:</div>
+                <div className="flex flex-wrap gap-1">
+                  {timePresets.map((preset, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setFormData(f => ({
+                        ...f,
+                        estimatedHours: preset.hours,
+                        estimatedMinutes: preset.minutes,
+                      }))}
+                      className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white rounded border transition-colors"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* One-time task option */}
@@ -623,8 +755,10 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                 <button
                   onClick={() => setShowHelpModal(false)}
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Close"
+                  title="Close"
                 >
-                  
+                  <X size={20} />
                 </button>
               </div>
               <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300">
