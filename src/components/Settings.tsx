@@ -659,52 +659,80 @@ const Settings: React.FC<SettingsProps> = ({
           )}
 
         {/* Study Plan Mode */}
-            <div className={`${highlightStudyPlanMode ? 'ring-2 ring-yellow-400 animate-pulse shadow-lg shadow-yellow-400/50 rounded-lg p-3 bg-yellow-50 dark:bg-yellow-900/20' : ''}`}>
-              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">Study Plan Mode</label>
-              <div className="flex flex-col gap-1">
-            <label className={`flex items-center gap-2 ${isSettingDisabled('studyPlanMode') ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <input
-                type="radio"
-                name="studyPlanMode"
-                value="eisenhower"
-                checked={studyPlanMode === 'eisenhower'}
-                onChange={() => setStudyPlanMode('eisenhower')}
-                disabled={isSettingDisabled('studyPlanMode')}
-                className="form-radio text-blue-600"
-              />
-                  <span className="text-sm text-gray-700 dark:text-gray-200">Eisenhower Matrix <span className="text-xs text-gray-500 dark:text-gray-400">(finish important & urgent tasks first)</span></span>
-            </label>
-            <label className={`flex items-center gap-2 ${isSettingDisabled('studyPlanMode') ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <input
-                type="radio"
-                name="studyPlanMode"
-                value="even"
-                checked={studyPlanMode === 'even'}
-                onChange={() => setStudyPlanMode('even')}
-                disabled={isSettingDisabled('studyPlanMode')}
-                className="form-radio text-blue-600"
-              />
-                  <span className="text-sm text-gray-700 dark:text-gray-200">Evenly Distributed <span className="text-xs text-gray-500 dark:text-gray-400">(spread all tasks equally)</span></span>
-            </label>
-            <label className={`flex items-center gap-2 ${isSettingDisabled('studyPlanMode') ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <input
-                type="radio"
-                name="studyPlanMode"
-                value="balanced"
-                checked={studyPlanMode === 'balanced'}
-                onChange={() => setStudyPlanMode('balanced')}
-                disabled={isSettingDisabled('studyPlanMode')}
-                className="form-radio text-blue-600"
-              />
-                  <span className="text-sm text-gray-700 dark:text-gray-200">Balanced Priority <span className="text-xs text-gray-500 dark:text-gray-400">(priority-based even distribution)</span></span>
-            </label>
+            <div className={`space-y-4 ${highlightStudyPlanMode ? 'ring-2 ring-yellow-400 animate-pulse shadow-lg shadow-yellow-400/50 rounded-lg p-3 bg-yellow-50 dark:bg-yellow-900/20' : ''}`}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">Study Plan Mode</label>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">Choose how TimePilot schedules your study sessions</p>
               </div>
-              <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-l-3 border-blue-400">
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  <strong>Note:</strong> Only the "Evenly Distributed" mode accounts for task frequency preferences.
-                  Switching to other modes will prioritize tasks based on importance/urgency instead of frequency settings.
-                </p>
+
+              {/* Dropdown for Study Plan Mode */}
+              <div className="space-y-3">
+                <select
+                  value={studyPlanMode}
+                  onChange={(e) => setStudyPlanMode(e.target.value as 'eisenhower' | 'even' | 'balanced')}
+                  disabled={isSettingDisabled('studyPlanMode')}
+                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${
+                    isSettingDisabled('studyPlanMode') ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  <option value="eisenhower">🎯 Eisenhower Matrix - Priority Focus</option>
+                  <option value="even">⚖️ Evenly Distributed - Frequency Friendly</option>
+                  <option value="balanced">🔄 Balanced Priority - Smart Mix</option>
+                </select>
+
+                {/* Mode Description */}
+                <div className="mt-3 p-3 border rounded-lg bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                  {studyPlanMode === 'eisenhower' && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">🎯 Eisenhower Matrix</span>
+                        <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 rounded-full">Priority Focus</span>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                        Prioritizes important & urgent tasks first. Best for deadline-heavy workloads.
+                      </p>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500 dark:text-gray-400">Frequency preferences:</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">❌ Not applied</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {studyPlanMode === 'even' && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">⚖️ Evenly Distributed</span>
+                        <span className="px-2 py-0.5 text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full">Frequency Friendly</span>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                        Spreads all tasks equally across available time. Respects your frequency preferences.
+                      </p>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500 dark:text-gray-400">Frequency preferences:</span>
+                        <span className="text-green-600 dark:text-green-400 font-medium">✅ Fully respected</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {studyPlanMode === 'balanced' && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">🔄 Balanced Priority</span>
+                        <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded-full">Smart Mix</span>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                        Combines priority-based scheduling with even distribution within priority tiers.
+                      </p>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-500 dark:text-gray-400">Frequency preferences:</span>
+                        <span className="text-red-600 dark:text-red-400 font-medium">❌ Not applied</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
+
+
             </div>
           </div>
         </div>
