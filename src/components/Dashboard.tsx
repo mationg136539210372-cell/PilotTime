@@ -168,20 +168,6 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
     <div className="space-y-8">
 
       {/* Positive reinforcement for completed sessions */}
-      {hasCompletedSessions && doneCount >= 3 && showRegeneratePrompt && (
-        <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg flex items-center justify-between dark:bg-green-900/20 dark:border-green-700">
-          <div>
-            <span className="font-semibold text-green-800 dark:text-green-200">Great progress!</span>
-            <span className="ml-2 text-green-700 dark:text-green-100">You've completed {doneCount} study session{doneCount > 1 ? 's' : ''}. Keep up the momentum! 🎉</span>
-          </div>
-          <button
-            onClick={() => setShowRegeneratePrompt(false)}
-            className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200"
-          >
-            <X size={20} />
-          </button>
-        </div>
-      )}
 
       {/* Top row: Stat cards */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
