@@ -317,18 +317,6 @@ const checkTimeEstimationFeasibility = (
     }
   }
   
-  // Suspiciously small estimates
-  if (taskData.estimatedHours < 0.5) {
-    warnings.push({
-      type: 'info',
-      category: 'estimation',
-      title: 'Very short task',
-      message: 'Tasks under 30 minutes might be better handled as quick actions rather than scheduled study sessions.',
-      suggestion: 'Consider bundling with similar small tasks or handling immediately.',
-      severity: 'minor'
-    });
-  }
-  
   return warnings;
 };
 
@@ -368,18 +356,6 @@ const checkSessionLengthFeasibility = (
     }
   }
   
-  // Tasks with unrealistic min work blocks
-  if (taskData.minWorkBlock && taskData.minWorkBlock > taskData.estimatedHours * 60) {
-    warnings.push({
-      type: 'error',
-      category: 'session-length',
-      title: 'Minimum work block longer than total task',
-      message: `Minimum work block is ${taskData.minWorkBlock} minutes but total task is only ${Math.round(taskData.estimatedHours * 60)} minutes.`,
-      suggestion: 'Reduce minimum work block or increase task estimation.',
-      severity: 'critical'
-    });
-  }
-  
   return warnings;
 };
 
@@ -405,47 +381,6 @@ const checkScheduleAvailability = (
       suggestion: 'Consider moving deadline to a work day or adjusting your work day settings.',
       severity: 'major'
     });
-  }
-  
-  // Check for heavy commitment periods
-  const daysUntilDeadline = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (daysUntilDeadline <= 7) {
-    // Check next 7 days for heavy commitments
-    let heavyCommitmentDays = 0;
-    for (let i = 0; i < 7; i++) {
-      const checkDate = new Date();
-      checkDate.setDate(checkDate.getDate() + i);
-      const dateStr = checkDate.toISOString().split('T')[0];
-      
-      const dayCommitments = commitments.filter(c => {
-        // Simple check - in real implementation would need proper date checking
-        return c.recurring && c.daysOfWeek.includes(checkDate.getDay());
-      });
-      
-      const commitmentHours = dayCommitments.reduce((sum, c) => {
-        if (c.startTime && c.endTime) {
-          const [sh, sm] = c.startTime.split(':').map(Number);
-          const [eh, em] = c.endTime.split(':').map(Number);
-          return sum + ((eh * 60 + em) - (sh * 60 + sm)) / 60;
-        }
-        return sum;
-      }, 0);
-      
-      if (commitmentHours > userSettings.dailyAvailableHours * 0.7) {
-        heavyCommitmentDays++;
-      }
-    }
-    
-    if (heavyCommitmentDays > 3) {
-      warnings.push({
-        type: 'warning',
-        category: 'schedule',
-        title: 'Heavy commitment period ahead',
-        message: `${heavyCommitmentDays} of the next 7 days have significant commitments, leaving limited study time.`,
-        suggestion: 'Consider starting earlier or extending deadline to avoid the busy period.',
-        severity: 'major'
-      });
-    }
   }
   
   return warnings;
@@ -501,18 +436,6 @@ const checkTaskTypeConsistency = (
   userSettings: UserSettings
 ): FeasibilityWarning[] => {
   const warnings: FeasibilityWarning[] = [];
-  
-  // Learning tasks should have consistent frequency
-  if (taskData.category === 'Learning' && taskData.targetFrequency === 'weekly') {
-    warnings.push({
-      type: 'info',
-      category: 'task-type',
-      title: 'Learning tasks benefit from frequency',
-      message: 'Learning tasks typically benefit from more frequent, shorter sessions for better retention.',
-      suggestion: 'Consider "3x per week" or "daily" frequency for better learning outcomes.',
-      severity: 'minor'
-    });
-  }
   
   // Large one-time tasks
   if (taskData.isOneTimeTask && taskData.estimatedHours > 4) {
@@ -612,18 +535,6 @@ const checkCategorySpecificIssues = (
   userSettings: UserSettings
 ): FeasibilityWarning[] => {
   const warnings: FeasibilityWarning[] = [];
-  
-  // Writing tasks often take longer than estimated
-  if (taskData.category === 'Writing' && taskData.estimatedHours < 3) {
-    warnings.push({
-      type: 'info',
-      category: 'category',
-      title: 'Writing tasks often take longer',
-      message: 'Writing projects frequently require more time than initially estimated for research, drafts, and revisions.',
-      suggestion: 'Consider adding 25-50% buffer time to your estimate.',
-      severity: 'minor'
-    });
-  }
   
   return warnings;
 };
