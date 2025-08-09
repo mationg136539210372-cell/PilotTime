@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp, Clock, X } from 'lucide-react';
 import { Task, UserSettings } from '../types';
 import { checkFrequencyDeadlineConflict } from '../utils/scheduling';
@@ -111,6 +111,31 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid &&
                    isEstimatedValid && isEstimatedReasonable && isImpactValid &&
                    isCustomCategoryValid && !isDeadlineRequiredForOneSitting && isStartDateValid;
+
+  // Frequency vs. deadline feasibility warning (inline preview)
+  const deadlineConflict = useMemo(() => {
+    if (!formData.deadline || formData.deadlineType === 'none') {
+      return { hasConflict: false } as { hasConflict: boolean; reason?: string; recommendedFrequency?: string };
+    }
+    const taskForCheck = {
+      deadline: formData.deadline,
+      estimatedHours: estimatedDecimalHours,
+      targetFrequency: formData.targetFrequency,
+      deadlineType: formData.deadlineType,
+      minWorkBlock: formData.minWorkBlock,
+      startDate: formData.startDate,
+    };
+    return checkFrequencyDeadlineConflict(taskForCheck as any, userSettings);
+  }, [formData.deadline, formData.deadlineType, formData.targetFrequency, formData.minWorkBlock, formData.startDate, estimatedDecimalHours, userSettings]);
+
+  // Low-priority with urgent deadline warning
+  const isLowPriorityUrgent = useMemo(() => {
+    if (formData.impact !== 'low' || !formData.deadline) return false;
+    const deadlineDate = new Date(formData.deadline);
+    const now = new Date();
+    const daysUntilDeadline = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntilDeadline <= 3;
+  }, [formData.impact, formData.deadline]);
 
   const getValidationErrors = (): string[] => {
     const errors: string[] = [];
@@ -517,6 +542,20 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       <option value="weekly"> Weekly sessions - Once per week</option>
       <option value="flexible"> When I have time - Flexible scheduling</option>
     </select>
+
+    {deadlineConflict.hasConflict && (
+      <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+        <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+        {deadlineConflict.reason && (
+          <div className="mt-1">{deadlineConflict.reason}</div>
+        )}
+        {deadlineConflict.recommendedFrequency && (
+          <div className="mt-1">
+            <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+          </div>
+        )}
+      </div>
+    )}
   </div>
 )}
 
@@ -691,6 +730,16 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Low-priority urgent warning */}
+          {isLowPriorityUrgent && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2 dark:bg-yellow-900/20 dark:border-yellow-700">
+              <div className="text-yellow-800 dark:text-yellow-200 font-medium mb-1">Warning: low priority with urgent deadline</div>
+              <div className="text-yellow-700 dark:text-yellow-300 text-sm">
+                This task is low priority but has an urgent deadline. It may not be scheduled if you have more important urgent tasks.
+              </div>
             </div>
           )}
 
