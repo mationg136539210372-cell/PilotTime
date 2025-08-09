@@ -595,6 +595,10 @@ export const generateNewStudyPlan = (
   existingStudyPlans: StudyPlan[] = []
 ): { plans: StudyPlan[]; suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> } => {
 
+  // SIMPLIFIED: No complex hour calculations - regeneration is a fresh start
+  // All missed sessions (redistributable and overdue) remain as-is for manual handling
+  // New study plan uses full task estimates
+
   if (settings.studyPlanMode === 'even') {
     // EVEN DISTRIBUTION LOGIC
     // Separate deadline-based tasks from no-deadline tasks
@@ -897,8 +901,9 @@ export const generateNewStudyPlan = (
         continue;
       }
       
+      // SIMPLIFIED: Use full task estimate - regeneration creates fresh plan
       let totalHours = task.estimatedHours;
-      
+
       // Use optimized session distribution instead of simple even distribution
       const sessionLengths = optimizeSessionDistribution(task, totalHours, daysForTask, settings);
       
@@ -1390,8 +1395,11 @@ export const generateNewStudyPlan = (
 
         if (daysForTask.length === 0) continue;
 
+        // SIMPLIFIED: Use full task estimate - regeneration creates fresh plan
+        let totalHours = task.estimatedHours;
+
         // Use optimized session distribution for even spreading
-        const sessionLengths = optimizeSessionDistribution(task, task.estimatedHours, daysForTask, settings);
+        const sessionLengths = optimizeSessionDistribution(task, totalHours, daysForTask, settings);
 
         for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
           let dayIndex = i;
