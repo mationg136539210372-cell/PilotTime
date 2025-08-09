@@ -956,19 +956,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                               </span>
                             )}
                             </div>
-                            {/* Skip button for rescheduled sessions */}
-                            {isRescheduled && session.originalTime && (
-                              <button
-                                onClick={e => { 
-                                  e.stopPropagation(); 
-                                  onSkipMissedSession(plan.date, session.sessionNumber || 0, session.taskId);
-                                }}
-                                className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
-                                title="Skip this rescheduled session"
-                              >
-                                Skip
-                              </button>
-                            )}
+                            {/* Skip button removed from upcoming sessions - only for today's sessions */}
                           </div>
                         </div>
                       );
