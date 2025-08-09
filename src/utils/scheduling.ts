@@ -137,7 +137,7 @@ export const doesCommitmentApplyToDate = (commitment: FixedCommitment, date: str
  * @returns Object indicating if there's a conflict and why
  */
 export const checkFrequencyDeadlineConflict = (
-  task: Pick<Task, 'deadline' | 'estimatedHours' | 'targetFrequency' | 'deadlineType' | 'minWorkBlock'>,
+  task: Pick<Task, 'deadline' | 'estimatedHours' | 'targetFrequency' | 'deadlineType' | 'minWorkBlock' | 'startDate'>,
   settings: UserSettings
 ): { hasConflict: boolean; reason?: string; recommendedFrequency?: string } => {
   // No conflict for tasks without deadlines
@@ -154,16 +154,21 @@ export const checkFrequencyDeadlineConflict = (
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
+  // Respect startDate if provided
+  const start = task.startDate ? new Date(task.startDate) : today;
+  start.setHours(0, 0, 0, 0);
+  const begin = start > today ? start : today;
+  
   // Calculate available days until deadline (respecting buffer)
   const bufferDate = new Date(deadline);
   bufferDate.setDate(bufferDate.getDate() - settings.bufferDays);
   
-  const timeDiff = bufferDate.getTime() - today.getTime();
+  const timeDiff = bufferDate.getTime() - begin.getTime();
   const totalDaysUntilDeadline = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
   
-  // Count work days until deadline
+  // Count work days between begin and bufferDate (inclusive)
   let workDaysCount = 0;
-  const currentDate = new Date(today);
+  const currentDate = new Date(begin);
   
   while (currentDate <= bufferDate) {
     const dayOfWeek = currentDate.getDay();
@@ -218,7 +223,7 @@ export const checkFrequencyDeadlineConflict = (
     
     return {
       hasConflict: true,
-      reason: `Your ${task.targetFrequency} frequency only allows ${maxSessionsWithFrequency} sessions, but you need at least ${minSessionsNeeded} sessions to complete this task before the deadline.`,
+      reason: `Given your start date, your ${task.targetFrequency} frequency only allows ${maxSessionsWithFrequency} sessions, but you need at least ${minSessionsNeeded} sessions to complete this task before the deadline.`,
       recommendedFrequency
     };
   }
@@ -460,7 +465,7 @@ for (const interval of busyIntervals) {
     const endM = (endTime % 60).toString().padStart(2, '0');
     
     if (targetDate) {
-      debugLog(`✓ Found slot: ${startH}:${startM} - ${endH}:${endM}`);
+      debugLog(`Found slot: ${startH}:${startM} - ${endH}:${endM}`);
     }
     
     return { start: `${startH}:${startM}`, end: `${endH}:${endM}` };
@@ -482,14 +487,14 @@ if (finalGap >= requiredMinutes) {
   const endM = (endTime % 60).toString().padStart(2, '0');
   
   if (targetDate) {
-    debugLog(`✓ Found final slot: ${startH}:${startM} - ${endH}:${endM}`);
+    debugLog(`Found final slot: ${startH}:${startM} - ${endH}:${endM}`);
   }
   
   return { start: `${startH}:${startM}`, end: `${endH}:${endM}` };
 }
 
 if (targetDate) {
-  debugLog(`✗ No available slot found for ${requiredHours}h session`);
+  debugLog(`No available slot found for ${requiredHours}h session`);
 }
 
 return null; // No available slot
@@ -594,10 +599,6 @@ export const generateNewStudyPlan = (
   fixedCommitments: FixedCommitment[],
   existingStudyPlans: StudyPlan[] = []
 ): { plans: StudyPlan[]; suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> } => {
-
-  // SIMPLIFIED: No complex hour calculations - regeneration is a fresh start
-  // All missed sessions (redistributable and overdue) remain as-is for manual handling
-  // New study plan uses full task estimates
 
   if (settings.studyPlanMode === 'even') {
     // EVEN DISTRIBUTION LOGIC
@@ -866,7 +867,8 @@ export const generateNewStudyPlan = (
       // Normalize deadline to start of day for comparison with date strings
       const deadlineDateStr = deadline.toISOString().split('T')[0];
       // Include all available days up to and including the deadline day
-      let daysForTask = availableDays.filter(d => d <= deadlineDateStr);
+      const startDateStr = (task as any).startDate || now.toISOString().split('T')[0];
+      let daysForTask = availableDays.filter(d => d >= startDateStr && d <= deadlineDateStr);
       
       // Apply frequency preference if enabled and no conflict detected
       if (task.respectFrequencyForDeadlines !== false && task.targetFrequency) {
@@ -901,9 +903,8 @@ export const generateNewStudyPlan = (
         continue;
       }
       
-      // SIMPLIFIED: Use full task estimate - regeneration creates fresh plan
       let totalHours = task.estimatedHours;
-
+      
       // Use optimized session distribution instead of simple even distribution
       const sessionLengths = optimizeSessionDistribution(task, totalHours, daysForTask, settings);
       
@@ -1042,7 +1043,8 @@ export const generateNewStudyPlan = (
           deadline.setDate(deadline.getDate() - settings.bufferDays);
         }
         const deadlineDateStr = deadline.toISOString().split('T')[0];
-        const daysForTask = availableDays.filter(d => d <= deadlineDateStr);
+        const startDateStrA = (task as any).startDate || now.toISOString().split('T')[0];
+        const daysForTask = availableDays.filter(d => d >= startDateStrA && d <= deadlineDateStr);
         
         // Try to redistribute remaining hours
         const finalUnscheduledHours = redistributeUnscheduledHours(task, unscheduledHours, daysForTask);
@@ -1184,6 +1186,12 @@ export const generateNewStudyPlan = (
         let dayIndex = 0;
         let failedAttempts = 0; // Track failed scheduling attempts
 
+        // Respect task start date for no-deadline tasks
+        const startStr = (task as any).startDate || now.toISOString().split('T')[0];
+        // Initialize dayIndex to first day >= startStr
+        while (dayIndex < availableDays.length && availableDays[dayIndex] < startStr) {
+          dayIndex++;
+        }
         while (remainingHours > 0 && dayIndex < availableDays.length) {
           const currentDate = availableDays[dayIndex];
           const plan = studyPlans.find(p => p.date === currentDate);
@@ -1391,15 +1399,13 @@ export const generateNewStudyPlan = (
           deadline.setDate(deadline.getDate() - settings.bufferDays);
         }
         const deadlineDateStr = deadline.toISOString().split('T')[0];
-        const daysForTask = availableDays.filter(d => d <= deadlineDateStr);
+        const startDateStrB = (task as any).startDate || now.toISOString().split('T')[0];
+        const daysForTask = availableDays.filter(d => d >= startDateStrB && d <= deadlineDateStr);
 
         if (daysForTask.length === 0) continue;
 
-        // SIMPLIFIED: Use full task estimate - regeneration creates fresh plan
-        let totalHours = task.estimatedHours;
-
         // Use optimized session distribution for even spreading
-        const sessionLengths = optimizeSessionDistribution(task, totalHours, daysForTask, settings);
+        const sessionLengths = optimizeSessionDistribution(task, task.estimatedHours, daysForTask, settings);
 
         for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
           let dayIndex = i;
@@ -1700,6 +1706,8 @@ export const generateNewStudyPlan = (
       }
       // Normalize deadline to start of day for comparison
       const deadlineDateStr = deadline.toISOString().split('T')[0];
+      const startDateStrC = (task as any).startDate || now.toISOString().split('T')[0];
+      const daysForTask = availableDays.filter(d => d >= startDateStrC && d <= deadlineDateStr);
       return taskScheduledHours[task.id] < task.estimatedHours && date <= deadlineDateStr;
     });
     for (const task of tasksForDay) {
@@ -2491,7 +2499,8 @@ export const redistributeAfterTaskDeletion = (
       deadline.setDate(deadline.getDate() - settings.bufferDays);
     }
     const deadlineDateStr = deadline.toISOString().split('T')[0];
-    const daysForTask = availableDays.filter(d => d <= deadlineDateStr);
+    const startDateStrD = (task as any).startDate || now.toISOString().split('T')[0];
+    const daysForTask = availableDays.filter(d => d >= startDateStrD && d <= deadlineDateStr);
     
     if (daysForTask.length === 0) {
       continue;
@@ -2583,7 +2592,8 @@ export const redistributeAfterTaskDeletion = (
         deadline.setDate(deadline.getDate() - settings.bufferDays);
       }
       const deadlineDateStr = deadline.toISOString().split('T')[0];
-      const daysForTask = availableDays.filter(d => d <= deadlineDateStr);
+      const startDateStrD = (task as any).startDate || now.toISOString().split('T')[0];
+      const daysForTask = availableDays.filter(d => d >= startDateStrD && d <= deadlineDateStr);
       
       const finalUnscheduledHours = redistributeUnscheduledHours(task, unscheduledHours, daysForTask);
       
