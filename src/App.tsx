@@ -456,11 +456,8 @@ function App() {
             );
 
             if (hasManualReschedules) {
-                const shouldPreserveReschedules = window.confirm(
-                    "You have manually rescheduled sessions. Regenerating the study plan will move them back to their original times. Would you like to preserve your manual reschedules?"
-                );
-
-                if (shouldPreserveReschedules) {
+                // For regular study plan generation, preserve manual reschedules by default
+                // Use the refresh function for options to reset reschedules
                     // Generate plan but preserve manual reschedules
                     const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
                     const newPlans = result.plans;
@@ -511,7 +508,6 @@ function App() {
                     setStudyPlans(newPlans);
                     setLastPlanStaleReason("task");
                     return;
-                }
             }
 
             // Generate new study plan
@@ -555,17 +551,108 @@ function App() {
     };
 
 
-    // Handle redistribution by regenerating the study plan
+    // Handle study plan regeneration (redistribution functionality has been removed)
     const handleRedistributeMissedSessions = () => {
         if (tasks.length > 0) {
             try {
-                // Simply regenerate the study plan which will incorporate missed sessions
+                // Simply regenerate the study plan
                 handleGenerateStudyPlan();
-                setNotificationMessage('Study plan regenerated successfully! Missed sessions have been incorporated into the new plan.');
+                setNotificationMessage('Study plan regenerated successfully!');
                 setTimeout(() => setNotificationMessage(''), 5000);
             } catch (error) {
                 console.error('Study plan regeneration failed:', error);
                 setNotificationMessage('Failed to regenerate study plan. Please try again.');
+                setTimeout(() => setNotificationMessage(''), 5000);
+            }
+        }
+    };
+
+    // Handle refresh study plan with preserve option (no browser dialog)
+    const handleRefreshStudyPlan = (preserveManualReschedules: boolean) => {
+        if (tasks.length > 0) {
+            try {
+                // Generate new study plan
+                const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+                const newPlans = result.plans;
+
+                if (preserveManualReschedules) {
+                    // Enhanced preservation logic
+                    newPlans.forEach(plan => {
+                        const prevPlan = studyPlans.find(p => p.date === plan.date);
+                        if (!prevPlan) return;
+
+                        plan.plannedTasks.forEach(session => {
+                            const prevSession = prevPlan.plannedTasks.find(s =>
+                                s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+                            );
+                            if (prevSession) {
+                                // Preserve done sessions
+                                if (prevSession.done) {
+                                    session.done = true;
+                                    session.status = prevSession.status;
+                                    session.actualHours = prevSession.actualHours;
+                                    session.completedAt = prevSession.completedAt;
+                                }
+                                // Preserve skipped sessions
+                                else if (prevSession.status === 'skipped') {
+                                    session.status = 'skipped';
+                                }
+                                // Preserve manual reschedules
+                                else if (prevSession.originalTime && prevSession.originalDate && prevSession.isManualOverride) {
+                                    session.originalTime = prevSession.originalTime;
+                                    session.originalDate = prevSession.originalDate;
+                                    session.startTime = prevSession.startTime;
+                                    session.endTime = prevSession.endTime;
+                                    session.rescheduledAt = prevSession.rescheduledAt;
+                                    session.isManualOverride = prevSession.isManualOverride;
+                                }
+                                // Preserve other rescheduled sessions (but allow regeneration of times)
+                                else if (prevSession.originalTime && prevSession.originalDate) {
+                                    session.originalTime = prevSession.originalTime;
+                                    session.originalDate = prevSession.originalDate;
+                                    session.rescheduledAt = prevSession.rescheduledAt;
+                                    session.isManualOverride = prevSession.isManualOverride;
+                                }
+                            }
+                        });
+                    });
+                } else {
+                    // Only preserve done and skipped sessions, reset manual reschedules
+                    newPlans.forEach(plan => {
+                        const prevPlan = studyPlans.find(p => p.date === plan.date);
+                        if (!prevPlan) return;
+
+                        plan.plannedTasks.forEach(session => {
+                            const prevSession = prevPlan.plannedTasks.find(s =>
+                                s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+                            );
+                            if (prevSession) {
+                                // Preserve done sessions
+                                if (prevSession.done) {
+                                    session.done = true;
+                                    session.status = prevSession.status;
+                                    session.actualHours = prevSession.actualHours;
+                                    session.completedAt = prevSession.completedAt;
+                                }
+                                // Preserve skipped sessions
+                                else if (prevSession.status === 'skipped') {
+                                    session.status = 'skipped';
+                                }
+                            }
+                        });
+                    });
+                }
+
+                setStudyPlans(newPlans);
+                setLastPlanStaleReason("task");
+                setNotificationMessage(preserveManualReschedules ?
+                    'Study plan refreshed! Manual reschedules preserved.' :
+                    'Study plan refreshed! All sessions optimally rescheduled.'
+                );
+                setTimeout(() => setNotificationMessage(''), 5000);
+            } catch (error) {
+                console.error('Study plan refresh failed:', error);
+                setNotificationMessage('Failed to refresh study plan. Please try again.');
                 setTimeout(() => setNotificationMessage(''), 5000);
             }
         }
@@ -2021,7 +2108,8 @@ function App() {
                             settings={settings}
                             onAddFixedCommitment={handleAddFixedCommitment}
                             onSkipMissedSession={handleSkipMissedSession}
-                onRedistributeMissedSessions={handleRedistributeMissedSessions}
+                            onRedistributeMissedSessions={handleRedistributeMissedSessions}
+                            onRefreshStudyPlan={handleRefreshStudyPlan}
                             onUpdateTask={handleUpdateTask}
                             onMarkMissedSessionDone={handleMarkMissedSessionDone}
                         />
@@ -2032,6 +2120,7 @@ function App() {
                             studyPlans={studyPlans}
                             fixedCommitments={fixedCommitments}
                             tasks={tasks}
+                            settings={settings}
                             onSelectTask={handleSelectTask}
                             onStartManualSession={(commitment, durationSeconds) => {
                                 setGlobalTimer({
@@ -2057,6 +2146,7 @@ function App() {
                                 setActiveTab('timer');
                             }}
                             onDeleteFixedCommitment={handleDeleteFixedCommitment}
+                            onUpdateStudyPlans={setStudyPlans}
                         />
                     )}
 
@@ -2376,7 +2466,7 @@ function App() {
                                                         <ul className="ml-4 mt-1 space-y-1">
                                                             <li>• Check your schedule each morning and adjust if needed</li>
                                                             <li>• Use the timer to track actual study time</li>
-                                                            <li>• Mark sessions as complete or missed accurately</li>
+                                                            <li>�� Mark sessions as complete or missed accurately</li>
                                                             <li>• Regenerate your plan if you add new tasks or commitments</li>
                                                         </ul>
                                                     </div>

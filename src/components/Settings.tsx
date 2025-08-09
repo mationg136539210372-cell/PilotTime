@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Clock, AlertTriangle, Calendar, Zap, Sun, Plus, Trash2, Edit3 } from 'lucide-react';
 import { UserSettings, StudyPlan, DateSpecificStudyWindow } from '../types';
-import { checkSessionStatus } from '../utils/scheduling';
 
 interface SettingsProps {
   settings: UserSettings;
@@ -146,41 +145,7 @@ const Settings: React.FC<SettingsProps> = ({
     return { isValid: true, message: "" };
   };
 
-  const validateMissedSessions = () => {
-    // Check for missed sessions across all study plans
-    const missedSessions = studyPlans.flatMap(plan => 
-      plan.plannedTasks.filter(session => {
-        const status = checkSessionStatus(session, plan.date);
-        return status === 'missed';
-      })
-    );
 
-    if (missedSessions.length > 0) {
-      return {
-        isValid: false,
-        message: `You have ${missedSessions.length} missed session${missedSessions.length > 1 ? 's' : ''}. Please go to the Study Plan tab to redistribute or skip these sessions before changing settings.`
-      };
-    }
-    return { isValid: true, message: "" };
-  };
-
-  const validateRescheduledSessions = () => {
-    // Check for rescheduled/redistributed sessions across all study plans
-    const rescheduledSessions = studyPlans.flatMap(plan => 
-      plan.plannedTasks.filter(session => {
-        // Check if session is manually rescheduled or redistributed
-        return session.isManualOverride === true || (!!session.originalTime && !!session.originalDate);
-      })
-    );
-
-    if (rescheduledSessions.length > 0) {
-      return {
-        isValid: false,
-        message: `You have ${rescheduledSessions.length} rescheduled session${rescheduledSessions.length > 1 ? 's' : ''}. Please go to the Study Plan tab to handle these sessions before changing settings.`
-      };
-    }
-    return { isValid: true, message: "" };
-  };
 
   const getValidationMessages = () => {
     const messages = [];
@@ -214,16 +179,6 @@ const Settings: React.FC<SettingsProps> = ({
     if (!bufferValidation.isValid) {
       messages.push({ type: 'warning', message: bufferValidation.message });
     }
-
-    const missedSessionsValidation = validateMissedSessions();
-    if (!missedSessionsValidation.isValid) {
-      messages.push({ type: 'error', message: missedSessionsValidation.message });
-    }
-    
-    const rescheduledSessionsValidation = validateRescheduledSessions();
-    if (!rescheduledSessionsValidation.isValid) {
-      messages.push({ type: 'error', message: rescheduledSessionsValidation.message });
-    }
     
     return messages;
   };
@@ -232,20 +187,6 @@ const Settings: React.FC<SettingsProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Check for missed sessions before saving
-    const missedSessionsValidation = validateMissedSessions();
-    if (!missedSessionsValidation.isValid) {
-      // Don't save settings if there are missed sessions
-      return;
-    }
-    
-    // Check for rescheduled sessions before saving
-    const rescheduledSessionsValidation = validateRescheduledSessions();
-    if (!rescheduledSessionsValidation.isValid) {
-      // Don't save settings if there are rescheduled sessions
-      return;
-    }
     
     onUpdateSettings({
       dailyAvailableHours,

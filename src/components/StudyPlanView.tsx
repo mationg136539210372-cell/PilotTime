@@ -14,6 +14,7 @@ interface StudyPlanViewProps {
   onAddFixedCommitment?: (commitment: FixedCommitment) => void; // NEW PROP
   onSkipMissedSession: (planDate: string, sessionNumber: number, taskId: string) => void;
   onRedistributeMissedSessions?: () => void; // NEW PROP for redistribution
+  onRefreshStudyPlan?: (preserveManualReschedules: boolean) => void; // NEW PROP for refresh with options
   onUpdateTask?: (taskId: string, updates: Partial<Task>) => void; // NEW PROP for task completion
   onMarkMissedSessionDone?: (planDate: string, sessionNumber: number, taskId: string) => void; // NEW PROP for marking missed sessions as done
 }
@@ -25,10 +26,12 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, settings, onAddFixedCommitment, onSkipMissedSession, onRedistributeMissedSessions, onUpdateTask, onMarkMissedSessionDone }) => {
+const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, settings, onAddFixedCommitment, onSkipMissedSession, onRedistributeMissedSessions, onRefreshStudyPlan, onUpdateTask, onMarkMissedSessionDone }) => {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [] = useState<{ taskTitle: string; unscheduledMinutes: number } | null>(null);
   const [showRegenerateConfirmation, setShowRegenerateConfirmation] = useState(false);
+  const [showRefreshConfirmation, setShowRefreshConfirmation] = useState(false);
+  const [hasManualReschedules, setHasManualReschedules] = useState(false);
   // Resched UI state
   const [reschedModal, setReschedModal] = useState<{ open: boolean; task: any | null }>({ open: false, task: null });
   const [reschedDate, setReschedDate] = useState<string>("");
@@ -296,8 +299,61 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
     setTimeout(() => setNotificationMessage(null), 3000);
   };
 
+  // Function to check if there are manual reschedules
+  const checkForManualReschedules = () => {
+    return studyPlans.some(plan =>
+      plan.plannedTasks.some(session =>
+        session.originalTime && session.originalDate && session.isManualOverride
+      )
+    );
+  };
+
+  // Handle refresh button click
+  const handleRefreshClick = () => {
+    const hasReschedules = checkForManualReschedules();
+    if (hasReschedules) {
+      setHasManualReschedules(true);
+      setShowRefreshConfirmation(true);
+    } else {
+      // No manual reschedules, directly refresh
+      if (onRefreshStudyPlan) {
+        onRefreshStudyPlan(false);
+      }
+    }
+  };
+
+  // Handle refresh confirmation
+  const handleRefreshConfirm = (preserveReschedules: boolean) => {
+    setShowRefreshConfirmation(false);
+    if (onRefreshStudyPlan) {
+      onRefreshStudyPlan(preserveReschedules);
+    }
+  };
+
   return (
     <div className="space-y-6 relative study-plan-container">
+      {/* Study Plan Header with Refresh Button */}
+      {studyPlans.length > 0 && (
+        <div className="bg-white rounded-xl shadow-lg p-6 dark:bg-gray-900 dark:shadow-gray-900">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Study Plan</h2>
+            </div>
+            <button
+              onClick={handleRefreshClick}
+              className="px-4 py-2 bg-gradient-to-r from-green-500 to-blue-600 text-white text-sm rounded-lg hover:from-green-600 hover:to-blue-700 transition-colors flex items-center space-x-2"
+              title="Refresh and regenerate your study plan"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Refresh Plan</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Missed Sessions Section */}
       {(missedSessions.length > 0 || overdueMissedSessions.length > 0) && (
         <div className={`bg-white rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900 border-l-4 ${(missedSessions.length > 0 || overdueMissedSessions.length > 0) ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}>
@@ -329,7 +385,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     <span>Regenerating...</span>
                   </div>
                 ) : (
-                  'Redistribute Sessions'
+                  'Regenerate Study Plan'
                 )}
               </button>
             </div>
@@ -340,10 +396,10 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               <>
                 <p>You have missed study sessions. Available actions:</p>
                 <ul className="mt-2 space-y-1">
-                  <li>• <strong>Skip</strong> any missed session (marks as completed, won't be redistributed)</li>
+                  <li>• <strong>Skip</strong> any missed session (marks as completed)</li>
                   <li>• <strong>Start studying</strong> any missed session now</li>
                   {missedSessions.length > 0 && (
-                    <li>• <strong>Redistribute Sessions</strong> regenerates your study plan to incorporate missed sessions</li>
+                    <li>• <strong>Regenerate Study Plan</strong> creates a new study plan</li>
                   )}
                   {overdueMissedSessions.length > 0 && (
                     <>
@@ -430,7 +486,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     Sessions for overdue tasks (deadline passed):
                   </h3>
                   <span className="text-xs text-orange-600 dark:text-orange-400">
-                    Redistribution not available
+                    Tasks past deadline
                   </span>
                 </div>
                 {overdueMissedSessions.map(({planDate, session, task}, idx) => (
@@ -679,6 +735,62 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                   className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-colors"
                 >
                   Yes, Generate Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refresh Confirmation Modal */}
+      {showRefreshConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center space-x-2">
+                  <AlertTriangle className="text-orange-500" size={24} />
+                  <span>Refresh Study Plan?</span>
+                </h2>
+                <button
+                  onClick={() => setShowRefreshConfirmation(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <p className="text-gray-600 dark:text-gray-300">
+                  You have manually rescheduled sessions. Refreshing the study plan will affect these changes.
+                </p>
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    <strong>Choose an option:</strong>
+                  </p>
+                  <ul className="text-sm text-yellow-700 dark:text-yellow-300 mt-1 space-y-1">
+                    <li>• <strong>Preserve reschedules:</strong> Keep your manual changes and optimize around them</li>
+                    <li>• <strong>Start fresh:</strong> Reset all sessions to optimally calculated times</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="flex flex-col space-y-2 mt-6">
+                <button
+                  onClick={() => handleRefreshConfirm(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-green-600 text-white rounded-lg hover:from-blue-600 hover:to-green-700 transition-colors"
+                >
+                  Preserve My Manual Reschedules
+                </button>
+                <button
+                  onClick={() => handleRefreshConfirm(false)}
+                  className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-colors"
+                >
+                  Start Fresh (Reset All)
+                </button>
+                <button
+                  onClick={() => setShowRefreshConfirmation(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                >
+                  Cancel
                 </button>
               </div>
             </div>

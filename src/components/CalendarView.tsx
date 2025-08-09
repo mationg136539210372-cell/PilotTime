@@ -1,22 +1,29 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
+import withDragAndDrop, { withDragAndDropProps } from 'react-big-calendar/lib/addons/dragAndDrop';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { StudyPlan, FixedCommitment, Task } from '../types';
+import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
+import { StudyPlan, FixedCommitment, Task, StudySession, UserSettings } from '../types';
 import { BookOpen, Clock, Settings, X } from 'lucide-react';
-import { checkSessionStatus } from '../utils/scheduling';
+import { checkSessionStatus, validateTimeSlot, doesCommitmentApplyToDate } from '../utils/scheduling';
 import { getLocalDateString } from '../utils/scheduling';
 import MobileCalendarView from './MobileCalendarView';
 
 const localizer = momentLocalizer(moment);
+const DragAndDropCalendar = withDragAndDrop(Calendar);
 
 interface CalendarViewProps {
   studyPlans: StudyPlan[];
   fixedCommitments: FixedCommitment[];
   tasks: Task[];
+  settings?: UserSettings;
   onSelectTask?: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
   onStartManualSession?: (commitment: FixedCommitment, durationSeconds: number) => void;
   onDeleteFixedCommitment?: (commitmentId: string) => void;
+  onUpdateStudyPlans?: (updatedPlans: StudyPlan[]) => void;
 }
 
 interface CalendarEvent {
@@ -90,9 +97,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   studyPlans,
   fixedCommitments,
   tasks,
+  settings,
   onSelectTask,
   onStartManualSession,
   onDeleteFixedCommitment,
+  onUpdateStudyPlans,
 }) => {
   const [timeInterval, setTimeInterval] = useState(() => {
     const saved = localStorage.getItem('timepilot-calendar-interval');
@@ -125,6 +134,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   });
   const [selectedManualSession, setSelectedManualSession] = useState<FixedCommitment | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragFeedback, setDragFeedback] = useState<string>('');
 
 
   // Mobile detection
@@ -486,6 +497,252 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
   };
 
+  // Utility function to find available time slots
+  const findNearestAvailableSlot = (targetStart: Date, sessionDuration: number, targetDate: string): { start: Date; end: Date } | null => {
+    if (!settings) return null;
+
+    // Get all busy slots for the target date
+    const busySlots: Array<{ start: Date; end: Date }> = [];
+
+    // Add existing study sessions
+    studyPlans.forEach(plan => {
+      if (plan.date === targetDate) {
+        plan.plannedTasks.forEach(session => {
+          if (session.status !== 'skipped' && session.startTime && session.endTime) {
+            const sessionStart = moment(targetDate + ' ' + session.startTime).toDate();
+            const sessionEnd = moment(targetDate + ' ' + session.endTime).toDate();
+            busySlots.push({ start: sessionStart, end: sessionEnd });
+          }
+        });
+      }
+    });
+
+    // Add fixed commitments
+    fixedCommitments.forEach(commitment => {
+      if (doesCommitmentApplyToDate(commitment, targetDate) && commitment.startTime && commitment.endTime) {
+        const commitmentStart = moment(targetDate + ' ' + commitment.startTime).toDate();
+        const commitmentEnd = moment(targetDate + ' ' + commitment.endTime).toDate();
+        busySlots.push({ start: commitmentStart, end: commitmentEnd });
+      }
+    });
+
+    // Sort busy slots by start time
+    busySlots.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    // Set study window boundaries
+    const dayStart = moment(targetDate).hour(settings.studyWindowStartHour || 6).minute(0).second(0).toDate();
+    const dayEnd = moment(targetDate).hour(settings.studyWindowEndHour || 23).minute(0).second(0).toDate();
+
+    const sessionDurationMs = sessionDuration * 60 * 60 * 1000;
+    const bufferTimeMs = (settings.bufferTimeBetweenSessions || 0) * 60 * 1000; // Convert minutes to ms
+
+    // Function to check if a slot is valid
+    const isSlotValid = (slotStart: Date, slotEnd: Date) => {
+      // Check if within study window
+      if (slotStart < dayStart || slotEnd > dayEnd) return false;
+
+      // Check if it conflicts with any busy slot
+      for (const busySlot of busySlots) {
+        const adjustedStart = new Date(slotStart.getTime() - bufferTimeMs);
+        const adjustedEnd = new Date(slotEnd.getTime() + bufferTimeMs);
+
+        if (adjustedStart < busySlot.end && adjustedEnd > busySlot.start) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    // Try to find the nearest available slot to the target time
+    const gridSize = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+    // Round target time to nearest 15-minute interval
+    const roundedTarget = new Date(Math.round(targetStart.getTime() / gridSize) * gridSize);
+
+    // Search for available slots starting from the rounded target time
+    for (let offset = 0; offset <= 12 * 60 * 60 * 1000; offset += gridSize) { // Search within 12 hours
+      // Try both directions from target time
+      for (const direction of [1, -1]) {
+        const testStart = new Date(roundedTarget.getTime() + (direction * offset));
+        const testEnd = new Date(testStart.getTime() + sessionDurationMs);
+
+        if (isSlotValid(testStart, testEnd)) {
+          return { start: testStart, end: testEnd };
+        }
+      }
+    }
+
+    return null;
+  };
+
+  // Handle drag start
+  const handleDragStart = () => {
+    setIsDragging(true);
+    setDragFeedback('');
+  };
+
+  // Handle event drop
+  const handleEventDrop = ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    setIsDragging(false);
+
+    // Only allow dragging study sessions, not commitments
+    if (event.resource.type !== 'study' || !onUpdateStudyPlans || !settings) {
+      setDragFeedback('Only study sessions can be moved');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    const session = event.resource.data as StudySession;
+    const targetDate = moment(start).format('YYYY-MM-DD');
+    const sessionDuration = session.allocatedHours;
+
+    // Check if target day is a work day
+    const targetDayOfWeek = moment(start).day();
+    if (!settings.workDays.includes(targetDayOfWeek)) {
+      setDragFeedback(`Cannot move session to ${moment(start).format('dddd')} - not a work day`);
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Find the nearest available slot
+    const availableSlot = findNearestAvailableSlot(start, sessionDuration, targetDate);
+
+    if (!availableSlot) {
+      setDragFeedback('No available time slot found for this session');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Get the original plan date where the session was dragged from
+    const originalPlanDate = event.resource.data.planDate;
+
+    // Update the study plans
+    const updatedPlans = studyPlans.map(plan => {
+      if (plan.date === targetDate) {
+        // Add session to target date
+        const newSession = {
+          ...session,
+          startTime: moment(availableSlot.start).format('HH:mm'),
+          endTime: moment(availableSlot.end).format('HH:mm'),
+          originalTime: session.originalTime || session.startTime,
+          originalDate: session.originalDate || originalPlanDate,
+          rescheduledAt: new Date().toISOString(),
+          isManualOverride: true
+        };
+
+        // Check if session already exists in this plan
+        const existingSessionIndex = plan.plannedTasks.findIndex(s =>
+          s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+        );
+
+        if (existingSessionIndex >= 0) {
+          // Update existing session
+          const updatedTasks = [...plan.plannedTasks];
+          updatedTasks[existingSessionIndex] = newSession;
+          return { ...plan, plannedTasks: updatedTasks };
+        } else {
+          // Add new session
+          return {
+            ...plan,
+            plannedTasks: [...plan.plannedTasks, newSession]
+          };
+        }
+      } else if (plan.date === originalPlanDate) {
+        // Remove session ONLY from the original plan date (where it was dragged from)
+        const updatedTasks = plan.plannedTasks.filter(s =>
+          !(s.taskId === session.taskId && s.sessionNumber === session.sessionNumber)
+        );
+        return { ...plan, plannedTasks: updatedTasks };
+      } else {
+        // For all other plans, leave them unchanged
+        return plan;
+      }
+    });
+
+    // If target date doesn't exist in plans, create it
+    const targetPlanExists = updatedPlans.some(plan => plan.date === targetDate);
+    if (!targetPlanExists) {
+      const newSession = {
+        ...session,
+        startTime: moment(availableSlot.start).format('HH:mm'),
+        endTime: moment(availableSlot.end).format('HH:mm'),
+        originalTime: session.originalTime || session.startTime,
+        originalDate: session.originalDate || originalPlanDate,
+        rescheduledAt: new Date().toISOString(),
+        isManualOverride: true
+      };
+
+      updatedPlans.push({
+        id: `plan-${targetDate}`,
+        date: targetDate,
+        plannedTasks: [newSession],
+        totalStudyHours: sessionDuration,
+        isOverloaded: false,
+        availableHours: settings.dailyAvailableHours
+      });
+
+      // Also remove from original plan if it exists
+      const originalPlanIndex = updatedPlans.findIndex(plan => plan.date === originalPlanDate);
+      if (originalPlanIndex >= 0) {
+        const originalPlan = updatedPlans[originalPlanIndex];
+        const updatedOriginalTasks = originalPlan.plannedTasks.filter(s =>
+          !(s.taskId === session.taskId && s.sessionNumber === session.sessionNumber)
+        );
+        updatedPlans[originalPlanIndex] = { ...originalPlan, plannedTasks: updatedOriginalTasks };
+      }
+    }
+
+    onUpdateStudyPlans(updatedPlans);
+
+    const snappedTime = moment(availableSlot.start).format('HH:mm');
+    setDragFeedback(`Session moved to ${moment(targetDate).format('MMM D')} at ${snappedTime}`);
+    setTimeout(() => setDragFeedback(''), 3000);
+  };
+
+  // Handle event resize
+  const handleEventResize = ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    // Only allow resizing study sessions
+    if (event.resource.type !== 'study' || !onUpdateStudyPlans) {
+      setDragFeedback('Only study sessions can be resized');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    const session = event.resource.data as StudySession;
+    const newDuration = moment(end).diff(moment(start), 'hours', true);
+
+    // Validate minimum duration (15 minutes)
+    if (newDuration < 0.25) {
+      setDragFeedback('Session must be at least 15 minutes long');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Update the study plans
+    const updatedPlans = studyPlans.map(plan => {
+      return {
+        ...plan,
+        plannedTasks: plan.plannedTasks.map(s => {
+          if (s.taskId === session.taskId && s.sessionNumber === session.sessionNumber) {
+            return {
+              ...s,
+              startTime: moment(start).format('HH:mm'),
+              endTime: moment(end).format('HH:mm'),
+              allocatedHours: newDuration,
+              rescheduledAt: new Date().toISOString(),
+              isManualOverride: true
+            };
+          }
+          return s;
+        })
+      };
+    });
+
+    onUpdateStudyPlans(updatedPlans);
+    setDragFeedback(`Session resized to ${newDuration.toFixed(1)} hours`);
+    setTimeout(() => setDragFeedback(''), 3000);
+  };
+
 
   // Custom event style for modern look, now color-coded by priority or type
   const eventStyleGetter = (event: CalendarEvent, start: Date, _end: Date, isSelected: boolean) => {
@@ -776,20 +1033,28 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   }
 
   return (
-    <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-2xl shadow-xl p-6 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 dark:shadow-gray-900 dark:text-gray-100">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-2 dark:text-white">
-          <BookOpen className="text-blue-600 dark:text-blue-400" size={28} />
-          <span>Smart Calendar</span>
-        </h2>
-        <button
-          onClick={() => setShowColorSettings(true)}
-          className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
-          title="Customize Colors"
-        >
-          <Settings size={20} className="text-gray-600 dark:text-gray-300" />
-        </button>
-      </div>
+    <DndProvider backend={HTML5Backend}>
+      <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-2xl shadow-xl p-6 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 dark:shadow-gray-900 dark:text-gray-100">
+        {/* Drag feedback notification */}
+        {dragFeedback && (
+          <div className="fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+            {dragFeedback}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center space-x-2 dark:text-white">
+            <BookOpen className="text-blue-600 dark:text-blue-400" size={28} />
+            <span>Smart Calendar {isDragging && <span className="text-sm text-blue-500">(Dragging...)</span>}</span>
+          </h2>
+          <button
+            onClick={() => setShowColorSettings(true)}
+            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+            title="Customize Colors"
+          >
+            <Settings size={20} className="text-gray-600 dark:text-gray-300" />
+          </button>
+        </div>
       {/* Legends */}
       <div className="mb-4 flex flex-wrap gap-4">
         {/* Task Category Legends - Only show default categories that exist in tasks */}
@@ -854,7 +1119,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         }}
         className="calendar-grid-container dark:bg-gray-900 dark:bg-opacity-95"
       >
-        <Calendar
+        <DragAndDropCalendar
           localizer={localizer}
           events={events}
           startAccessor="start"
@@ -885,6 +1150,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           }}
           rtl={false}
           dayLayoutAlgorithm="no-overlap"
+          draggableAccessor={(event) => event.resource.type === 'study'}
+          resizable={true}
+          onEventDrop={handleEventDrop}
+          onEventResize={handleEventResize}
+          onDragStart={handleDragStart}
         />
       </div>
       {/* Add custom CSS for thicker interval lines and better spacing */}
@@ -1002,6 +1272,47 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         
         .dark .rbc-timeslot-group.rbc-past {
           background-color: #1f2937 !important;
+        }
+
+        /* Drag and Drop Styles */
+        .rbc-addons-dnd-drag-preview {
+          background-color: rgba(59, 130, 246, 0.1) !important;
+          border: 2px dashed #3b82f6 !important;
+          opacity: 0.7 !important;
+        }
+
+        .rbc-addons-dnd-over {
+          background-color: rgba(34, 197, 94, 0.1) !important;
+          border: 2px solid #22c55e !important;
+        }
+
+        .rbc-event.rbc-addons-dnd-dragged-event {
+          opacity: 0.5 !important;
+          cursor: grabbing !important;
+        }
+
+        .rbc-event:hover {
+          cursor: grab !important;
+        }
+
+        /* Resize handles */
+        .rbc-addons-dnd-resize-south-anchor,
+        .rbc-addons-dnd-resize-north-anchor {
+          background-color: #3b82f6 !important;
+          height: 6px !important;
+          width: 100% !important;
+          opacity: 0 !important;
+          transition: opacity 0.2s !important;
+        }
+
+        .rbc-event:hover .rbc-addons-dnd-resize-south-anchor,
+        .rbc-event:hover .rbc-addons-dnd-resize-north-anchor {
+          opacity: 1 !important;
+        }
+
+        /* Only allow drag on study sessions */
+        .rbc-event[data-event-type="commitment"] {
+          cursor: default !important;
         }
       `}</style>
 
@@ -1224,7 +1535,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       )}
 
-    </div>
+      </div>
+    </DndProvider>
   );
 };
 
