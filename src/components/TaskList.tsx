@@ -32,6 +32,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showFrequencyInfo, setShowFrequencyInfo] = useState(false);
 
   // Auto-detect deadline type based on whether deadline is set (similar to TaskInput)
   React.useEffect(() => {
@@ -357,9 +358,19 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                       {/* Work Frequency Preference - Dropdown */}
                       {!editFormData.isOneTimeTask && (
                         <div className="mt-4">
-                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                            How often would you like to work on this?
-                          </label>
+                          <div className="flex items-center gap-2 mb-2">
+                            <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                              How often would you like to work on this?
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setShowFrequencyInfo(!showFrequencyInfo)}
+                              className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                              title="About frequency preferences"
+                            >
+                              <Info size={16} />
+                            </button>
+                          </div>
                           <select
                             value={editFormData.targetFrequency || 'daily'}
                             onChange={(e) => setEditFormData({ ...editFormData, targetFrequency: e.target.value as any })}
@@ -384,6 +395,22 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                                       <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
                                     </div>
                                   )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Collapsible information about frequency preferences and study plan modes */}
+                          {showFrequencyInfo && (
+                            <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded text-xs">
+                              <div className="flex items-start gap-1">
+                                <span className="text-blue-600 dark:text-blue-400">ℹ️</span>
+                                <div className="text-blue-700 dark:text-blue-300">
+                                  <div className="font-medium">About Frequency Preferences</div>
+                                  <div className="mt-1">
+                                    Frequency preferences are only applied when using <strong>"Evenly Distributed"</strong> study plan mode.
+                                    Other modes (Eisenhower Matrix, Balanced Priority) prioritize tasks by importance/urgency instead.
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -491,65 +518,29 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                           </div>
 
                           {/* Additional options for deadline tasks */}
-                          <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
-                            <div>
-                              <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
-                                <input
-                                  type="checkbox"
-                                  checked={editFormData.respectFrequencyForDeadlines !== false}
-                                  onChange={(e) => setEditFormData({ ...editFormData, respectFrequencyForDeadlines: e.target.checked })}
-                                  className="text-blue-600"
-                                />
-                                Respect frequency preference for deadline tasks
-                              </label>
-                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                Uncheck to allow daily scheduling for urgent deadline tasks regardless of frequency preference
+                          {/* Only show advanced options for no-deadline tasks */}
+                          {editFormData.deadlineType === 'none' && (
+                            <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Maximum session length</label>
+                                <select
+                                  value={editFormData.maxSessionLength || 2}
+                                  onChange={(e) => setEditFormData({ ...editFormData, maxSessionLength: parseFloat(e.target.value) })}
+                                  className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                                >
+                                  <option value={1}>1 hour</option>
+                                  <option value={1.5}>1.5 hours</option>
+                                  <option value={2}>2 hours</option>
+                                  <option value={2.5}>2.5 hours</option>
+                                  <option value={3}>3 hours</option>
+                                  <option value={4}>4 hours</option>
+                                </select>
+                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                  Sessions will be capped at this length to maintain focus
+                                </div>
                               </div>
                             </div>
-
-                            {/* Additional preferences for no-deadline tasks */}
-                            {editFormData.deadlineType === 'none' && (
-                              <>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Preferred time</label>
-                                  <div className="flex gap-2">
-                                    {['morning', 'afternoon', 'evening'].map(timeSlot => (
-                                      <label key={timeSlot} className="flex items-center gap-1">
-                                        <input
-                                          type="checkbox"
-                                          checked={(editFormData.preferredTimeSlots || []).includes(timeSlot as any)}
-                                          onChange={(e) => {
-                                            const timeSlots = editFormData.preferredTimeSlots || [];
-                                            if (e.target.checked) {
-                                              setEditFormData({ ...editFormData, preferredTimeSlots: [...timeSlots, timeSlot as any] });
-                                            } else {
-                                              setEditFormData({ ...editFormData, preferredTimeSlots: timeSlots.filter(t => t !== timeSlot) });
-                                            }
-                                          }}
-                                        />
-                                        <span className="capitalize text-xs text-gray-700 dark:text-gray-300">{timeSlot}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Maximum session length</label>
-                                  <select
-                                    value={editFormData.maxSessionLength || 2}
-                                    onChange={(e) => setEditFormData({ ...editFormData, maxSessionLength: parseInt(e.target.value) })}
-                                    className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
-                                  >
-                                    <option value={1}>1 hour</option>
-                                    <option value={1.5}>1.5 hours</option>
-                                    <option value={2}>2 hours</option>
-                                    <option value={3}>3 hours</option>
-                                    <option value={4}>4 hours</option>
-                                  </select>
-                                </div>
-                              </>
-                            )}
-                          </div>
+                          )}
                         </div>
                       )}
                     </div>
