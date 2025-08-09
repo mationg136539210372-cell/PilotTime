@@ -20,6 +20,7 @@ export interface Task {
   minWorkBlock?: number; // Minimum meaningful work session in minutes (only for deadline tasks)
   maxSessionLength?: number; // Maximum session length in hours (only for no-deadline tasks)
   isOneTimeTask?: boolean; // Task should be completed in one sitting, not divided into sessions
+  startDate?: string; // New: earliest date the task can be scheduled (YYYY-MM-DD)
 }
 
 export interface SessionSchedulingMetadata {
