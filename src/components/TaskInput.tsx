@@ -1,13 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { Task, UserSettings } from '../types';
+import { Task, UserSettings, StudyPlan, FixedCommitment } from '../types';
 import { checkFrequencyDeadlineConflict } from '../utils/scheduling';
+import { checkTaskFeasibility } from '../utils/task-feasibility';
 import TimeEstimationModal from './TimeEstimationModal';
+import TaskFeasibilityWarnings from './TaskFeasibilityWarnings';
 
 interface TaskInputProps {
   onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   onCancel?: () => void;
   userSettings: UserSettings;
+  existingTasks?: Task[];
+  studyPlans?: StudyPlan[];
+  commitments?: FixedCommitment[];
 }
 
 
@@ -97,7 +102,14 @@ const TASK_TYPE_MAP: Record<string, keyof typeof EST_HELPER_CONFIG> = {
   Communicating: 'Administrative', // treat as Administrative for now
 };
 
-const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings }) => {
+const TaskInput: React.FC<TaskInputProps> = ({
+  onAddTask,
+  onCancel,
+  userSettings,
+  existingTasks = [],
+  studyPlans = [],
+  commitments = []
+}) => {
   const [showEstimationHelper, setShowEstimationHelper] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -230,6 +242,107 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
     return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
   }, [formData.deadline, formData.estimatedHours, formData.estimatedMinutes, formData.targetFrequency, formData.deadlineType, formData.minWorkBlock, userSettings]);
 
+  // Comprehensive feasibility checking
+  const feasibilityResult = useMemo(() => {
+    // Only run feasibility check if we have minimum required data
+    if (!formData.title.trim() || convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes) <= 0) {
+      return { isValid: true, warnings: [] };
+    }
+
+    const taskDataForCheck = {
+      title: formData.title,
+      deadline: formData.deadline,
+      estimatedHours: convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes),
+      targetFrequency: formData.targetFrequency,
+      deadlineType: formData.deadlineType,
+      importance: formData.importance,
+      category: formData.category === 'Other' ? formData.customCategory : formData.category,
+      minWorkBlock: formData.minWorkBlock,
+      maxSessionLength: formData.maxSessionLength,
+      isOneTimeTask: formData.isOneTimeTask,
+      preferredTimeSlots: formData.preferredTimeSlots
+    };
+
+    const result = checkTaskFeasibility(
+      taskDataForCheck,
+      userSettings,
+      existingTasks,
+      studyPlans,
+      commitments
+    );
+
+    console.log('📊 Feasibility Result:', {
+      isValid: result.isValid,
+      warningCount: result.warnings.length,
+      criticalWarnings: result.warnings.filter(w => w.severity === 'critical').length,
+      hasCriticalFeasibilityIssues: result.warnings?.some(w => w.severity === 'critical') || false,
+      taskData: taskDataForCheck,
+      userSettings: {
+        dailyAvailableHours: userSettings.dailyAvailableHours,
+        workDays: userSettings.workDays
+      }
+    });
+
+    return result;
+  }, [
+    formData.title,
+    formData.deadline,
+    formData.estimatedHours,
+    formData.estimatedMinutes,
+    formData.targetFrequency,
+    formData.deadlineType,
+    formData.importance,
+    formData.category,
+    formData.customCategory,
+    formData.minWorkBlock,
+    formData.maxSessionLength,
+    formData.isOneTimeTask,
+    formData.preferredTimeSlots,
+    userSettings,
+    existingTasks,
+    studyPlans,
+    commitments
+  ]);
+
+  // Handle applying feasibility suggestions
+  const handleApplySuggestions = (suggestions: any) => {
+    setFormData(prev => {
+      const updates: any = { ...prev };
+
+      if (suggestions.frequency) {
+        updates.targetFrequency = suggestions.frequency;
+      }
+
+      if (suggestions.deadline) {
+        updates.deadline = suggestions.deadline;
+      }
+
+      if (suggestions.estimation) {
+        const hours = Math.floor(suggestions.estimation);
+        const minutes = Math.round((suggestions.estimation - hours) * 60);
+        updates.estimatedHours = hours;
+        updates.estimatedMinutes = minutes;
+      }
+
+      if (suggestions.markAsOneSitting) {
+        updates.isOneTimeTask = true;
+      }
+
+      if (suggestions.removeOneSitting) {
+        updates.isOneTimeTask = false;
+      }
+
+      // Note: increaseDailyHours would need to be handled by updating user settings
+      // This would require callback to parent component to update settings
+      if (suggestions.increaseDailyHours) {
+        // Show a message that this requires updating settings
+        alert(`To handle this task, consider increasing your daily available hours to ${suggestions.increaseDailyHours}h in Settings.`);
+      }
+
+      return updates;
+    });
+  };
+
   // Enhanced validation with better error messages
   const isTitleValid = formData.title.trim().length > 0;
   const isTitleLengthValid = formData.title.trim().length <= 100; // Max 100 characters
@@ -243,8 +356,10 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   const isCustomCategoryValid = !showCustomCategory || (formData.customCategory && formData.customCategory.trim().length > 0 && formData.customCategory.trim().length <= 50);
 
   const isOneSittingTooLong = formData.isOneTimeTask && totalTime > userSettings.dailyAvailableHours;
+  const hasCriticalFeasibilityIssues = feasibilityResult.warnings?.some(w => w.severity === 'critical') || false;
   const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid && isDeadlineNotPast &&
-                     isEstimatedValid && isEstimatedReasonable && isImpactValid && isCustomCategoryValid;
+                     isEstimatedValid && isEstimatedReasonable && isImpactValid && isCustomCategoryValid &&
+                     !hasCriticalFeasibilityIssues;
 
   // Enhanced validation messages
   const getValidationErrors = () => {
@@ -472,6 +587,13 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                 )}
               </div>
             )}
+
+            {/* Feasibility Warnings */}
+            <TaskFeasibilityWarnings
+              feasibilityResult={feasibilityResult}
+              onSuggestionApply={handleApplySuggestions}
+              className="mt-4"
+            />
 
             {/* Task Timeline Toggle Button */}
             <div className="mt-4">
@@ -868,11 +990,21 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
         <div className="flex space-x-3 mt-4 justify-end">
             <button
               type="submit"
-            className="bg-gradient-to-r from-green-500 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-green-600 hover:to-blue-700 transition-all duration-200 flex items-center space-x-2 text-lg shadow add-task-button"
+            className={`px-6 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-lg shadow add-task-button ${
+              !isFormValid
+                ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed'
+                : 'bg-gradient-to-r from-green-500 to-blue-600 text-white hover:from-green-600 hover:to-blue-700'
+            }`}
             disabled={!isFormValid}
+            title={hasCriticalFeasibilityIssues ? 'Critical feasibility issues must be resolved first' : ''}
             >
               <Plus size={20} />
-              <span>Add Task</span>
+              <span>
+                {hasCriticalFeasibilityIssues
+                  ? 'Resolve Critical Issues First'
+                  : 'Add Task'
+                }
+              </span>
             </button>
             <button
               type="button"
