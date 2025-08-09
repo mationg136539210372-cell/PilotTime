@@ -7,7 +7,7 @@ import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 import { StudyPlan, FixedCommitment, Task, StudySession, UserSettings } from '../types';
-import { BookOpen, Clock, Settings, X } from 'lucide-react';
+import { BookOpen, Clock, Settings, X, Calendar as CalendarIcon } from 'lucide-react';
 import { checkSessionStatus, validateTimeSlot, doesCommitmentApplyToDate } from '../utils/scheduling';
 import { getLocalDateString } from '../utils/scheduling';
 import MobileCalendarView from './MobileCalendarView';
@@ -136,6 +136,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const [isMobile, setIsMobile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragFeedback, setDragFeedback] = useState<string>('');
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
 
   // Mobile detection
@@ -498,7 +499,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   // Utility function to find available time slots with precise placement
-  const findNearestAvailableSlot = (targetStart: Date, sessionDuration: number, targetDate: string): { start: Date; end: Date } | null => {
+  const findNearestAvailableSlot = (targetStart: Date, sessionDuration: number, targetDate: string, excludeSession?: any): { start: Date; end: Date } | null => {
     if (!settings) return null;
 
     // Get all busy slots for the target date
@@ -508,6 +509,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     studyPlans.forEach(plan => {
       if (plan.date === targetDate) {
         plan.plannedTasks.forEach(session => {
+          // Exclude the session being dragged to avoid self-overlap detection
+          if (excludeSession &&
+              session.taskId === excludeSession.taskId &&
+              session.sessionNumber === excludeSession.sessionNumber) {
+            return;
+          }
+
           if (session.status !== 'skipped' && session.startTime && session.endTime) {
             const sessionStart = moment(targetDate + ' ' + session.startTime).toDate();
             const sessionEnd = moment(targetDate + ' ' + session.endTime).toDate();
@@ -553,15 +561,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       return true;
     };
 
-    // IMPROVED: Try to place at exact target time first, with minimal snapping
-    // Snap to user's selected time interval for consistency with calendar grid
+    // IMPROVED: Try to place at exact target time first, then snap if needed
     const SNAP_INTERVAL = timeInterval * 60 * 1000; // Convert user's time interval to milliseconds
 
-    // Round target time to nearest time interval (matches calendar grid)
+    // First, try the exact drop position without snapping
+    const exactTargetEnd = new Date(targetStart.getTime() + sessionDurationMs);
+    if (isSlotValid(targetStart, exactTargetEnd)) {
+      return { start: targetStart, end: exactTargetEnd };
+    }
+
+    // If exact position doesn't work, try snapped to grid
     const roundedTarget = new Date(Math.round(targetStart.getTime() / SNAP_INTERVAL) * SNAP_INTERVAL);
     const targetEnd = new Date(roundedTarget.getTime() + sessionDurationMs);
 
-    // First, try the exact target location
     if (isSlotValid(roundedTarget, targetEnd)) {
       return { start: roundedTarget, end: targetEnd };
     }
@@ -638,8 +650,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       return;
     }
 
-    // Find the nearest available slot
-    const availableSlot = findNearestAvailableSlot(start, sessionDuration, targetDate);
+    // Find the nearest available slot, excluding the session being dragged
+    const availableSlot = findNearestAvailableSlot(start, sessionDuration, targetDate, session);
 
     if (!availableSlot) {
       setDragFeedback('No available time slot found for this session');
@@ -651,10 +663,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const originalStartTime = moment(originalDate + ' ' + session.startTime).toDate();
     const timeDifferenceFromOriginal = Math.abs(moment(start).diff(moment(originalStartTime), 'minutes'));
 
-    // If the movement is less than 5 minutes, consider it a micro-movement and ignore
-    if (timeDifferenceFromOriginal < 5) {
-      setDragFeedback('Session returned to original position (micro-movement ignored)');
-      setTimeout(() => setDragFeedback(''), 3000);
+    // If the movement is less than 2 minutes, consider it a micro-movement and ignore
+    if (timeDifferenceFromOriginal < 2) {
+      setDragFeedback('Session kept in original position');
+      setTimeout(() => setDragFeedback(''), 2000);
       return;
     }
 
@@ -889,7 +901,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       case 'health':
         return '🏥';
       case 'learning':
-        return '🎓';
+        return '����';
       case 'finance':
         return '💰';
       case 'home':
@@ -1075,13 +1087,24 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             <BookOpen className="text-blue-600 dark:text-blue-400" size={28} />
             <span>Smart Calendar {isDragging && <span className="text-sm text-blue-500">(Dragging...)</span>}</span>
           </h2>
-          <button
-            onClick={() => setShowColorSettings(true)}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
-            title="Customize Colors"
-          >
-            <Settings size={20} className="text-gray-600 dark:text-gray-300" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowInfoModal(true)}
+              className="p-2 rounded-lg bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 transition-colors"
+              title="Learn about Drag & Drop"
+            >
+              <svg size={20} className="text-blue-600 dark:text-blue-300" fill="currentColor" viewBox="0 0 24 24" width="20" height="20">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowColorSettings(true)}
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+              title="Customize Colors"
+            >
+              <Settings size={20} className="text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
         </div>
       {/* Legends */}
       <div className="mb-4 flex flex-wrap gap-4">
@@ -1181,12 +1204,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           draggableAccessor={(event) => {
             if (event.resource.type !== 'study') return false;
 
-            // Check if session is missed - missed sessions cannot be dragged
+            // Check session status - only allow dragging of pending/active sessions
             const session = event.resource.data;
             const planDate = session.planDate || moment(event.start).format('YYYY-MM-DD');
             const sessionStatus = checkSessionStatus(session, planDate);
 
-            return sessionStatus !== 'missed';
+            // Don't allow dragging of missed, completed, or done sessions
+            return sessionStatus !== 'missed' &&
+                   sessionStatus !== 'completed' &&
+                   !session.done;
           }}
           resizable={false}
           onEventDrop={handleEventDrop}
@@ -1338,6 +1364,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           transform: scale(1.02) !important;
           transition: transform 0.1s ease !important;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        /* Non-draggable events (completed, missed, or commitments) */
+        .rbc-event[data-event-type="commitment"]:hover {
+          cursor: default !important;
+          transform: none !important;
+        }
+
+        .rbc-event.non-draggable:hover {
+          cursor: not-allowed !important;
+          transform: none !important;
+          box-shadow: none !important;
         }
 
         /* Enhanced grid lines during drag */
@@ -1512,6 +1550,160 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     Done
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Info Modal for Drag & Drop */}
+      {showInfoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-3xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center space-x-2">
+                  <BookOpen className="text-blue-500" size={28} />
+                  <span>Smart Calendar Guide</span>
+                </h2>
+                <button
+                  onClick={() => setShowInfoModal(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Drag and Drop Section */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg p-5 border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <svg className="text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24" width="24" height="24">
+                      <path d="M13 6v5h5l-6 6-6-6h5V6h2z"/>
+                    </svg>
+                    <h3 className="text-lg font-bold text-blue-800 dark:text-blue-200">Drag & Drop Sessions</h3>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-green-600 dark:text-green-400 font-bold mt-0.5">✓</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Move study sessions:</strong> Click and drag any study session to reschedule it to a different time
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-green-600 dark:text-green-400 font-bold mt-0.5">✓</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Smart placement:</strong> Sessions will place exactly where you drop them, or find the nearest available slot if there's a conflict
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-green-600 dark:text-green-400 font-bold mt-0.5">✓</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Automatic buffer time:</strong> Respects your buffer time settings between sessions to prevent scheduling conflicts
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-orange-600 dark:text-orange-400 font-bold mt-0.5">⚠</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Restrictions:</strong> Completed, missed sessions, and commitments cannot be moved
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Time Intervals Section */}
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg p-5 border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Clock className="text-purple-600 dark:text-purple-400" size={24} />
+                    <h3 className="text-lg font-bold text-purple-800 dark:text-purple-200">Time Interval Settings</h3>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-blue-600 dark:text-blue-400 font-bold mt-0.5">📍</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Precision control:</strong> Use smaller intervals (5-15 min) for more precise session placement
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-blue-600 dark:text-blue-400 font-bold mt-0.5">⚡</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Quick positioning:</strong> Larger intervals (30-60 min) provide faster, grid-aligned placement
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-green-600 dark:text-green-400 font-bold mt-0.5">💡</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Pro tip:</strong> Change intervals using the dropdown in the calendar toolbar for optimal positioning accuracy
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Study Plan Integration */}
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-lg p-5 border border-emerald-200 dark:border-emerald-800">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <CalendarIcon className="text-emerald-600 dark:text-emerald-400" size={24} />
+                    <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200">Study Plan Integration</h3>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">🔄</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Real-time sync:</strong> Rearranged sessions automatically update in your Study Plan view
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">📊</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Status tracking:</strong> Moved sessions show as "Rescheduled" with original time reference
+                      </p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">✨</span>
+                      <p className="text-gray-700 dark:text-gray-300">
+                        <strong>Manual override:</strong> Your manual changes take priority over automatic scheduling
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Visual Feedback */}
+                <div className="bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 rounded-lg p-5 border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <svg className="text-amber-600 dark:text-amber-400" fill="currentColor" viewBox="0 0 24 24" width="24" height="24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    <h3 className="text-lg font-bold text-amber-800 dark:text-amber-200">Visual Feedback</h3>
+                  </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 bg-green-500 rounded"></div>
+                        <span className="text-gray-700 dark:text-gray-300">Exact placement</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                        <span className="text-gray-700 dark:text-gray-300">Near target</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                        <span className="text-gray-700 dark:text-gray-300">Nearest available</span>
+                      </div>
+                    </div>
+                    <p className="text-gray-600 dark:text-gray-400 text-xs">
+                      Color-coded notifications show exactly where your session was placed and why
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-6 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setShowInfoModal(false)}
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Got it!
+                </button>
               </div>
             </div>
           </div>
