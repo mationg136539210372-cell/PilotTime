@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import { Task, UserSettings, StudyPlan, FixedCommitment } from '../types';
+import { Task, UserSettings } from '../types';
 import { checkFrequencyDeadlineConflict } from '../utils/scheduling';
-import { checkTaskFeasibility } from '../utils/task-feasibility';
 import TimeEstimationModal from './TimeEstimationModal';
-import TaskFeasibilityWarnings from './TaskFeasibilityWarnings';
 
 interface TaskInputProps {
   onAddTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   onCancel?: () => void;
   userSettings: UserSettings;
-  existingTasks?: Task[];
-  studyPlans?: StudyPlan[];
-  commitments?: FixedCommitment[];
 }
 
 
@@ -102,14 +97,7 @@ const TASK_TYPE_MAP: Record<string, keyof typeof EST_HELPER_CONFIG> = {
   Communicating: 'Administrative', // treat as Administrative for now
 };
 
-const TaskInput: React.FC<TaskInputProps> = ({
-  onAddTask,
-  onCancel,
-  userSettings,
-  existingTasks = [],
-  studyPlans = [],
-  commitments = []
-}) => {
+const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings }) => {
   const [showEstimationHelper, setShowEstimationHelper] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -130,6 +118,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
     minWorkBlock: 30, // Default 30 minutes (only for deadline tasks)
     maxSessionLength: 2, // Default 2 hours for no-deadline tasks
     isOneTimeTask: false, // New field for one-time tasks
+    startDate: new Date().toISOString().split('T')[0], // New: start date defaults to today
   });
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showTimePresets, setShowTimePresets] = useState(false);
@@ -137,7 +126,6 @@ const TaskInput: React.FC<TaskInputProps> = ({
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showImportanceHelpModal, setShowImportanceHelpModal] = useState(false);
   const [showTimeEstimationModal, setShowTimeEstimationModal] = useState(false);
-  const [showFrequencyInfo, setShowFrequencyInfo] = useState(false);
   const [estBase, setEstBase] = useState(formData.estimatedHours || '1');
   // Remove estAdjusted state, use only local let estAdjusted
   const estimationHelperRef = useRef<HTMLDivElement>(null);
@@ -237,112 +225,12 @@ const TaskInput: React.FC<TaskInputProps> = ({
       estimatedHours: convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes),
       targetFrequency: formData.targetFrequency,
       deadlineType: formData.deadlineType,
-      minWorkBlock: formData.minWorkBlock
+      minWorkBlock: formData.minWorkBlock,
+      startDate: formData.startDate,
     };
     
     return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
-  }, [formData.deadline, formData.estimatedHours, formData.estimatedMinutes, formData.targetFrequency, formData.deadlineType, formData.minWorkBlock, userSettings]);
-
-  // Comprehensive feasibility checking
-  const feasibilityResult = useMemo(() => {
-    // Only run feasibility check if we have minimum required data
-    if (!formData.title.trim() || convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes) <= 0) {
-      return { isValid: true, warnings: [] };
-    }
-
-    const taskDataForCheck = {
-      title: formData.title,
-      deadline: formData.deadline,
-      estimatedHours: convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes),
-      targetFrequency: formData.targetFrequency,
-      deadlineType: formData.deadlineType,
-      importance: formData.importance,
-      category: formData.category === 'Other' ? formData.customCategory : formData.category,
-      minWorkBlock: formData.minWorkBlock,
-      maxSessionLength: formData.maxSessionLength,
-      isOneTimeTask: formData.isOneTimeTask,
-      preferredTimeSlots: formData.preferredTimeSlots
-    };
-
-    const result = checkTaskFeasibility(
-      taskDataForCheck,
-      userSettings,
-      existingTasks,
-      studyPlans,
-      commitments
-    );
-
-    console.log('📊 Feasibility Result:', {
-      isValid: result.isValid,
-      warningCount: result.warnings.length,
-      criticalWarnings: result.warnings.filter(w => w.severity === 'critical').length,
-      hasCriticalFeasibilityIssues: result.warnings?.some(w => w.severity === 'critical') || false,
-      taskData: taskDataForCheck,
-      userSettings: {
-        dailyAvailableHours: userSettings.dailyAvailableHours,
-        workDays: userSettings.workDays
-      }
-    });
-
-    return result;
-  }, [
-    formData.title,
-    formData.deadline,
-    formData.estimatedHours,
-    formData.estimatedMinutes,
-    formData.targetFrequency,
-    formData.deadlineType,
-    formData.importance,
-    formData.category,
-    formData.customCategory,
-    formData.minWorkBlock,
-    formData.maxSessionLength,
-    formData.isOneTimeTask,
-    formData.preferredTimeSlots,
-    userSettings,
-    existingTasks,
-    studyPlans,
-    commitments
-  ]);
-
-  // Handle applying feasibility suggestions
-  const handleApplySuggestions = (suggestions: any) => {
-    setFormData(prev => {
-      const updates: any = { ...prev };
-
-      if (suggestions.frequency) {
-        updates.targetFrequency = suggestions.frequency;
-      }
-
-      if (suggestions.deadline) {
-        updates.deadline = suggestions.deadline;
-      }
-
-      if (suggestions.estimation) {
-        const hours = Math.floor(suggestions.estimation);
-        const minutes = Math.round((suggestions.estimation - hours) * 60);
-        updates.estimatedHours = hours;
-        updates.estimatedMinutes = minutes;
-      }
-
-      if (suggestions.markAsOneSitting) {
-        updates.isOneTimeTask = true;
-      }
-
-      if (suggestions.removeOneSitting) {
-        updates.isOneTimeTask = false;
-      }
-
-      // Note: increaseDailyHours would need to be handled by updating user settings
-      // This would require callback to parent component to update settings
-      if (suggestions.increaseDailyHours) {
-        // Show a message that this requires updating settings
-        alert(`To handle this task, consider increasing your daily available hours to ${suggestions.increaseDailyHours}h in Settings.`);
-      }
-
-      return updates;
-    });
-  };
+  }, [formData.deadline, formData.estimatedHours, formData.estimatedMinutes, formData.targetFrequency, formData.deadlineType, formData.minWorkBlock, formData.startDate, userSettings]);
 
   // Enhanced validation with better error messages
   const isTitleValid = formData.title.trim().length > 0;
@@ -350,6 +238,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
   // Deadline is always optional now
   const isDeadlineValid = true; // Always valid since deadline is optional
   const isDeadlineNotPast = formData.deadline ? formData.deadline >= today : true;
+  const isStartDateNotPast = formData.startDate ? formData.startDate >= today : true;
   const totalTime = convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
   const isEstimatedValid = totalTime > 0;
   const isEstimatedReasonable = totalTime <= 24; // Max 24 hours per task
@@ -357,10 +246,8 @@ const TaskInput: React.FC<TaskInputProps> = ({
   const isCustomCategoryValid = !showCustomCategory || (formData.customCategory && formData.customCategory.trim().length > 0 && formData.customCategory.trim().length <= 50);
 
   const isOneSittingTooLong = formData.isOneTimeTask && totalTime > userSettings.dailyAvailableHours;
-  const hasCriticalFeasibilityIssues = feasibilityResult.warnings?.some(w => w.severity === 'critical') || false;
   const isFormValid = isTitleValid && isTitleLengthValid && isDeadlineValid && isDeadlineNotPast &&
-                     isEstimatedValid && isEstimatedReasonable && isImpactValid && isCustomCategoryValid &&
-                     !hasCriticalFeasibilityIssues;
+                     isEstimatedValid && isEstimatedReasonable && isImpactValid && isCustomCategoryValid && isStartDateNotPast;
 
   // Enhanced validation messages
   const getValidationErrors = () => {
@@ -390,13 +277,17 @@ const TaskInput: React.FC<TaskInputProps> = ({
       errors.push('Custom category must be between 1-50 characters');
     }
     
+    if (!isStartDateNotPast) {
+      errors.push('Start date cannot be in the past');
+    }
+    
     return errors;
   };
 
   const getValidationWarnings = () => {
     const warnings = [];
     if (isOneSittingTooLong) {
-      warnings.push(`⚠️ This one-sitting task (${totalTime}h) exceeds your daily available hours (${userSettings.dailyAvailableHours}h). Consider reducing the estimated time, increasing your daily hours in settings, or unchecking "one-sitting" to allow splitting.`);
+      warnings.push(` This one-sitting task (${totalTime}h) exceeds your daily available hours (${userSettings.dailyAvailableHours}h). Consider reducing the estimated time, increasing your daily hours in settings, or unchecking "one-sitting" to allow splitting.`);
     }
     return warnings;
   };
@@ -442,7 +333,9 @@ const TaskInput: React.FC<TaskInputProps> = ({
       respectFrequencyForDeadlines: formData.respectFrequencyForDeadlines,
       preferredTimeSlots: formData.preferredTimeSlots,
       minWorkBlock: formData.minWorkBlock,
+      maxSessionLength: formData.deadlineType === 'none' ? formData.maxSessionLength : undefined,
       isOneTimeTask: formData.isOneTimeTask,
+      startDate: formData.startDate || today,
     });
     setFormData({
       title: '',
@@ -460,7 +353,9 @@ const TaskInput: React.FC<TaskInputProps> = ({
       respectFrequencyForDeadlines: true,
       preferredTimeSlots: [],
       minWorkBlock: 30,
+      maxSessionLength: 2,
       isOneTimeTask: false,
+      startDate: today,
     });
     setShowEstimationHelper(false);
     setShowMoreOptions(false);
@@ -534,7 +429,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
               {formData.isOneTimeTask && (
                 <div className="mt-1 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-2 border-blue-300 dark:border-blue-600">
                   <div className="text-xs text-blue-700 dark:text-blue-300">
-                    💡 One-sitting tasks will be scheduled as single blocks. Work frequency settings won't apply.
+                     One-sitting tasks will be scheduled as single blocks. Work frequency settings won't apply.
                   </div>
                 </div>
               )}
@@ -543,25 +438,15 @@ const TaskInput: React.FC<TaskInputProps> = ({
             {/* Work Frequency Preference */}
             {!formData.isOneTimeTask && (
               <div className="mt-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <label className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                    How often would you like to work on this?
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowFrequencyInfo(!showFrequencyInfo)}
-                    className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                    title="About frequency preferences"
-                  >
-                    <Info size={16} />
-                  </button>
-                </div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
+                  How often would you like to work on this?
+                </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { value: 'daily', label: '📅 Daily progress', desc: 'Work a bit each day' },
-                    { value: '3x-week', label: '🗓️ Few times per week', desc: 'Every 2-3 days' },
-                    { value: 'weekly', label: '📆 Weekly sessions', desc: 'Once per week' },
-                    { value: 'flexible', label: '⏰ When I have time', desc: 'Flexible scheduling' }
+                    { value: 'daily', label: ' Daily progress', desc: 'Work a bit each day' },
+                    { value: '3x-week', label: ' Few times per week', desc: 'Every 2-3 days' },
+                    { value: 'weekly', label: ' Weekly sessions', desc: 'Once per week' },
+                    { value: 'flexible', label: ' When I have time', desc: 'Flexible scheduling' }
                   ].map(option => (
                     <label key={option.value} className={`flex flex-col p-3 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-white dark:hover:bg-gray-700 cursor-pointer transition-colors ${
                       formData.targetFrequency === option.value ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600' : ''
@@ -583,7 +468,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
                 {deadlineConflict.hasConflict && (
                   <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
                     <div className="flex items-start gap-1">
-                      <span className="text-amber-600 dark:text-amber-400">⚠️</span>
+                      <span className="text-amber-600 dark:text-amber-400"></span>
                       <div>
                         <div className="font-medium">Frequency preference may not allow completion before deadline</div>
                         <div className="mt-1">{deadlineConflict.reason}</div>
@@ -596,76 +481,179 @@ const TaskInput: React.FC<TaskInputProps> = ({
                     </div>
                   </div>
                 )}
-
-                {/* Collapsible information about frequency preferences and study plan modes */}
-                {showFrequencyInfo && (
-                  <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded text-xs">
-                    <div className="flex items-start gap-1">
-                      <span className="text-blue-600 dark:text-blue-400">ℹ️</span>
-                      <div className="text-blue-700 dark:text-blue-300">
-                        <div className="font-medium">About Frequency Preferences</div>
-                        <div className="mt-1">
-                          Frequency preferences are only applied when using <strong>"Evenly Distributed"</strong> study plan mode.
-                          Other modes (Eisenhower Matrix, Balanced Priority) prioritize tasks by importance/urgency instead.
-                        </div>
-                        <div className="mt-1 text-blue-600 dark:text-blue-400">
-                          You can change your study plan mode in Settings.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Feasibility Warnings */}
-            <TaskFeasibilityWarnings
-              feasibilityResult={feasibilityResult}
-              onSuggestionApply={handleApplySuggestions}
-              className="mt-4"
-            />
+            {/* Task Timeline Toggle Button */}
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowTaskTimeline(!showTaskTimeline)}
+                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors"
+              >
+                {showTaskTimeline ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                Advanced Options
+              </button>
 
-            {/* Advanced Options - Only for no-deadline tasks */}
-            {formData.deadlineType === 'none' && (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowTaskTimeline(!showTaskTimeline)}
-                  className="flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors"
-                >
-                  {showTaskTimeline ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  Advanced Options
-                </button>
+              {/* Task Timeline Section - Collapsible */}
+              {showTaskTimeline && (
+                <div className="mt-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Task Timeline Options</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowHelpModal(true)}
+                      className="text-gray-400 hover:text-blue-600 transition-colors"
+                      title="Help & Information"
+                    >
+                      <HelpCircle size={16} />
+                    </button>
+                  </div>
 
-                {/* Advanced Options Section - Only Maximum Session Length */}
-                {showTaskTimeline && (
-                  <div className="mt-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Session Preferences</span>
-                    </div>
+                  {/* Start Date Selection */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Start date</label>
+                    <input
+                      type="date"
+                      min={today}
+                      value={formData.startDate}
+                      onChange={e => setFormData(f => ({ ...f, startDate: e.target.value || today }))}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white ${!isStartDateNotPast && formData.startDate ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    />
+                    {!isStartDateNotPast && formData.startDate && (
+                      <div className="text-red-600 text-xs mt-1">Start date cannot be in the past. Please select today or a future date.</div>
+                    )}
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Default is today. Sessions will not be scheduled before this date.</div>
+                  </div>
 
+                  {/* Deadline Type Selection */}
+                  <div className="space-y-2 mb-4">
+                    <label className="flex items-center gap-3 p-2 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-white dark:hover:bg-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deadlineType"
+                        value="hard"
+                        checked={formData.deadlineType === 'hard'}
+                        onChange={() => setFormData(f => ({ ...f, deadlineType: 'hard' }))}
+                        className="text-blue-600"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-gray-800 dark:text-white">Hard deadline (must finish by date)</div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-2 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-white dark:hover:bg-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deadlineType"
+                        value="soft"
+                        checked={formData.deadlineType === 'soft'}
+                        onChange={() => setFormData(f => ({ ...f, deadlineType: 'soft' }))}
+                        className="text-blue-600"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-gray-800 dark:text-white">Flexible target date</div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-2 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-white dark:hover:bg-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="deadlineType"
+                        value="none"
+                        checked={formData.deadlineType === 'none'}
+                        onChange={() => setFormData(f => ({ ...f, deadlineType: 'none' }))}
+                        className="text-blue-600"
+                      />
+                      <div>
+                        <div className="text-sm font-medium text-gray-800 dark:text-white">No deadline (work when time allows)</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Work frequency preference - now applies to ALL tasks */}
+                  <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Maximum session length</label>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Work frequency preference</label>
                       <select
-                        value={formData.maxSessionLength}
-                        onChange={e => setFormData(f => ({ ...f, maxSessionLength: parseFloat(e.target.value) }))}
+                        value={formData.targetFrequency}
+                        onChange={e => setFormData(f => ({ ...f, targetFrequency: e.target.value as any }))}
                         className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
                       >
-                        <option value={1}>1 hour</option>
-                        <option value={1.5}>1.5 hours</option>
-                        <option value={2}>2 hours</option>
-                        <option value={2.5}>2.5 hours</option>
-                        <option value={3}>3 hours</option>
-                        <option value={4}>4 hours</option>
+                        <option value="daily">Daily progress (default)</option>
+                        <option value="3x-week">Few times per week</option>
+                        <option value="weekly">Weekly sessions</option>
+                        <option value="flexible">When I have time</option>
                       </select>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Sessions will be capped at this length to maintain focus
-                      </div>
+                      
+                      {/* Show warning if frequency conflicts with deadline */}
+                      {deadlineConflict.hasConflict && (
+                        <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+                          <div className="flex items-start gap-1">
+                            <span className="text-amber-600 dark:text-amber-400"></span>
+                            <div>
+                              <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+                              <div className="mt-1">{deadlineConflict.reason}</div>
+                              {deadlineConflict.recommendedFrequency && (
+                                <div className="mt-1">
+                                  <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Additional preferences for no-deadline tasks */}
+                    {formData.deadlineType === 'none' && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Preferred time</label>
+                          <div className="flex gap-2">
+                            {['morning', 'afternoon', 'evening'].map(timeSlot => (
+                              <label key={timeSlot} className="flex items-center gap-1">
+                                <input
+                                  type="checkbox"
+                                  checked={formData.preferredTimeSlots.includes(timeSlot as any)}
+                                  onChange={e => {
+                                    const timeSlots = formData.preferredTimeSlots;
+                                    if (e.target.checked) {
+                                      setFormData(f => ({ ...f, preferredTimeSlots: [...timeSlots, timeSlot as any] }));
+                                    } else {
+                                      setFormData(f => ({ ...f, preferredTimeSlots: timeSlots.filter(t => t !== timeSlot) }));
+                                    }
+                                  }}
+                                />
+                                <span className="capitalize text-xs text-gray-700 dark:text-gray-300">{timeSlot}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Maximum session length for no-deadline tasks */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Maximum session length</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0.5}
+                              max={8}
+                              step={0.5}
+                              value={formData.maxSessionLength}
+                              onChange={e => setFormData(f => ({ ...f, maxSessionLength: Math.max(0.5, Math.min(8, parseFloat(e.target.value) || 2)) }))}
+                              className="w-24 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
+                            />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">hours</span>
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Only applies to tasks without deadlines.</div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
               </div>
             </div>
         {/* Description */}
@@ -815,7 +803,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
             className="text-blue-600 font-medium underline focus:outline-none mb-2"
             onClick={() => setShowMoreOptions(v => !v)}
           >
-            {showMoreOptions ? 'Hide More Options' : '▼ More Options'}
+            {showMoreOptions ? 'Hide More Options' : ' More Options'}
           </button>
           {showMoreOptions && (
             <div className="space-y-4 transition-all">
@@ -910,21 +898,11 @@ const TaskInput: React.FC<TaskInputProps> = ({
         <div className="flex space-x-3 mt-4 justify-end">
             <button
               type="submit"
-            className={`px-6 py-2 rounded-lg transition-all duration-200 flex items-center space-x-2 text-lg shadow add-task-button ${
-              !isFormValid
-                ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed'
-                : 'bg-gradient-to-r from-green-500 to-blue-600 text-white hover:from-green-600 hover:to-blue-700'
-            }`}
+            className="bg-gradient-to-r from-green-500 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-green-600 hover:to-blue-700 transition-all duration-200 flex items-center space-x-2 text-lg shadow add-task-button"
             disabled={!isFormValid}
-            title={hasCriticalFeasibilityIssues ? 'Critical feasibility issues must be resolved first' : ''}
             >
               <Plus size={20} />
-              <span>
-                {hasCriticalFeasibilityIssues
-                  ? 'Resolve Critical Issues First'
-                  : 'Add Task'
-                }
-              </span>
+              <span>Add Task</span>
             </button>
             <button
               type="button"
@@ -944,7 +922,9 @@ const TaskInput: React.FC<TaskInputProps> = ({
                 targetFrequency: 'weekly',
                 preferredTimeSlots: [],
                 minWorkBlock: 30,
+                maxSessionLength: 2,
                 isOneTimeTask: false,
+                startDate: today,
               });
               setShowEstimationHelper(false);
               setShowMoreOptions(false);
@@ -968,7 +948,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
                 onClick={() => setShowHelpModal(false)}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
               >
-                ×
+                
               </button>
             </div>
 
@@ -1059,14 +1039,14 @@ const TaskInput: React.FC<TaskInputProps> = ({
                 onClick={() => setShowImportanceHelpModal(false)}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl"
               >
-                ×
+                
               </button>
             </div>
 
             <div className="space-y-6 text-sm text-gray-600 dark:text-gray-300">
               {/* Overview */}
               <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg">
-                <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">🎯 Quick Summary</h4>
+                <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2"> Quick Summary</h4>
                 <p className="text-blue-700 dark:text-blue-300">
                   Task importance determines scheduling priority. <strong>High impact tasks</strong> are always scheduled first, 
                   while <strong>low impact tasks</strong> fill remaining time slots and may be postponed if your schedule becomes tight.
@@ -1075,7 +1055,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
 
               {/* Scheduling Priority System */}
               <div>
-                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">📊 Scheduling Priority Order</h4>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3"> Scheduling Priority Order</h4>
                 <div className="space-y-3">
                   <div className="bg-red-50 dark:bg-red-900/30 p-3 rounded-lg border-l-4 border-red-500">
                     <div className="flex items-center gap-2 mb-1">
@@ -1113,7 +1093,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
 
               {/* How Settings Affect Scheduling */}
               <div>
-                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">⚙️ How Your Settings Interact with Importance</h4>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3"> How Your Settings Interact with Importance</h4>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-lg">
@@ -1137,7 +1117,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
                     
                     <div className="bg-teal-50 dark:bg-teal-900/30 p-3 rounded-lg">
                       <h5 className="font-medium text-teal-800 dark:text-teal-200 mb-1">Frequency Preferences</h5>
-                      <p className="text-sm">Frequency preferences (daily, weekly, etc.) are only applied in <strong>"Evenly Distributed"</strong> mode. Other study plan modes prioritize tasks by importance/urgency instead.</p>
+                      <p className="text-sm">High impact tasks maintain consistent frequency even with tight schedules. Low impact tasks may have reduced frequency.</p>
                     </div>
                   </div>
                 </div>
@@ -1145,25 +1125,25 @@ const TaskInput: React.FC<TaskInputProps> = ({
 
               {/* One-Time Tasks */}
               <div>
-                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">⏱️ One-Time Tasks & Importance</h4>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3"> One-Time Tasks & Importance</h4>
                 <div className="space-y-3">
                   <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-lg">
                     <h5 className="font-medium text-amber-800 dark:text-amber-200 mb-2">High Impact One-Time Tasks</h5>
                     <ul className="text-sm space-y-1">
-                      <li>• Scheduled as early as possible for maximum priority</li>
-                      <li>• Get the best available time slots</li>
-                      <li>• Protected from being moved or interrupted</li>
-                      <li>• Example: Important presentation, critical exam</li>
+                      <li> Scheduled as early as possible for maximum priority</li>
+                      <li> Get the best available time slots</li>
+                      <li> Protected from being moved or interrupted</li>
+                      <li> Example: Important presentation, critical exam</li>
                     </ul>
                   </div>
                   
                   <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg">
                     <h5 className="font-medium text-gray-800 dark:text-gray-200 mb-2">Low Impact One-Time Tasks</h5>
                     <ul className="text-sm space-y-1">
-                      <li>• Scheduled on deadline day (respecting buffer days)</li>
-                      <li>• May be moved to accommodate higher priority tasks</li>
-                      <li>• Placed in less optimal time slots if needed</li>
-                      <li>• Example: Routine administrative tasks, optional activities</li>
+                      <li> Scheduled on deadline day (respecting buffer days)</li>
+                      <li> May be moved to accommodate higher priority tasks</li>
+                      <li> Placed in less optimal time slots if needed</li>
+                      <li> Example: Routine administrative tasks, optional activities</li>
                     </ul>
                   </div>
                 </div>
@@ -1171,10 +1151,10 @@ const TaskInput: React.FC<TaskInputProps> = ({
 
               {/* Examples */}
               <div>
-                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">💡 Real-World Examples</h4>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3"> Real-World Examples</h4>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <h5 className="font-medium text-red-600 dark:text-red-400 mb-2">🔥 High Impact Tasks</h5>
+                    <h5 className="font-medium text-red-600 dark:text-red-400 mb-2"> High Impact Tasks</h5>
                     <ul className="text-sm space-y-1 list-disc list-inside">
                       <li>Final exam preparation</li>
                       <li>Job interview preparation</li>
@@ -1187,7 +1167,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
                   </div>
                   
                   <div>
-                    <h5 className="font-medium text-gray-600 dark:text-gray-400 mb-2">📝 Low Impact Tasks</h5>
+                    <h5 className="font-medium text-gray-600 dark:text-gray-400 mb-2"> Low Impact Tasks</h5>
                     <ul className="text-sm space-y-1 list-disc list-inside">
                       <li>Regular homework assignments</li>
                       <li>Routine reading</li>
@@ -1203,33 +1183,33 @@ const TaskInput: React.FC<TaskInputProps> = ({
 
               {/* Do's and Don'ts */}
               <div>
-                <h4 className="font-semibold text-gray-800 dark:text-white mb-3">✅❌ Do's and Don'ts</h4>
+                <h4 className="font-semibold text-gray-800 dark:text-white mb-3"> Do's and Don'ts</h4>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="bg-green-50 dark:bg-green-900/30 p-4 rounded-lg">
                     <h5 className="font-medium text-green-800 dark:text-green-200 mb-2 flex items-center gap-2">
-                      <span>✅</span> Do
+                      <span></span> Do
                     </h5>
                     <ul className="text-sm space-y-2">
-                      <li>• Mark tasks as high impact if failure significantly affects your goals</li>
-                      <li>• Consider long-term consequences, not just immediate effort</li>
-                      <li>• Use high impact for tasks with cascading effects</li>
-                      <li>• Be honest about what truly matters to your success</li>
-                      <li>• Mark career-defining or grade-critical tasks as high impact</li>
-                      <li>• Consider high impact for tasks that unlock future opportunities</li>
+                      <li> Mark tasks as high impact if failure significantly affects your goals</li>
+                      <li> Consider long-term consequences, not just immediate effort</li>
+                      <li> Use high impact for tasks with cascading effects</li>
+                      <li> Be honest about what truly matters to your success</li>
+                      <li> Mark career-defining or grade-critical tasks as high impact</li>
+                      <li> Consider high impact for tasks that unlock future opportunities</li>
                     </ul>
                   </div>
                   
                   <div className="bg-red-50 dark:bg-red-900/30 p-4 rounded-lg">
                     <h5 className="font-medium text-red-800 dark:text-red-200 mb-2 flex items-center gap-2">
-                      <span>❌</span> Don't
+                      <span></span> Don't
                     </h5>
                     <ul className="text-sm space-y-2">
-                      <li>• Mark everything as high impact (dilutes the system)</li>
-                      <li>• Base importance solely on difficulty or time required</li>
-                      <li>• Use high impact for tasks you simply prefer to do first</li>
-                      <li>• Confuse urgency with importance</li>
-                      <li>• Mark routine/repeatable tasks as high impact</li>
-                      <li>• Let emotions override objective importance assessment</li>
+                      <li> Mark everything as high impact (dilutes the system)</li>
+                      <li> Base importance solely on difficulty or time required</li>
+                      <li> Use high impact for tasks you simply prefer to do first</li>
+                      <li> Confuse urgency with importance</li>
+                      <li> Mark routine/repeatable tasks as high impact</li>
+                      <li> Let emotions override objective importance assessment</li>
                     </ul>
                   </div>
                 </div>
@@ -1237,7 +1217,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
 
               {/* Warning Scenarios */}
               <div className="bg-yellow-50 dark:bg-yellow-900/30 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">⚠️ What Happens When Schedule Gets Tight</h4>
+                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2"> What Happens When Schedule Gets Tight</h4>
                 <div className="space-y-2 text-sm">
                   <p><strong>High Impact Tasks:</strong> Always protected and scheduled, even if it means working longer hours or rearranging other commitments.</p>
                   <p><strong>Low Impact Tasks:</strong> May be postponed, have reduced session frequency, or be moved to less optimal time slots to make room for high-priority items.</p>
@@ -1247,7 +1227,7 @@ const TaskInput: React.FC<TaskInputProps> = ({
 
               {/* Quick Decision Guide */}
               <div className="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-lg">
-                <h4 className="font-semibold text-indigo-800 dark:text-indigo-200 mb-3">🤔 Quick Decision Guide</h4>
+                <h4 className="font-semibold text-indigo-800 dark:text-indigo-200 mb-3"> Quick Decision Guide</h4>
                 <div className="text-sm">
                   <p className="mb-2"><strong>Ask yourself:</strong></p>
                   <ul className="space-y-1 list-disc list-inside">
