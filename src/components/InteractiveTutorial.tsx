@@ -46,6 +46,7 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
   const [initialTasksCount, setInitialTasksCount] = useState(tasksCount);
   const [initialCommitmentsCount, setInitialCommitmentsCount] = useState(commitmentsCount);
   const [initialStudyPlanMode, setInitialStudyPlanMode] = useState<string | null>(null);
+  const [completedRequirements, setCompletedRequirements] = useState<Set<string>>(new Set());
 
   const tutorialSteps: TutorialStep[] = [
     // Welcome & Overview
@@ -415,19 +416,31 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
         <div className="space-y-3 text-sm">
           <div className="space-y-2">
             <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg border-l-4 border-purple-500">
-              <p className="font-semibold text-purple-800 dark:text-purple-200 mb-1">🎯 <strong>Eisenhower Matrix</strong></p>
+              <p className="font-semibold text-purple-800 dark:text-purple-200 mb-1">��� <strong>Eisenhower Matrix</strong></p>
               <p className="text-purple-700 dark:text-purple-300 text-xs mb-2">Smart prioritization based on importance + urgency</p>
-              <p className="text-purple-600 dark:text-purple-400 text-xs"><strong>Best for:</strong> Mixed workload with varying priorities</p>
+              <p className="text-purple-600 dark:text-purple-400 text-xs mb-1"><strong>Best for:</strong> Mixed workload with varying priorities</p>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-red-600 dark:text-red-400">❌</span>
+                <span className="text-red-700 dark:text-red-300">Ignores frequency preferences</span>
+              </div>
             </div>
             <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border-l-4 border-blue-500">
               <p className="font-semibold text-blue-800 dark:text-blue-200 mb-1">⚖️ <strong>Evenly Distributed</strong></p>
               <p className="text-blue-700 dark:text-blue-300 text-xs mb-2">Equal time allocation across all tasks</p>
-              <p className="text-blue-600 dark:text-blue-400 text-xs"><strong>Best for:</strong> Similar priority tasks or maintaining balance</p>
+              <p className="text-blue-600 dark:text-blue-400 text-xs mb-1"><strong>Best for:</strong> Similar priority tasks or maintaining balance</p>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-green-600 dark:text-green-400">✅</span>
+                <span className="text-green-700 dark:text-green-300">Respects frequency preferences</span>
+              </div>
             </div>
             <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border-l-4 border-green-500">
               <p className="font-semibold text-green-800 dark:text-green-200 mb-1">🎯 <strong>Balanced Priority</strong></p>
               <p className="text-green-700 dark:text-green-300 text-xs mb-2">Weighted distribution favoring important tasks</p>
-              <p className="text-green-600 dark:text-green-400 text-xs"><strong>Best for:</strong> When some tasks are more critical than others</p>
+              <p className="text-green-600 dark:text-green-400 text-xs mb-1"><strong>Best for:</strong> When some tasks are more critical than others</p>
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-red-600 dark:text-red-400">❌</span>
+                <span className="text-red-700 dark:text-red-300">Ignores frequency preferences</span>
+              </div>
             </div>
           </div>
         </div>
@@ -444,8 +457,11 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       requiresAction: true,
       customContent: (
         <div className="bg-orange-50 dark:bg-orange-900/20 p-2 rounded-lg text-sm">
-          <p className="text-orange-800 dark:text-orange-200 text-xs">
+          <p className="text-orange-800 dark:text-orange-200 text-xs mb-2">
             💡 <strong>Tip:</strong> Try switching between modes and check the calendar to see how session distribution changes!
+          </p>
+          <p className="text-orange-700 dark:text-orange-300 text-xs">
+            🎯 <strong>For Frequency Preferences:</strong> Use "Evenly Distributed" mode to respect your daily/weekly scheduling preferences. Other modes prioritize by importance/urgency.
           </p>
         </div>
       )
@@ -462,7 +478,7 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
         <div className="space-y-3 text-sm">
           <div className="grid grid-cols-1 gap-2">
             <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg">
-              <p className="font-medium text-gray-800 dark:text-gray-200 text-xs mb-1">⏰ <strong>Daily Available Hours</strong></p>
+              <p className="font-medium text-gray-800 dark:text-gray-200 text-xs mb-1">��� <strong>Daily Available Hours</strong></p>
               <p className="text-gray-600 dark:text-gray-400 text-xs">Maximum hours you want to study per day (excluding commitments)</p>
             </div>
             <div className="bg-gray-50 dark:bg-gray-800 p-2 rounded-lg">
@@ -620,7 +636,7 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
               <li>🔄 <strong>Weekly Review:</strong> Check progress every Sunday and adjust</li>
               <li>📊 <strong>Track Patterns:</strong> Notice when you're most productive</li>
               <li>⚡ <strong>Batch Similar Tasks:</strong> Group reading, writing, problem-solving</li>
-              <li>🎯 <strong>Start Small:</strong> Begin with 2-3 tasks, then scale up</li>
+              <li>�� <strong>Start Small:</strong> Begin with 2-3 tasks, then scale up</li>
               <li>🏆 <strong>Celebrate Wins:</strong> Acknowledge completed sessions</li>
             </ul>
           </div>
@@ -713,6 +729,7 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       setInitialTasksCount(tasksCount);
       setInitialCommitmentsCount(commitmentsCount);
       setActionCompleted(false);
+      setCompletedRequirements(new Set()); // Reset completed requirements when tutorial starts fresh
     }
   }, [isActive, currentStepIndex, tasksCount, commitmentsCount]);
 
@@ -803,21 +820,39 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
   // Check if Next button should be enabled
   const canProceed = () => {
     if (!currentStep.requiresAction) return true;
-    
+
+    // Check if this requirement was already completed
+    const requirementKey = `${currentStep.id}-${currentStep.waitFor}`;
+    if (completedRequirements.has(requirementKey)) return true;
+
+    let isCurrentlyMet = false;
     switch (currentStep.waitFor) {
       case 'task-added':
-        return tasksCount > initialTasksCount;
+        isCurrentlyMet = tasksCount > initialTasksCount;
+        break;
       case 'commitment-added':
-        return commitmentsCount > initialCommitmentsCount;
+        isCurrentlyMet = commitmentsCount > initialCommitmentsCount;
+        break;
       case 'tab-changed':
-        return currentStep.targetTab && currentTab === currentStep.targetTab;
+        isCurrentlyMet = currentStep.targetTab && currentTab === currentStep.targetTab;
+        break;
       case 'study-plan-mode-changed':
-        return initialStudyPlanMode && currentStudyPlanMode && initialStudyPlanMode !== currentStudyPlanMode;
+        isCurrentlyMet = initialStudyPlanMode && currentStudyPlanMode && initialStudyPlanMode !== currentStudyPlanMode;
+        break;
       case 'timer-session-active':
-        return currentStep.targetTab && currentTab === currentStep.targetTab && hasActiveTimerSession;
+        isCurrentlyMet = currentStep.targetTab && currentTab === currentStep.targetTab && hasActiveTimerSession;
+        break;
       default:
-        return true;
+        isCurrentlyMet = true;
+        break;
     }
+
+    // If requirement is currently met, mark it as completed
+    if (isCurrentlyMet && !completedRequirements.has(requirementKey)) {
+      setCompletedRequirements(prev => new Set([...prev, requirementKey]));
+    }
+
+    return isCurrentlyMet;
   };
 
   const isNextButtonEnabled = canProceed();
