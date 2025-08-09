@@ -497,7 +497,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
   };
 
-  // Utility function to find available time slots
+  // Utility function to find available time slots with precise placement
   const findNearestAvailableSlot = (targetStart: Date, sessionDuration: number, targetDate: string): { start: Date; end: Date } | null => {
     if (!settings) return null;
 
@@ -553,18 +553,28 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       return true;
     };
 
-    // Try to find the nearest available slot to the target time
-    // Use buffer time from settings, with 15 minutes as fallback minimum
-    const bufferMinutes = Math.max(settings.bufferTimeBetweenSessions || 15, 5); // Minimum 5 minutes
-    const gridSize = bufferMinutes * 60 * 1000; // Convert minutes to milliseconds
+    // IMPROVED: Try to place at exact target time first, with minimal snapping
+    // Snap to user's selected time interval for consistency with calendar grid
+    const SNAP_INTERVAL = timeInterval * 60 * 1000; // Convert user's time interval to milliseconds
 
-    // Round target time to nearest buffer interval
-    const roundedTarget = new Date(Math.round(targetStart.getTime() / gridSize) * gridSize);
+    // Round target time to nearest time interval (matches calendar grid)
+    const roundedTarget = new Date(Math.round(targetStart.getTime() / SNAP_INTERVAL) * SNAP_INTERVAL);
+    const targetEnd = new Date(roundedTarget.getTime() + sessionDurationMs);
 
-    // Search for available slots starting from the rounded target time
-    for (let offset = 0; offset <= 12 * 60 * 60 * 1000; offset += gridSize) { // Search within 12 hours
-      // Try both directions from target time
-      for (const direction of [1, -1]) {
+    // First, try the exact target location
+    if (isSlotValid(roundedTarget, targetEnd)) {
+      return { start: roundedTarget, end: targetEnd };
+    }
+
+    // If exact location doesn't work, search for nearest alternative
+    // Search in time interval increments for consistent grid placement
+    const maxSearchTime = 6 * 60 * 60 * 1000; // Search within 6 hours (reduced from 12)
+
+    for (let offset = SNAP_INTERVAL; offset <= maxSearchTime; offset += SNAP_INTERVAL) {
+      // Try both directions from target time, but prioritize forward direction first
+      const directions = [1, -1];
+
+      for (const direction of directions) {
         const testStart = new Date(roundedTarget.getTime() + (direction * offset));
         const testEnd = new Date(testStart.getTime() + sessionDurationMs);
 
@@ -578,9 +588,15 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   // Handle drag start
-  const handleDragStart = () => {
+  const handleDragStart = (event: any) => {
     setIsDragging(true);
     setDragFeedback('');
+
+    // Store the original position for comparison
+    if (event && event.start) {
+      const originalTime = moment(event.start).format('HH:mm');
+      setDragFeedback(`Dragging session from ${originalTime}...`);
+    }
   };
 
   // Handle event drop
@@ -629,6 +645,32 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       setDragFeedback('No available time slot found for this session');
       setTimeout(() => setDragFeedback(''), 3000);
       return;
+    }
+
+    // Check for micro-movements - if user drops very close to original position, keep it there
+    const originalStartTime = moment(originalDate + ' ' + session.startTime).toDate();
+    const timeDifferenceFromOriginal = Math.abs(moment(start).diff(moment(originalStartTime), 'minutes'));
+
+    // If the movement is less than 5 minutes, consider it a micro-movement and ignore
+    if (timeDifferenceFromOriginal < 5) {
+      setDragFeedback('Session returned to original position (micro-movement ignored)');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Calculate the time difference to inform user if session was moved
+    const targetTime = moment(start).format('HH:mm');
+    const actualTime = moment(availableSlot.start).format('HH:mm');
+    const timeDifferenceMinutes = Math.abs(moment(availableSlot.start).diff(moment(start), 'minutes'));
+
+    // Provide specific feedback about placement
+    let placementMessage = '';
+    if (timeDifferenceMinutes === 0) {
+      placementMessage = `✅ Session placed exactly at ${actualTime}`;
+    } else if (timeDifferenceMinutes <= 15) {
+      placementMessage = `📍 Session placed at ${actualTime} (${timeDifferenceMinutes}min from target)`;
+    } else {
+      placementMessage = `🔄 Session moved to ${actualTime} (nearest available slot)`;
     }
 
     // Get the original plan date where the session was dragged from
@@ -712,9 +754,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     onUpdateStudyPlans(updatedPlans);
 
-    const snappedTime = moment(availableSlot.start).format('HH:mm');
-    setDragFeedback(`Session moved to ${moment(targetDate).format('MMM D')} at ${snappedTime}`);
-    setTimeout(() => setDragFeedback(''), 3000);
+    // Show the placement feedback message
+    setDragFeedback(placementMessage);
+    setTimeout(() => setDragFeedback(''), 4000); // Show for 4 seconds
   };
 
 
@@ -1014,8 +1056,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-2xl shadow-xl p-6 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 dark:shadow-gray-900 dark:text-gray-100">
         {/* Drag feedback notification */}
         {dragFeedback && (
-          <div className="fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
-            {dragFeedback}
+          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border-l-4 transition-all duration-300 transform ${
+            dragFeedback.includes('✅') ? 'bg-green-500 border-green-700 text-white' :
+            dragFeedback.includes('📍') ? 'bg-blue-500 border-blue-700 text-white' :
+            dragFeedback.includes('🔄') ? 'bg-orange-500 border-orange-700 text-white' :
+            dragFeedback.includes('Dragging') ? 'bg-purple-500 border-purple-700 text-white' :
+            dragFeedback.includes('micro-movement') ? 'bg-gray-500 border-gray-700 text-white' :
+            'bg-red-500 border-red-700 text-white'
+          }`}>
+            <div className="flex items-center space-x-2">
+              <span className="font-medium">{dragFeedback}</span>
+            </div>
           </div>
         )}
 
@@ -1259,25 +1310,43 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           background-color: #1f2937 !important;
         }
 
-        /* Drag and Drop Styles */
+        /* Drag and Drop Styles - Enhanced for precision */
         .rbc-addons-dnd-drag-preview {
-          background-color: rgba(59, 130, 246, 0.1) !important;
-          border: 2px dashed #3b82f6 !important;
-          opacity: 0.7 !important;
+          background-color: rgba(59, 130, 246, 0.2) !important;
+          border: 3px dashed #3b82f6 !important;
+          opacity: 0.8 !important;
+          border-radius: 8px !important;
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
         }
 
         .rbc-addons-dnd-over {
-          background-color: rgba(34, 197, 94, 0.1) !important;
-          border: 2px solid #22c55e !important;
+          background-color: rgba(34, 197, 94, 0.15) !important;
+          border: 3px solid #22c55e !important;
+          border-radius: 8px !important;
+          box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2) !important;
         }
 
         .rbc-event.rbc-addons-dnd-dragged-event {
-          opacity: 0.5 !important;
+          opacity: 0.4 !important;
           cursor: grabbing !important;
+          transform: scale(0.98) !important;
+          transition: transform 0.1s ease !important;
         }
 
         .rbc-event:hover {
           cursor: grab !important;
+          transform: scale(1.02) !important;
+          transition: transform 0.1s ease !important;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+        }
+
+        /* Enhanced grid lines during drag */
+        .rbc-addons-dnd .rbc-time-slot {
+          transition: background-color 0.1s ease !important;
+        }
+
+        .rbc-addons-dnd .rbc-time-slot:hover {
+          background-color: rgba(59, 130, 246, 0.05) !important;
         }
 
         /* Resize handles disabled */
@@ -1289,6 +1358,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         /* Only allow drag on study sessions */
         .rbc-event[data-event-type="commitment"] {
           cursor: default !important;
+        }
+
+        /* Better visual feedback for valid drop zones */
+        .rbc-time-slot.rbc-dnd-over {
+          background-color: rgba(34, 197, 94, 0.1) !important;
+          border-left: 4px solid #22c55e !important;
         }
       `}</style>
 
