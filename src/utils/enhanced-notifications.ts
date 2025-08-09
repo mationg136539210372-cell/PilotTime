@@ -16,6 +16,7 @@ export interface UnscheduledTaskNotification {
   deadline: string;
   category?: string;
   urgencyLevel: 'low' | 'medium' | 'high' | 'critical';
+  reason: string;
   suggestions: OptimizationSuggestion[];
 }
 
@@ -73,7 +74,8 @@ export function getAccurateUnscheduledTasks(
       const unscheduledMinutes = Math.round(unscheduledHours * 60);
       const urgencyLevel = calculateUrgencyLevel(task, unscheduledHours);
       const suggestions = generateOptimizationSuggestions(task, unscheduledHours, settings);
-      
+      const reason = generateReasonMessage(task, unscheduledHours, scheduledHours);
+
       unscheduledTasks.push({
         taskTitle: task.title,
         taskId: task.id,
@@ -84,6 +86,7 @@ export function getAccurateUnscheduledTasks(
         deadline: task.deadline,
         category: task.category,
         urgencyLevel,
+        reason,
         suggestions
       });
     }
@@ -114,6 +117,28 @@ function isRedistributedSession(session: StudySession): boolean {
   
   // Legacy check for redistributed sessions
   return !!(session.originalTime && session.originalDate);
+}
+
+/**
+ * Generates a reason message explaining why the task has unscheduled time
+ */
+function generateReasonMessage(task: Task, unscheduledHours: number, scheduledHours: number): string {
+  const unscheduledPercentage = unscheduledHours / task.estimatedHours;
+  const now = new Date();
+  const deadline = new Date(task.deadline);
+  const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (scheduledHours === 0) {
+    return `This task hasn't been scheduled yet. You need to allocate ${task.estimatedHours}h before the deadline.`;
+  } else if (unscheduledPercentage > 0.75) {
+    return `Most of this task (${Math.round(unscheduledPercentage * 100)}%) remains unscheduled despite the upcoming deadline.`;
+  } else if (daysUntilDeadline <= 1 && unscheduledHours > 1) {
+    return `With less than 2 days remaining, ${Math.round(unscheduledHours * 10) / 10}h of work still needs to be scheduled.`;
+  } else if (unscheduledPercentage > 0.5) {
+    return `Over half of this task (${Math.round(unscheduledPercentage * 100)}%) still needs to be scheduled.`;
+  } else {
+    return `${Math.round(unscheduledHours * 10) / 10}h of this task couldn't fit in your current schedule and needs attention.`;
+  }
 }
 
 /**
