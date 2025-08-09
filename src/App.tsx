@@ -32,6 +32,7 @@ import InteractiveTutorial from './components/InteractiveTutorial';
 import TutorialButton from './components/TutorialButton';
 import ErrorBoundary from './components/ErrorBoundary';
 import './utils/test-data-setup'; // Import test data setup for testing
+import { assessAddTaskFeasibility } from './utils/task-feasibility';
 
 function App() {
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'plan' | 'timer' | 'calendar' | 'commitments' | 'settings'>('dashboard');
@@ -668,39 +669,14 @@ function App() {
             id: Date.now().toString(),
             createdAt: new Date().toISOString()
         };
-        let updatedTasks = [...tasks, newTask];
-        // Generate a study plan with the new task
-        const { plans: newPlans } = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
-        
-        // Check if the new task has any unscheduled time (excluding skipped sessions)
-        const newTaskScheduledHours: Record<string, number> = {};
-        newPlans.forEach(plan => {
-          plan.plannedTasks.forEach(session => {
-            // Skip sessions that are marked as skipped - they shouldn't count towards scheduled hours
-            if (session.status !== 'skipped') {
-              newTaskScheduledHours[session.taskId] = (newTaskScheduledHours[session.taskId] || 0) + session.allocatedHours;
-            }
-          });
-        });
-        
-        const newTaskScheduled = newTaskScheduledHours[newTask.id] || 0;
-        
-        // More reasonable feasibility check:
-        // Only block if the task is completely unscheduled OR if more than 50% is unscheduled
-        const totalTaskHours = newTask.estimatedHours;
-        const scheduledPercentage = totalTaskHours > 0 ? (newTaskScheduled / totalTaskHours) * 100 : 0;
-        const isCompletelyUnscheduled = newTaskScheduled === 0;
-        const isMostlyUnscheduled = scheduledPercentage < 50;
-        
-        const blocksNewTask = isCompletelyUnscheduled || isMostlyUnscheduled;
-        
-        if (blocksNewTask) {
-            const reason = isCompletelyUnscheduled 
-                ? "cannot be scheduled at all"
-                : `can only be ${scheduledPercentage.toFixed(0)}% scheduled`;
-                
+        const updatedTasks = [...tasks, newTask];
+
+        // Centralized feasibility assessment
+        const feasibility = assessAddTaskFeasibility(newTask, updatedTasks, settings, fixedCommitments, studyPlans);
+
+        if (feasibility.blocksNewTask) {
             setNotificationMessage(
-              `Task "${newTask.title}" ${reason} with your current settings.\n` +
+              `Task "${newTask.title}" ${feasibility.reason} with your current settings.\n` +
               `Try one or more of the following:\n` +
               ` Reduce the estimated hours for this task\n` +
               ` Adjust the deadline to allow more time\n` +
@@ -715,8 +691,9 @@ function App() {
             setLastPlanStaleReason("task");
             return;
         }
+
         setTasks(updatedTasks);
-        setStudyPlans(newPlans);
+        setStudyPlans(feasibility.plans);
         setShowTaskInput(false);
         setLastPlanStaleReason("task");
     };
@@ -2606,9 +2583,9 @@ function App() {
                                         </h4>
                                         <div className="grid grid-cols-3 gap-2">
                                             {[
-                                                { amount: '50', emoji: '', desc: 'Coffee' },
-                                                { amount: '100', emoji: '', desc: 'Pizza' },
-                                                { amount: '200', emoji: '', desc: 'Party' }
+                                                { amount: '50', emoji: '☕', desc: 'Coffee' },
+                                                { amount: '100', emoji: '🍕', desc: 'Pizza' },
+                                                { amount: '200', emoji: '🎉', desc: 'Party' }
                                             ].map((item, index) => (
                                                 <div
                                                     key={index}
@@ -2634,15 +2611,15 @@ function App() {
                                         </h4>
                                         <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-green-500"></span>
+                                                <span className="text-green-500">✅</span>
                                                 <span>New features and improvements</span>
                                             </div>
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-green-500"></span>
+                                                <span className="text-green-500">✅</span>
                                                 <span>Keep TimePilot free for everyone</span>
                                             </div>
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-green-500"></span>
+                                                <span className="text-green-500">✅</span>
                                                 <span>Better performance and reliability</span>
                                             </div>
                                         </div>
