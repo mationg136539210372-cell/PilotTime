@@ -1,16 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, BookOpen, X, Play, Trash2 } from 'lucide-react';
-import { StudyPlan, FixedCommitment, Task } from '../types';
-import { checkSessionStatus, formatTime } from '../utils/scheduling';
+import { StudyPlan, FixedCommitment, Task, StudySession, UserSettings } from '../types';
+import { checkSessionStatus, formatTime, validateTimeSlot, doesCommitmentApplyToDate } from '../utils/scheduling';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { TouchBackend } from 'react-dnd-touch-backend';
 import moment from 'moment';
 
 interface MobileCalendarViewProps {
   studyPlans: StudyPlan[];
   fixedCommitments: FixedCommitment[];
   tasks: Task[];
+  settings?: UserSettings;
   onSelectTask?: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
   onStartManualSession?: (commitment: FixedCommitment, durationSeconds: number) => void;
   onDeleteFixedCommitment?: (commitmentId: string) => void;
+  onUpdateStudyPlans?: (updatedPlans: StudyPlan[]) => void;
 }
 
 interface CalendarEvent {
@@ -29,12 +33,85 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
   studyPlans,
   fixedCommitments,
   tasks,
+  settings,
   onSelectTask,
   onStartManualSession,
   onDeleteFixedCommitment,
+  onUpdateStudyPlans,
 }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragFeedback, setDragFeedback] = useState<string>('');
+
+  // Utility function to find available time slots (copied from CalendarView)
+  const findNearestAvailableSlot = (targetStart: Date, sessionDuration: number, targetDate: string): { start: Date; end: Date } | null => {
+    if (!settings) return null;
+
+    // Get all busy slots for the target date
+    const busySlots: Array<{ start: Date; end: Date }> = [];
+
+    // Add existing study sessions
+    studyPlans.forEach(plan => {
+      if (plan.date === targetDate) {
+        plan.plannedTasks.forEach(session => {
+          if (session.status !== 'skipped' && session.startTime && session.endTime) {
+            const sessionStart = moment(targetDate + ' ' + session.startTime).toDate();
+            const sessionEnd = moment(targetDate + ' ' + session.endTime).toDate();
+            busySlots.push({ start: sessionStart, end: sessionEnd });
+          }
+        });
+      }
+    });
+
+    // Add fixed commitments
+    fixedCommitments.forEach(commitment => {
+      if (doesCommitmentApplyToDate(commitment, targetDate) && commitment.startTime && commitment.endTime) {
+        const commitmentStart = moment(targetDate + ' ' + commitment.startTime).toDate();
+        const commitmentEnd = moment(targetDate + ' ' + commitment.endTime).toDate();
+        busySlots.push({ start: commitmentStart, end: commitmentEnd });
+      }
+    });
+
+    // Sort busy slots by start time
+    busySlots.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    // Set study window boundaries
+    const dayStart = moment(targetDate).hour(settings.studyWindowStartHour || 6).minute(0).second(0).toDate();
+    const dayEnd = moment(targetDate).hour(settings.studyWindowEndHour || 23).minute(0).second(0).toDate();
+
+    const sessionDurationMs = sessionDuration * 60 * 60 * 1000;
+    const bufferTimeMs = (settings.bufferTimeBetweenSessions || 0) * 60 * 1000;
+
+    // Function to check if a slot is valid
+    const isSlotValid = (slotStart: Date, slotEnd: Date) => {
+      if (slotStart < dayStart || slotEnd > dayEnd) return false;
+      for (const busySlot of busySlots) {
+        const adjustedStart = new Date(slotStart.getTime() - bufferTimeMs);
+        const adjustedEnd = new Date(slotEnd.getTime() + bufferTimeMs);
+        if (adjustedStart < busySlot.end && adjustedEnd > busySlot.start) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    // Try to find the nearest available slot
+    const bufferMinutes = Math.max(settings.bufferTimeBetweenSessions || 15, 5);
+    const gridSize = bufferMinutes * 60 * 1000;
+    const roundedTarget = new Date(Math.round(targetStart.getTime() / gridSize) * gridSize);
+
+    for (let offset = 0; offset <= 12 * 60 * 60 * 1000; offset += gridSize) {
+      for (const direction of [1, -1]) {
+        const testStart = new Date(roundedTarget.getTime() + (direction * offset));
+        const testEnd = new Date(testStart.getTime() + sessionDurationMs);
+        if (isSlotValid(testStart, testEnd)) {
+          return { start: testStart, end: testEnd };
+        }
+      }
+    }
+    return null;
+  };
 
   // Generate dates for the horizontal picker (7 days around selected date)
   const dateRange = useMemo(() => {
@@ -233,8 +310,11 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
 
   // Handle click on a calendar event
   const handleEventClick = (event: CalendarEvent) => {
-    // For study sessions, show a simple detail modal
-    setSelectedEvent(event);
+    // Only show modal for study sessions, not commitments
+    if (event.resource.type === 'study') {
+      setSelectedEvent(event);
+    }
+    // Do nothing for commitments - remove the UI
   };
 
   // Handle starting a manual commitment session from the detail modal
@@ -261,6 +341,122 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
     setSelectedEvent(null); // Close modal after deleting
   };
 
+  // Handle mobile drag and drop
+  const handleMobileDrop = (draggedEvent: CalendarEvent, targetHour: number) => {
+    if (!onUpdateStudyPlans || !settings || draggedEvent.resource.type !== 'study') {
+      setDragFeedback('Only study sessions can be moved');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    const session = draggedEvent.resource.data.session as StudySession;
+    const targetDate = moment(selectedDate).format('YYYY-MM-DD');
+    const originalDate = session.planDate || moment(draggedEvent.start).format('YYYY-MM-DD');
+    const sessionDuration = session.allocatedHours;
+
+    // Restrict movement to same day only
+    if (targetDate !== originalDate) {
+      setDragFeedback('Sessions can only be moved within the same day');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Create target start time
+    const targetStart = moment(selectedDate).hour(targetHour).minute(0).second(0).toDate();
+
+    // Check if target day is a work day
+    const targetDayOfWeek = moment(selectedDate).day();
+    if (!settings.workDays.includes(targetDayOfWeek)) {
+      setDragFeedback(`Cannot move session to ${moment(selectedDate).format('dddd')} - not a work day`);
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Find the nearest available slot
+    const availableSlot = findNearestAvailableSlot(targetStart, sessionDuration, targetDate);
+
+    if (!availableSlot) {
+      setDragFeedback('No available time slot found for this session');
+      setTimeout(() => setDragFeedback(''), 3000);
+      return;
+    }
+
+    // Update the study plans (same logic as desktop version)
+    const updatedPlans = studyPlans.map(plan => {
+      if (plan.date === targetDate) {
+        const newSession = {
+          ...session,
+          startTime: moment(availableSlot.start).format('HH:mm'),
+          endTime: moment(availableSlot.end).format('HH:mm'),
+          originalTime: session.originalTime || session.startTime,
+          originalDate: session.originalDate || originalDate,
+          rescheduledAt: new Date().toISOString(),
+          isManualOverride: true
+        };
+
+        const existingSessionIndex = plan.plannedTasks.findIndex(s =>
+          s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+        );
+
+        if (existingSessionIndex >= 0) {
+          const updatedTasks = [...plan.plannedTasks];
+          updatedTasks[existingSessionIndex] = newSession;
+          return { ...plan, plannedTasks: updatedTasks };
+        } else {
+          return {
+            ...plan,
+            plannedTasks: [...plan.plannedTasks, newSession]
+          };
+        }
+      } else if (plan.date === originalDate) {
+        const updatedTasks = plan.plannedTasks.filter(s =>
+          !(s.taskId === session.taskId && s.sessionNumber === session.sessionNumber)
+        );
+        return { ...plan, plannedTasks: updatedTasks };
+      } else {
+        return plan;
+      }
+    });
+
+    // Handle case when target date doesn't exist in plans
+    const targetPlanExists = updatedPlans.some(plan => plan.date === targetDate);
+    if (!targetPlanExists) {
+      const newSession = {
+        ...session,
+        startTime: moment(availableSlot.start).format('HH:mm'),
+        endTime: moment(availableSlot.end).format('HH:mm'),
+        originalTime: session.originalTime || session.startTime,
+        originalDate: session.originalDate || originalDate,
+        rescheduledAt: new Date().toISOString(),
+        isManualOverride: true
+      };
+
+      updatedPlans.push({
+        id: `plan-${targetDate}`,
+        date: targetDate,
+        plannedTasks: [newSession],
+        totalStudyHours: sessionDuration,
+        isOverloaded: false,
+        availableHours: settings.dailyAvailableHours
+      });
+
+      const originalPlanIndex = updatedPlans.findIndex(plan => plan.date === originalDate);
+      if (originalPlanIndex >= 0) {
+        const originalPlan = updatedPlans[originalPlanIndex];
+        const updatedOriginalTasks = originalPlan.plannedTasks.filter(s =>
+          !(s.taskId === session.taskId && s.sessionNumber === session.sessionNumber)
+        );
+        updatedPlans[originalPlanIndex] = { ...originalPlan, plannedTasks: updatedOriginalTasks };
+      }
+    }
+
+    onUpdateStudyPlans(updatedPlans);
+
+    const snappedTime = moment(availableSlot.start).format('HH:mm');
+    setDragFeedback(`Session moved to ${moment(targetDate).format('MMM D')} at ${snappedTime}`);
+    setTimeout(() => setDragFeedback(''), 3000);
+  };
+
 
   // Format hour for time slot display (e.g., "4 AM", "1 PM")
   const formatTimeSlot = (hour: number) => {
@@ -278,15 +474,129 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
     });
   };
 
-  return (
-    <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-2xl shadow-xl p-4 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center space-x-2">
-          <BookOpen className="text-blue-600 dark:text-blue-400" size={24} />
-          <span>Calendar</span>
-        </h2>
+  // Draggable Event Component for mobile
+  const DraggableEvent: React.FC<{ event: CalendarEvent; onEventClick: (event: CalendarEvent) => void }> = ({ event, onEventClick }) => {
+    // Check if session is missed to prevent dragging
+    const isStudySession = event.resource.type === 'study';
+    const sessionStatus = isStudySession ? checkSessionStatus(event.resource.data.session, moment(selectedDate).format('YYYY-MM-DD')) : null;
+    const isMissedSession = sessionStatus === 'missed';
+
+    const [{ isDragging }, drag] = useDrag(() => ({
+      type: 'event',
+      item: event,
+      canDrag: isStudySession && !isMissedSession, // Only non-missed study sessions can be dragged
+      collect: (monitor) => ({
+        isDragging: monitor.isDragging(),
+      }),
+    }), [event, isMissedSession]);
+
+    // Handle drag start/end with useEffect
+    React.useEffect(() => {
+      if (isDragging) {
+        setIsDragging(true);
+        setDragFeedback('');
+      } else {
+        setIsDragging(false);
+      }
+    }, [isDragging]);
+
+    const canDrag = isStudySession && !isMissedSession;
+
+    return (
+      <div
+        ref={canDrag ? drag : null}
+        onClick={() => onEventClick(event)}
+        className={`mb-2 p-3 rounded-lg text-white text-sm font-medium transition-all duration-200 ${
+          isDragging ? 'opacity-50 scale-95' : ''
+        } ${canDrag ? 'cursor-move hover:opacity-80' : isMissedSession ? 'cursor-default opacity-75' : 'cursor-pointer hover:opacity-80'}`}
+        style={{
+          backgroundColor: getEventColor(event),
+          touchAction: canDrag ? 'none' : 'auto' // Disable touch scrolling when dragging
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold truncate">
+              {event.title} {(() => {
+                if (event.allDay) return '';
+                const durationHours = moment(event.end).diff(moment(event.start), 'hours', true);
+                const durationMinutes = moment(event.end).diff(moment(event.start), 'minutes', true);
+                if (durationHours >= 1) {
+                  return `(${Math.round(durationHours)}h)`;
+                } else if (durationMinutes > 0) {
+                  return `(${Math.round(durationMinutes)}m)`;
+                }
+                return '';
+              })()}
+              {canDrag && <span className="text-xs ml-1">📱</span>}
+              {isMissedSession && <span className="text-xs ml-1">🚫</span>}
+            </div>
+            <div className="text-xs opacity-90">
+              {moment(event.start).format('h:mm A')} - {moment(event.end).format('h:mm A')}
+            </div>
+            {event.resource.type === 'study' && (
+              <div className="text-xs opacity-75 mt-1">
+                {formatTime(event.resource.data.session.allocatedHours)}
+              </div>
+            )}
+          </div>
+          <div className="ml-2">
+            {event.resource.type === 'study' ? (
+              <BookOpen size={16} />
+            ) : (
+              <Clock size={16} />
+            )}
+          </div>
+        </div>
       </div>
+    );
+  };
+
+  // Drop Zone Component for time slots
+  const TimeSlotDropZone: React.FC<{ hour: number; children: React.ReactNode }> = ({ hour, children }) => {
+    const [{ isOver, canDrop }, drop] = useDrop(() => ({
+      accept: 'event',
+      drop: (item: CalendarEvent) => {
+        handleMobileDrop(item, hour);
+      },
+      collect: (monitor) => ({
+        isOver: monitor.isOver(),
+        canDrop: monitor.canDrop(),
+      }),
+    }), [hour]);
+
+    return (
+      <div
+        ref={drop}
+        className={`flex-1 p-3 min-h-[60px] transition-colors duration-200 ${
+          isOver && canDrop ? 'bg-green-100 dark:bg-green-900' : ''
+        } ${canDrop && !isOver ? 'bg-blue-50 dark:bg-blue-900' : ''}`}
+      >
+        {children}
+        {isOver && canDrop && (
+          <div className="absolute inset-0 border-2 border-dashed border-green-500 rounded-lg pointer-events-none" />
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <DndProvider backend={TouchBackend} options={{ enableMouseEvents: true }}>
+      <div className="bg-gradient-to-br from-blue-50 via-white to-purple-50 rounded-2xl shadow-xl p-4 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900">
+        {/* Drag feedback notification */}
+        {dragFeedback && (
+          <div className="fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+            {dragFeedback}
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center space-x-2">
+            <BookOpen className="text-blue-600 dark:text-blue-400" size={24} />
+            <span>Calendar {isDragging && <span className="text-sm text-blue-500">(Dragging...)</span>}</span>
+          </h2>
+        </div>
 
       {/* Horizontal Date Picker */}
       <div className="mb-6">
@@ -374,54 +684,16 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
                     {formatTimeSlot(hour)}
                   </div>
                   
-                  {/* Events */}
-                  <div className="flex-1 p-3 min-h-[60px]">
+                  {/* Events - Now with drag and drop support */}
+                  <TimeSlotDropZone hour={hour}>
                     {events.map((event) => (
-                      <div
-                        key={event.id} // Ensure unique key for each event render
-                        onClick={() => handleEventClick(event)}
-                        className="mb-2 p-3 rounded-lg text-white text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-80"
-                        style={{ backgroundColor: getEventColor(event) }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold truncate">
-                              {event.title} {(() => {
-                                // Don't show duration for all-day events
-                                if (event.allDay) return '';
-                                
-                                const durationHours = moment(event.end).diff(moment(event.start), 'hours', true);
-                                const durationMinutes = moment(event.end).diff(moment(event.start), 'minutes', true);
-                                if (durationHours >= 1) {
-                                  // Display hours if at least 1 full hour
-                                  return `(${Math.round(durationHours)}h)`;
-                                } else if (durationMinutes > 0) {
-                                  // Display minutes if less than an hour but more than 0
-                                  return `(${Math.round(durationMinutes)}m)`;
-                                }
-                                return ''; // No duration if 0 or negative
-                              })()}
-                            </div>
-                            <div className="text-xs opacity-90">
-                              {moment(event.start).format('h:mm A')} - {moment(event.end).format('h:mm A')}
-                            </div>
-                            {event.resource.type === 'study' && (
-                              <div className="text-xs opacity-75 mt-1">
-                                {formatTime(event.resource.data.session.allocatedHours)}
-                              </div>
-                            )}
-                          </div>
-                          <div className="ml-2">
-                            {event.resource.type === 'study' ? (
-                              <BookOpen size={16} />
-                            ) : (
-                              <Clock size={16} />
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <DraggableEvent
+                        key={event.id}
+                        event={event}
+                        onEventClick={handleEventClick}
+                      />
                     ))}
-                  </div>
+                  </TimeSlotDropZone>
                 </div>
               </div>
             );
@@ -520,7 +792,8 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
         </div>
       )}
 
-    </div>
+      </div>
+    </DndProvider>
   );
 };
 
