@@ -766,73 +766,78 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                           return (
                 <div
   key={`today-${session.taskId}-${session.sessionNumber || 0}-${session.startTime || ''}-${todaysPlan.date}`}
-  className={`p-5 mb-4 rounded-xl border-2 study-session-item transition-all duration-300 shadow-sm hover:shadow-md ${!isDone && !isCompleted && sessionStatus !== 'missed' ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'} ${currentStatusColors.bg} ${currentStatusColors.border}`}
+  className={`p-4 sm:p-5 mb-4 rounded-xl border-2 study-session-item transition-all duration-300 shadow-sm hover:shadow-md ${!isDone && !isCompleted && sessionStatus !== 'missed' ? 'cursor-pointer sm:hover:scale-[1.02]' : 'cursor-default'} ${currentStatusColors.bg} ${currentStatusColors.border}`}
   onClick={() => !isDone && !isCompleted && sessionStatus !== 'missed' && todaysPlan && onSelectTask(task, { allocatedHours: session.allocatedHours, planDate: todaysPlan.date, sessionNumber: session.sessionNumber })}
 >
-                <div className="flex items-center justify-between">
-  <div className="flex-1">
-    {/* Header with icon, title, and status */}
-    <div className="flex items-center space-x-3 mb-3">
-      <div className="flex-shrink-0">
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <h3 className={`font-semibold text-lg truncate ${
-          isDone || isCompleted || sessionStatus === 'missed' 
-            ? 'line-through opacity-60' 
-            : currentStatusColors.text
-        }`}>
-          {task.title}
-        </h3>
-        {task.category && (
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            {task.category}
-          </span>
-        )}
-      </div>
-      {statusText && (
-        <span className={`px-3 py-1 text-xs rounded-full font-medium ${currentStatusColors.badge}`}>
-          {statusText}
+                <div className="space-y-4">
+  <div className="w-full">
+    {/* Header with icon, title, and status - Mobile responsive */}
+<div className="space-y-2 mb-3">
+  <div className="flex items-center space-x-3">
+    <div className="flex-shrink-0">
+      {icon}
+    </div>
+    <div className="flex-1 min-w-0">
+      <h3 className={`font-semibold text-lg ${
+        isDone || isCompleted || sessionStatus === 'missed' 
+          ? 'line-through opacity-60' 
+          : currentStatusColors.text
+      }`}>
+        {task.title}
+      </h3>
+      {task.category && (
+        <span className="text-sm text-gray-600 dark:text-gray-400">
+          {task.category}
         </span>
       )}
     </div>
-
-    {/* Time and session info */}
-    <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center space-x-4 text-sm">
-        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <Clock size={16} className="text-gray-500 dark:text-gray-400" />
-          <span className="font-medium text-gray-700 dark:text-gray-300">
-            {session.startTime} - {session.endTime}
-          </span>
-        </div>
-        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <TrendingUp size={16} className="text-gray-500 dark:text-gray-400" />
-          <span className="font-medium text-gray-700 dark:text-gray-300">
-            {formatTime(session.allocatedHours)}
-          </span>
-        </div>
-        <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-            Session {sessionNumber}/{totalSessions}
-          </span>
-        </div>
-      </div>
-
-      {/* Due date and importance */}
-      <div className="flex items-center space-x-3">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          Due: <span className="font-medium">{new Date(task.deadline).toLocaleDateString()}</span>
-        </div>
-        <span className={`px-3 py-1 text-xs rounded-full font-medium ${
-          task.importance 
-            ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200' 
-            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-        }`}>
-          {task.importance ? 'Important' : 'Normal'}
-        </span>
-      </div>
+  </div>
+  {statusText && (
+    <div className="flex justify-end">
+      <span className={`px-3 py-1 text-xs rounded-full font-medium ${currentStatusColors.badge}`}>
+        {statusText}
+      </span>
     </div>
+  )}
+</div>
+
+    {/* Time and session info - Mobile responsive */}
+<div className="space-y-3 mb-3">
+  {/* First row: Time, Duration, Session number */}
+  <div className="flex items-center flex-wrap gap-2 text-sm">
+    <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      <Clock size={16} className="text-gray-500 dark:text-gray-400" />
+      <span className="font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+        {session.startTime} - {session.endTime}
+      </span>
+    </div>
+    <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      <TrendingUp size={16} className="text-gray-500 dark:text-gray-400" />
+      <span className="font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+        {formatTime(session.allocatedHours)}
+      </span>
+    </div>
+    <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
+      <span className="text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap">
+        Session {sessionNumber}/{totalSessions}
+      </span>
+    </div>
+  </div>
+
+  {/* Second row: Due date and importance */}
+  <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="text-sm text-gray-600 dark:text-gray-400">
+      Due: <span className="font-medium">{new Date(task.deadline).toLocaleDateString()}</span>
+    </div>
+    <span className={`px-3 py-1 text-xs rounded-full font-medium whitespace-nowrap ${
+      task.importance 
+        ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200' 
+        : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+    }`}>
+      {task.importance ? 'Important' : 'Normal'}
+    </span>
+  </div>
+</div>
 
     {/* Rescheduled info */}
     {isRescheduled && session.originalTime && (
