@@ -770,99 +770,99 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
   onClick={() => !isDone && !isCompleted && sessionStatus !== 'missed' && todaysPlan && onSelectTask(task, { allocatedHours: session.allocatedHours, planDate: todaysPlan.date, sessionNumber: session.sessionNumber })}
 >
                 <div>
-    {/* Compact header */}
-<div className="flex items-center justify-between mb-2">
-  <div className="flex items-center space-x-2 flex-1 min-w-0">
-    <div className="flex-shrink-0">
-      {icon}
+  <div className="w-full">
+  {/* Compact header */}
+  <div className="flex items-center justify-between mb-2">
+    <div className="flex items-center space-x-2 flex-1 min-w-0">
+      <div className="flex-shrink-0">
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className={`font-medium text-base truncate ${
+          isDone || isCompleted || sessionStatus === 'missed' 
+            ? 'line-through opacity-60' 
+            : currentStatusColors.text
+        }`}>
+          {task.title}
+        </h3>
+        {task.category && (
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {task.category}
+          </span>
+        )}
+      </div>
     </div>
-    <div className="flex-1 min-w-0">
-      <h3 className={`font-medium text-base truncate ${
-        isDone || isCompleted || sessionStatus === 'missed' 
-          ? 'line-through opacity-60' 
-          : currentStatusColors.text
-      }`}>
-        {task.title}
-      </h3>
-      {task.category && (
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          {task.category}
-        </span>
+    {statusText && (
+      <span className={`px-2 py-1 text-xs rounded-full font-medium ml-2 flex-shrink-0 ${currentStatusColors.badge}`}>
+        {statusText}
+      </span>
+    )}
+  </div>
+
+  {/* Compact session info */}
+  <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-2">
+    <div className="flex items-center space-x-3">
+      <div className="flex items-center space-x-1">
+        <Clock size={12} />
+        <span className="font-medium">{session.startTime} - {session.endTime}</span>
+      </div>
+      <div className="flex items-center space-x-1">
+        <TrendingUp size={12} />
+        <span>{formatTime(session.allocatedHours)}</span>
+      </div>
+      <span>Session {sessionNumber}/{totalSessions}</span>
+    </div>
+    <div className="flex items-center space-x-2">
+      <span>Due {new Date(task.deadline).toLocaleDateString()}</span>
+      {task.importance && (
+        <span className="w-2 h-2 bg-purple-500 rounded-full" title="Important"></span>
       )}
     </div>
   </div>
-  {statusText && (
-    <span className={`px-2 py-1 text-xs rounded-full font-medium ml-2 flex-shrink-0 ${currentStatusColors.badge}`}>
-      {statusText}
-    </span>
+
+  {/* Compact rescheduled info */}
+  {isRescheduled && session.originalTime && (
+    <div className="text-xs text-blue-600 dark:text-blue-400">
+      Moved from {session.originalTime}
+      {session.originalDate && session.originalDate !== todaysPlan.date && (
+        <span> ({new Date(session.originalDate).toLocaleDateString()})</span>
+      )}
+    </div>
+  )}
+
+  {/* Compact action buttons */}
+  {((isDone || isCompleted) || (isRescheduled && session.originalTime)) && (
+    <div className="flex items-center justify-end space-x-1 mt-2">
+      {(isDone || isCompleted) && (
+        <button
+          onClick={e => { 
+            e.stopPropagation(); 
+            if (todaysPlan) {
+              onUndoSessionDone(todaysPlan.date, session.taskId, session.sessionNumber || 0);
+            }
+          }}
+          className="px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 transition-colors dark:bg-orange-900 dark:text-orange-300"
+          title="Undo completion"
+        >
+          Undo
+        </button>
+      )}
+      
+      {isRescheduled && session.originalTime && (
+        <button
+          onClick={e => { 
+            e.stopPropagation(); 
+            onSkipMissedSession(todaysPlan.date, session.sessionNumber || 0, session.taskId);
+          }}
+          className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 transition-colors dark:bg-yellow-900 dark:text-yellow-200"
+          title="Skip this rescheduled session"
+        >
+          Skip
+        </button>
+      )}
+    </div>
   )}
 </div>
-
-    {/* Compact session info */}
-<div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-2">
-  <div className="flex items-center space-x-3">
-    <div className="flex items-center space-x-1">
-      <Clock size={12} />
-      <span className="font-medium">{session.startTime} - {session.endTime}</span>
-    </div>
-    <div className="flex items-center space-x-1">
-      <TrendingUp size={12} />
-      <span>{formatTime(session.allocatedHours)}</span>
-    </div>
-    <span>Session {sessionNumber}/{totalSessions}</span>
-  </div>
-  <div className="flex items-center space-x-2">
-    <span>Due {new Date(task.deadline).toLocaleDateString()}</span>
-    {task.importance && (
-      <span className="w-2 h-2 bg-purple-500 rounded-full" title="Important"></span>
-    )}
-  </div>
-</div>
-
-    {/* Compact rescheduled info */}
-{isRescheduled && session.originalTime && (
-  <div className="text-xs text-blue-600 dark:text-blue-400">
-    Moved from {session.originalTime}
-    {session.originalDate && session.originalDate !== todaysPlan.date && (
-      <span> ({new Date(session.originalDate).toLocaleDateString()})</span>
-    )}
-  </div>
-)
-  </div>
-</div>
-                {/* Undo button for completed sessions */}
-                {(isDone || isCompleted) && (
-                  <button
-                    onClick={e => { 
-                      e.stopPropagation(); 
-                      if (todaysPlan) {
-                        onUndoSessionDone(todaysPlan.date, session.taskId, session.sessionNumber || 0);
-                      }
-                    }}
-                    className="ml-4 px-3 py-1 text-xs bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors duration-200 dark:bg-orange-900 dark:text-orange-300 dark:hover:bg-orange-800"
-                    title="Undo completion"
-                  >
-                    Undo
-                  </button>
-                )}
-                {/* Undo button for rescheduled sessions */}
-                {isRescheduled && session.originalTime && (
-                  <div className="flex space-x-2 ml-4">
-                    <button
-                      onClick={e => { 
-                        e.stopPropagation(); 
-                        onSkipMissedSession(todaysPlan.date, session.sessionNumber || 0, session.taskId);
-                      }}
-                      className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
-                      title="Skip this rescheduled session"
-                    >
-                      Skip
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
           
           {/* Show "No Sessions Planned" message when all sessions are filtered out */}
           {todaysPlan.plannedTasks.filter(session => session.status !== 'skipped').length === 0 && (
