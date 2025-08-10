@@ -740,10 +740,6 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               currentSessionStatus = 'missed';
               icon = <AlertTriangle className={`${statusColors.missed.icon}`} size={20} />;
               statusText = 'Missed';
-            } else if (sessionStatus === 'overdue') {
-              currentSessionStatus = 'overdue';
-              icon = <Clock3 className={`${statusColors.overdue.icon}`} size={20} />;
-              statusText = 'Overdue';
             } else if (isRescheduled) {
               currentSessionStatus = 'rescheduled';
               icon = <Clock3 className={`${statusColors.rescheduled.icon}`} size={20} />;
