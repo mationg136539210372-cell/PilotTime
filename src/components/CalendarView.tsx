@@ -58,7 +58,6 @@ const COMMITMENT_DEFAULT_COLOR = '#3b82f6'; // Blue for commitments
 
 
 const DEFAULT_MISSED_COLOR = '#dc2626'; // Darker Red
-const DEFAULT_OVERDUE_COLOR = '#c2410c'; // Even Darker Orange
 const DEFAULT_COMPLETED_COLOR = '#d1d5db'; // Gray
 const DEFAULT_IMPORTANT_TASK_COLOR = '#f59e0b'; // Amber
 const DEFAULT_NOT_IMPORTANT_TASK_COLOR = '#64748b'; // Gray
@@ -66,7 +65,6 @@ const DEFAULT_UNCATEGORIZED_COLOR = '#64748b'; // Gray for uncategorized items
 
 interface ColorSettings {
   missedColor: string;
-  overdueColor: string;
   completedColor: string;
   importantTaskColor: string;
   notImportantTaskColor: string;
@@ -127,7 +125,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
     return {
       missedColor: DEFAULT_MISSED_COLOR,
-      overdueColor: DEFAULT_OVERDUE_COLOR,
       completedColor: DEFAULT_COMPLETED_COLOR,
       importantTaskColor: DEFAULT_IMPORTANT_TASK_COLOR,
       notImportantTaskColor: DEFAULT_NOT_IMPORTANT_TASK_COLOR,
@@ -172,7 +169,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const resetToDefaults = () => {
     setColorSettings({
       missedColor: DEFAULT_MISSED_COLOR,
-      overdueColor: DEFAULT_OVERDUE_COLOR,
       completedColor: DEFAULT_COMPLETED_COLOR,
       importantTaskColor: DEFAULT_IMPORTANT_TASK_COLOR,
       notImportantTaskColor: DEFAULT_NOT_IMPORTANT_TASK_COLOR,
@@ -818,15 +814,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 8px)';
         backgroundSize = '8px 8px';
         console.log(`Missed session "${event.title}" styled with red color and strikethrough`);
-      }
-      // If session is overdue, make it orange
-      else if (sessionStatus === 'overdue') {
-        backgroundColor = colorSettings.overdueColor;
-        opacity = 0.9;
-        // Add a subtle pattern for overdue sessions
-        backgroundImage = 'radial-gradient(circle, rgba(255,255,255,0.2) 1px, transparent 1px)';
-        backgroundSize = '4px 4px';
-        console.log(`Overdue session "${event.title}" styled with orange color and dot pattern`);
       }
 
     } else if (event.resource.type === 'commitment') {
@@ -1516,17 +1503,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                       />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                         Missed
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="color"
-                        value={colorSettings.overdueColor}
-                        onChange={(e) => handleSpecialColorChange('overdueColor', e.target.value)}
-                        className="w-12 h-8 rounded border border-gray-300 dark:border-gray-600"
-                      />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Overdue
                       </span>
                     </div>
                     <div className="flex items-center space-x-3">
