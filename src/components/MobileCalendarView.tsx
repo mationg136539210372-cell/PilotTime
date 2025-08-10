@@ -284,7 +284,6 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
       const sessionStatus = checkSessionStatus(session, moment(selectedDate).format('YYYY-MM-DD'));
       
       if (sessionStatus === 'missed') return '#dc2626';  // Red
-      if (sessionStatus === 'overdue') return '#c2410c'; // Darker Orange/Brown
       if (session.done || session.status === 'completed') return '#d1d5db'; // Light Gray (completed)
       if (task.importance) return '#f59e0b';           // Amber (important tasks)
       
