@@ -31,6 +31,7 @@ import SuggestionsPanel from './components/SuggestionsPanel';
 import InteractiveTutorial from './components/InteractiveTutorial';
 import TutorialButton from './components/TutorialButton';
 import ErrorBoundary from './components/ErrorBoundary';
+import TimePilotIcon from './components/TimePilotIcon';
 import './utils/test-data-setup'; // Import test data setup for testing
 import { assessAddTaskFeasibility } from './utils/task-feasibility';
 
@@ -1815,7 +1816,7 @@ function App() {
                         </div>
                         <div className="flex items-center space-x-2">
                             <div className="w-8 h-8 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
-                                <span className="text-white font-bold text-sm drop-shadow-sm"></span>
+                                <TimePilotIcon size={20} />
                             </div>
                             <div className="text-lg font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
                         </div>
@@ -1825,7 +1826,7 @@ function App() {
                     <div className="hidden sm:flex items-center justify-between px-4 sm:px-6 py-6">
                         <div className="flex items-center space-x-4">
                             <div className="w-12 h-12 bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-violet-500/25 transform hover:scale-105 transition-all duration-300">
-                                <span className="text-white font-bold text-xl drop-shadow-sm"></span>
+                                <TimePilotIcon size={28} />
                             </div>
                             <div className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent drop-shadow-sm">TimePilot</div>
                         </div>

@@ -183,7 +183,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     // Convert study plans to calendar events
     studyPlans.forEach(plan => {
-      // Sort the planned tasks by priority and time before creating events
+      // Sort the planned tasks by chronological order first, then by priority
       const sortedTasks = [...plan.plannedTasks].sort((a, b) => {
         // Check session status for missed sessions
         const aStatus = checkSessionStatus(a, plan.date);
@@ -197,43 +197,39 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           return -1; // b (missed) goes after a
         }
         if (aStatus === 'missed' && bStatus === 'missed') {
-          // Both are missed, sort by original time
-          const [aH, aM] = a.startTime.split(':').map(Number);
-          const [bH, bM] = b.startTime.split(':').map(Number);
+          // Both are missed, sort by current start time
+          const [aH, aM] = (a.startTime || '00:00').split(':').map(Number);
+          const [bH, bM] = (b.startTime || '00:00').split(':').map(Number);
           const aMinutes = aH * 60 + aM;
           const bMinutes = bH * 60 + bM;
           return aMinutes - bMinutes;
         }
         
-        // Both are not missed, sort by priority first, then by start time
-        const taskA = tasks.find(t => t.id === a.taskId);
-        const taskB = tasks.find(t => t.id === b.taskId);
+        // Both are not missed, prioritize chronological order for manually rescheduled sessions
+        // Check if either session has been manually rescheduled
+        const aIsRescheduled = a.schedulingMetadata?.state === 'rescheduled' || a.originalTime;
+        const bIsRescheduled = b.schedulingMetadata?.state === 'rescheduled' || b.originalTime;
         
-        if (!taskA || !taskB) {
-          // Fallback to time-based sorting if tasks not found
-          const [aH, aM] = a.startTime.split(':').map(Number);
-          const [bH, bM] = b.startTime.split(':').map(Number);
+        // If both are rescheduled or both are not rescheduled, sort by time
+        if (aIsRescheduled === bIsRescheduled) {
+          const [aH, aM] = (a.startTime || '00:00').split(':').map(Number);
+          const [bH, bM] = (b.startTime || '00:00').split(':').map(Number);
           const aMinutes = aH * 60 + aM;
           const bMinutes = bH * 60 + bM;
           return aMinutes - bMinutes;
         }
         
-        // Priority order: high (3) > medium (2) > low (1)
-        // const priorityOrder: { [key: string]: number } = { high: 3, medium: 2, low: 1 };
-        // const priorityA = priorityOrder[taskA.priority] || 0;
-        // const priorityB = priorityOrder[taskB.priority] || 0;
-        // If priorities are different, sort by priority (higher first)
-        // if (priorityA !== priorityB) {
-        //   return priorityB - priorityA; // Higher priority first
-        // }
-        // Instead, use importance: true (high) > false (low)
-        if (taskA.importance !== taskB.importance) {
-          return taskB.importance ? 1 : -1; // true (high) comes first
+        // If one is rescheduled and the other isn't, prioritize the rescheduled one
+        if (aIsRescheduled && !bIsRescheduled) {
+          return -1; // a (rescheduled) comes first
+        }
+        if (!aIsRescheduled && bIsRescheduled) {
+          return 1; // b (rescheduled) comes first
         }
         
-        // If priorities are the same, sort by start time
-        const [aH, aM] = a.startTime.split(':').map(Number);
-        const [bH, bM] = b.startTime.split(':').map(Number);
+        // Fallback to time-based sorting
+        const [aH, aM] = (a.startTime || '00:00').split(':').map(Number);
+        const [bH, bM] = (b.startTime || '00:00').split(':').map(Number);
         const aMinutes = aH * 60 + aM;
         const bMinutes = bH * 60 + bM;
         return aMinutes - bMinutes;

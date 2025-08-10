@@ -479,6 +479,14 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
                     // Show all active sessions (not completed or skipped)
                     return session.status !== 'skipped' && !session.done && session.status !== 'completed';
                   })
+                  .sort((a, b) => {
+                    // Sort by current start time chronologically
+                    const [aHour, aMinute] = (a.startTime || '00:00').split(':').map(Number);
+                    const [bHour, bMinute] = (b.startTime || '00:00').split(':').map(Number);
+                    const aMinutes = aHour * 60 + aMinute;
+                    const bMinutes = bHour * 60 + bMinute;
+                    return aMinutes - bMinutes;
+                  })
                   .map((session, index) => {
                   const task = tasks.find(t => t.id === session.taskId);
                   if (!task) return null;

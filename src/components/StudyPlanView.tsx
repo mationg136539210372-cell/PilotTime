@@ -663,6 +663,14 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           
           {todaysPlan.plannedTasks
             .filter(session => session.status !== 'skipped') // Hide skipped sessions from UI
+            .sort((a, b) => {
+              // Sort by current start time chronologically
+              const [aHour, aMinute] = (a.startTime || '00:00').split(':').map(Number);
+              const [bHour, bMinute] = (b.startTime || '00:00').split(':').map(Number);
+              const aMinutes = aHour * 60 + aMinute;
+              const bMinutes = bHour * 60 + bMinute;
+              return aMinutes - bMinutes;
+            })
             .map((session) => {
             const task = getTaskById(session.taskId);
             if (!task) return null;
@@ -913,6 +921,14 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                   <div className="space-y-2">
                     {plan.plannedTasks
                       .filter(session => session.status !== 'skipped') // Hide skipped sessions from upcoming plans
+                      .sort((a, b) => {
+                        // Sort by current start time chronologically
+                        const [aHour, aMinute] = (a.startTime || '00:00').split(':').map(Number);
+                        const [bHour, bMinute] = (b.startTime || '00:00').split(':').map(Number);
+                        const aMinutes = aHour * 60 + aMinute;
+                        const bMinutes = bHour * 60 + bMinute;
+                        return aMinutes - bMinutes;
+                      })
                       .map((session) => {
                       const task = getTaskById(session.taskId);
                       if (!task) return null;
