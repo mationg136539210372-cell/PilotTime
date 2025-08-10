@@ -968,9 +968,35 @@ function App() {
 
 
     const handleUpdateTask = (taskId: string, updates: Partial<Task>) => {
+        const originalTask = tasks.find(task => task.id === taskId);
         const updatedTasks = tasks.map(task =>
             task.id === taskId ? { ...task, ...updates } : task
         );
+        
+        // Check if estimated time changed and adjust preserved manual schedules
+        const timeChanged = originalTask && updates.estimatedHours !== undefined && 
+                           originalTask.estimatedHours !== updates.estimatedHours;
+        
+        if (timeChanged && originalTask) {
+            const timeRatio = updates.estimatedHours! / (originalTask.estimatedHours || 1);
+            // Update preserved manual session durations proportionally
+            studyPlans.forEach(plan => {
+                plan.plannedTasks.forEach(session => {
+                    if (session.taskId === taskId && session.isManualOverride && session.originalTime && session.originalDate) {
+                        const [startHour, startMinute] = session.startTime.split(':').map(Number);
+                        const [endHour, endMinute] = session.endTime.split(':').map(Number);
+                        const currentDuration = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+                        const newDuration = Math.max(15, Math.round(currentDuration * timeRatio)); // Minimum 15 minutes
+                        
+                        // Update the end time based on new duration
+                        const newEndTime = new Date();
+                        newEndTime.setHours(startHour, startMinute + newDuration, 0, 0);
+                        session.endTime = `${newEndTime.getHours().toString().padStart(2, '0')}:${newEndTime.getMinutes().toString().padStart(2, '0')}`;
+                        session.allocatedHours = newDuration / 60;
+                    }
+                });
+            });
+        }
         
         // Generate new study plan with updated tasks, preserving manual schedules
         const { plans: newPlans } = generateNewStudyPlanWithPreservation(updatedTasks, settings, fixedCommitments, studyPlans);
