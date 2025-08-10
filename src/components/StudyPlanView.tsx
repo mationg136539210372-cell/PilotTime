@@ -617,7 +617,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           </div>
         </div>
       ) : todaysPlan ? (
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900">
+        <div className="bg-gray-50 rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-800 flex items-center space-x-2 dark:text-white">
               <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
@@ -683,37 +683,42 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             
             // Enhanced color system for session status and importance
             const statusColors = {
-              completed: {
-                bg: 'bg-emerald-50 border-l-emerald-500 dark:bg-emerald-900/20 dark:border-l-emerald-400',
-                text: 'text-emerald-700 dark:text-emerald-300',
-                icon: 'text-emerald-500 dark:text-emerald-400',
-                badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200'
-              },
-              missed: {
-                bg: 'bg-red-50 border-l-red-500 dark:bg-red-900/20 dark:border-l-red-400',
-                text: 'text-red-700 dark:text-red-300',
-                icon: 'text-red-500 dark:text-red-400',
-                badge: 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200'
-              },
-              overdue: {
-                bg: 'bg-amber-50 border-l-amber-500 dark:bg-amber-900/20 dark:border-l-amber-400',
-                text: 'text-amber-700 dark:text-amber-300',
-                icon: 'text-amber-500 dark:text-amber-400',
-                badge: 'bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200'
-              },
-              rescheduled: {
-                bg: 'bg-indigo-50 border-l-indigo-500 dark:bg-indigo-900/20 dark:border-l-indigo-400',
-                text: 'text-indigo-700 dark:text-indigo-300',
-                icon: 'text-indigo-500 dark:text-indigo-400',
-                badge: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-800 dark:text-indigo-200'
-              },
-              scheduled: {
-                bg: 'bg-slate-50 border-l-slate-300 dark:bg-slate-900/20 dark:border-l-slate-400',
-                text: 'text-slate-700 dark:text-slate-300',
-                icon: 'text-slate-500 dark:text-slate-400',
-                badge: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
-              }
-            };
+  completed: {
+    bg: 'bg-emerald-100 dark:bg-emerald-800/40',
+    border: 'border-emerald-300 dark:border-emerald-600',
+    text: 'text-emerald-800 dark:text-emerald-200',
+    icon: 'text-emerald-600 dark:text-emerald-400',
+    badge: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-700 dark:text-emerald-100'
+  },
+  missed: {
+    bg: 'bg-red-100 dark:bg-red-800/40',
+    border: 'border-red-300 dark:border-red-600',
+    text: 'text-red-800 dark:text-red-200',
+    icon: 'text-red-600 dark:text-red-400',
+    badge: 'bg-red-200 text-red-900 dark:bg-red-700 dark:text-red-100'
+  },
+  overdue: {
+    bg: 'bg-amber-100 dark:bg-amber-800/40',
+    border: 'border-amber-300 dark:border-amber-600',
+    text: 'text-amber-800 dark:text-amber-200',
+    icon: 'text-amber-600 dark:text-amber-400',
+    badge: 'bg-amber-200 text-amber-900 dark:bg-amber-700 dark:text-amber-100'
+  },
+  rescheduled: {
+    bg: 'bg-indigo-100 dark:bg-indigo-800/40',
+    border: 'border-indigo-300 dark:border-indigo-600',
+    text: 'text-indigo-800 dark:text-indigo-200',
+    icon: 'text-indigo-600 dark:text-indigo-400',
+    badge: 'bg-indigo-200 text-indigo-900 dark:bg-indigo-700 dark:text-indigo-100'
+  },
+  scheduled: {
+    bg: 'bg-white dark:bg-gray-800',
+    border: 'border-gray-200 dark:border-gray-700',
+    text: 'text-gray-800 dark:text-gray-200',
+    icon: 'text-gray-600 dark:text-gray-400',
+    badge: 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+  }
+};
 
             const importanceColors = {
               high: {
@@ -760,63 +765,88 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             
                           return (
                 <div
-                  key={`today-${session.taskId}-${session.sessionNumber || 0}-${session.startTime || ''}-${todaysPlan.date}`}
-                  className={`p-4 border-l-4 rounded-lg study-session-item ${!isDone && !isCompleted && sessionStatus !== 'missed' ? 'cursor-pointer hover:shadow-md' : 'cursor-default'} transition-all duration-200 flex items-center justify-between ${currentStatusColors.bg} ${importanceStyle.ring}`}
-                  onClick={() => !isDone && !isCompleted && sessionStatus !== 'missed' && todaysPlan && onSelectTask(task, { allocatedHours: session.allocatedHours, planDate: todaysPlan.date, sessionNumber: session.sessionNumber })}
-                >
-                <div className={`flex-1 ${isDone || isCompleted ? 'pointer-events-none' : ''}`}>
-                  <div className="flex items-center space-x-2 mb-2">
-                    {icon && <span className="mr-2">{icon}</span>}
-                    <h3 className={`font-medium ${
-                      isDone || isCompleted || sessionStatus === 'missed' 
-                        ? 'line-through text-gray-500 dark:text-gray-400' 
-                        : currentStatusColors.text
-                    }`}>
-                      {task.title}
-                    </h3>
-                    {task.category && (
-                      <span className="text-sm text-gray-500 dark:text-gray-300">({task.category})</span>
-                    )}
-                    {statusText && (
-                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${currentStatusColors.badge}`}>
-                        {statusText}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-200">
-                    <div className="flex items-center space-x-1">
-                      <Clock size={16} />
-                      {session.startTime} - {session.endTime}
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <TrendingUp size={16} />
-                      <span>
-                        {formatTime(session.allocatedHours)}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <span className="text-xs">
-                        Session {sessionNumber}/{totalSessions}
-                      </span>
-                    </div>
-                    {isRescheduled && session.originalTime && (
-                      <div className="flex items-center space-x-1 text-xs text-blue-600 dark:text-blue-400">
-                        <span>Moved from {session.originalTime}</span>
-                        {session.originalDate && session.originalDate !== todaysPlan.date && (
-                          <span>({new Date(session.originalDate).toLocaleDateString()})</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className={`flex flex-col items-end space-y-2 ml-4 ${isDone || isCompleted ? 'pointer-events-none' : ''}`}>
-                  <div className="text-sm text-gray-500 dark:text-gray-300">
-                    Due: {new Date(task.deadline).toLocaleDateString()}
-                  </div>
-                  <span className={`px-2 py-1 text-xs rounded-full ml-4 ${importanceStyle.badge} ${isDone || isCompleted ? 'opacity-50' : ''}`}>
-                    {task.importance ? 'Important' : 'Not Important'}
-                  </span>
-                </div>
+  key={`today-${session.taskId}-${session.sessionNumber || 0}-${session.startTime || ''}-${todaysPlan.date}`}
+  className={`p-5 mb-4 rounded-xl border-2 study-session-item transition-all duration-300 shadow-sm hover:shadow-md ${!isDone && !isCompleted && sessionStatus !== 'missed' ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'} ${currentStatusColors.bg} ${currentStatusColors.border}`}
+  onClick={() => !isDone && !isCompleted && sessionStatus !== 'missed' && todaysPlan && onSelectTask(task, { allocatedHours: session.allocatedHours, planDate: todaysPlan.date, sessionNumber: session.sessionNumber })}
+>
+                <div className="flex items-center justify-between">
+  <div className="flex-1">
+    {/* Header with icon, title, and status */}
+    <div className="flex items-center space-x-3 mb-3">
+      <div className="flex-shrink-0">
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className={`font-semibold text-lg truncate ${
+          isDone || isCompleted || sessionStatus === 'missed' 
+            ? 'line-through opacity-60' 
+            : currentStatusColors.text
+        }`}>
+          {task.title}
+        </h3>
+        {task.category && (
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            {task.category}
+          </span>
+        )}
+      </div>
+      {statusText && (
+        <span className={`px-3 py-1 text-xs rounded-full font-medium ${currentStatusColors.badge}`}>
+          {statusText}
+        </span>
+      )}
+    </div>
+
+    {/* Time and session info */}
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center space-x-4 text-sm">
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <Clock size={16} className="text-gray-500 dark:text-gray-400" />
+          <span className="font-medium text-gray-700 dark:text-gray-300">
+            {session.startTime} - {session.endTime}
+          </span>
+        </div>
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <TrendingUp size={16} className="text-gray-500 dark:text-gray-400" />
+          <span className="font-medium text-gray-700 dark:text-gray-300">
+            {formatTime(session.allocatedHours)}
+          </span>
+        </div>
+        <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            Session {sessionNumber}/{totalSessions}
+          </span>
+        </div>
+      </div>
+
+      {/* Due date and importance */}
+      <div className="flex items-center space-x-3">
+        <div className="text-sm text-gray-600 dark:text-gray-400">
+          Due: <span className="font-medium">{new Date(task.deadline).toLocaleDateString()}</span>
+        </div>
+        <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+          task.importance 
+            ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200' 
+            : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+        }`}>
+          {task.importance ? 'Important' : 'Normal'}
+        </span>
+      </div>
+    </div>
+
+    {/* Rescheduled info */}
+    {isRescheduled && session.originalTime && (
+      <div className="flex items-center space-x-2 text-xs bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-lg">
+        <span className="text-blue-700 dark:text-blue-300 font-medium">
+          Moved from {session.originalTime}
+          {session.originalDate && session.originalDate !== todaysPlan.date && (
+            <span> ({new Date(session.originalDate).toLocaleDateString()})</span>
+          )}
+        </span>
+      </div>
+    )}
+  </div>
+</div>
                 {/* Undo button for completed sessions */}
                 {(isDone || isCompleted) && (
                   <button
