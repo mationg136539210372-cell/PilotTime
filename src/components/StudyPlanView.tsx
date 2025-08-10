@@ -827,7 +827,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
       <span> ({new Date(session.originalDate).toLocaleDateString()})</span>
     )}
   </div>
-)}
+)
   </div>
 </div>
                 {/* Undo button for completed sessions */}
