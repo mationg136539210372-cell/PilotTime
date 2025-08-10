@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan } from './utils/scheduling';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
@@ -461,7 +461,7 @@ function App() {
                 // For regular study plan generation, preserve manual reschedules by default
                 // Use the refresh function for options to reset reschedules
                     // Generate plan but preserve manual reschedules
-                    const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+                    const result = generateNewStudyPlanWithPreservation(tasks, settings, fixedCommitments, studyPlans);
                     const newPlans = result.plans;
                     
                     // Enhanced preservation logic
@@ -512,8 +512,8 @@ function App() {
                     return;
             }
 
-            // Generate new study plan
-            const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+            // Generate new study plan, preserving manual schedules
+            const result = generateNewStudyPlanWithPreservation(tasks, settings, fixedCommitments, studyPlans);
             const newPlans = result.plans;
             
             // Preserve session status from previous plan
@@ -574,7 +574,9 @@ function App() {
         if (tasks.length > 0) {
             try {
                 // Generate new study plan
-                const result = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+                const result = preserveManualReschedules 
+                    ? generateNewStudyPlanWithPreservation(tasks, settings, fixedCommitments, studyPlans)
+                    : generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
                 const newPlans = result.plans;
 
                 if (preserveManualReschedules) {
@@ -686,7 +688,8 @@ function App() {
               ` Adjust your study window hours in Settings\n`
             );
             setTasks(tasks);
-            const { plans: restoredPlans } = generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
+            // Use preservation function to maintain manual schedules even when restoring
+            const { plans: restoredPlans } = generateNewStudyPlanWithPreservation(tasks, settings, fixedCommitments, studyPlans);
             setStudyPlans(restoredPlans);
             setShowTaskInput(false);
             setLastPlanStaleReason("task");
@@ -747,43 +750,11 @@ function App() {
         updatedCommitments = [...updatedCommitments, newCommitment];
         setFixedCommitments(updatedCommitments);
         
-        // Regenerate study plan with new commitment
+        // Regenerate study plan with new commitment, preserving manual schedules
         if (tasks.length > 0) {
-            const { plans: newPlans } = generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
-            
-            // Preserve session status from previous plan
-            newPlans.forEach(plan => {
-                const prevPlan = studyPlans.find(p => p.date === plan.date);
-                if (!prevPlan) return;
-                
-                // Preserve session status and properties
-                plan.plannedTasks.forEach(session => {
-                    const prevSession = prevPlan.plannedTasks.find(s => s.taskId === session.taskId && s.sessionNumber === session.sessionNumber);
-                    if (prevSession) {
-                        // Preserve done sessions
-                        if (prevSession.done) {
-                            session.done = true;
-                            session.status = prevSession.status;
-                            session.actualHours = prevSession.actualHours;
-                            session.completedAt = prevSession.completedAt;
-                        }
-                        // Preserve skipped sessions
-                        else if (prevSession.status === 'skipped') {
-                            session.status = 'skipped';
-                        }
-                        // Preserve rescheduled sessions
-                        else if (prevSession.originalTime && prevSession.originalDate) {
-                            session.originalTime = prevSession.originalTime;
-                            session.originalDate = prevSession.originalDate;
-                            session.rescheduledAt = prevSession.rescheduledAt;
-                            session.isManualOverride = prevSession.isManualOverride;
-                        }
-                    }
-                });
-            });
-            
+            const { plans: newPlans } = generateNewStudyPlanWithPreservation(tasks, settings, updatedCommitments, studyPlans);
             setStudyPlans(newPlans);
-        setLastPlanStaleReason("commitment");
+            setLastPlanStaleReason("commitment");
         }
     };
 
@@ -826,9 +797,9 @@ function App() {
 
         setFixedCommitments(updatedCommitments);
         
-        // Regenerate study plan with updated commitments
+        // Regenerate study plan with updated commitments, preserving manual schedules
         if (tasks.length > 0) {
-            const { plans: newPlans } = generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
+            const { plans: newPlans } = generateNewStudyPlanWithPreservation(tasks, settings, updatedCommitments, studyPlans);
             
             // Preserve session status from previous plan
             newPlans.forEach(plan => {
@@ -955,9 +926,9 @@ function App() {
         
         setFixedCommitments(updatedCommitments);
         
-        // Regenerate study plan with updated commitments
+        // Regenerate study plan with updated commitments, preserving manual schedules
         if (tasks.length > 0) {
-            const { plans: newPlans } = generateNewStudyPlan(tasks, settings, updatedCommitments, studyPlans);
+            const { plans: newPlans } = generateNewStudyPlanWithPreservation(tasks, settings, updatedCommitments, studyPlans);
             
             // Preserve session status from previous plan
             newPlans.forEach(plan => {
@@ -1001,8 +972,8 @@ function App() {
             task.id === taskId ? { ...task, ...updates } : task
         );
         
-        // Generate new study plan with updated tasks
-        const { plans: newPlans } = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, studyPlans);
+        // Generate new study plan with updated tasks, preserving manual schedules
+        const { plans: newPlans } = generateNewStudyPlanWithPreservation(updatedTasks, settings, fixedCommitments, studyPlans);
         
         // Preserve session status from previous plan
         newPlans.forEach(plan => {
@@ -1055,9 +1026,9 @@ function App() {
         }
         setLastPlanStaleReason("task");
 
-        // Use unified redistribution system after task deletion
+        // Use unified redistribution system after task deletion, preserving manual schedules
         try {
-            const result = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, cleanedPlans);
+            const result = generateNewStudyPlanWithPreservation(updatedTasks, settings, fixedCommitments, cleanedPlans);
             setStudyPlans(result.plans);
             setNotificationMessage('Study plan updated after deleting task.');
             setTimeout(() => setNotificationMessage(null), 3000);
@@ -1438,8 +1409,8 @@ function App() {
                                     
                                     setTasks(updatedTasks);
                                     
-                                    // Regenerate study plan with the updated task status
-                                    const { plans: newPlans } = generateNewStudyPlan(updatedTasks, settings, fixedCommitments, updatedPlans);
+                                    // Regenerate study plan with the updated task status, preserving manual schedules
+                                    const { plans: newPlans } = generateNewStudyPlanWithPreservation(updatedTasks, settings, fixedCommitments, updatedPlans);
                                     
                                     // Preserve session status from previous plan
                                     newPlans.forEach(plan => {
@@ -1594,9 +1565,9 @@ function App() {
         setSettings({ ...newSettings });
         localStorage.setItem('timepilot-settings', JSON.stringify({ ...newSettings }));
         
-        // Auto-regenerate study plan with new settings
+        // Auto-regenerate study plan with new settings, preserving manual schedules
         if (tasks.length > 0) {
-            const { plans: newPlans } = generateNewStudyPlan(tasks, newSettings, fixedCommitments, studyPlans);
+            const { plans: newPlans } = generateNewStudyPlanWithPreservation(tasks, newSettings, fixedCommitments, studyPlans);
             
             // Preserve session status from previous plan
             newPlans.forEach(plan => {

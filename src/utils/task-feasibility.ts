@@ -1,5 +1,5 @@
 import { Task, UserSettings, StudyPlan, FixedCommitment } from '../types';
-import { generateNewStudyPlan } from './scheduling';
+import { generateNewStudyPlanWithPreservation } from './scheduling';
 
 export interface AddTaskFeasibility {
   blocksNewTask: boolean;
@@ -13,6 +13,7 @@ export interface AddTaskFeasibility {
 /**
  * Assess feasibility of adding a task by generating a plan and checking scheduled vs. total hours.
  * Blocks if the task is completely unscheduled OR if more than 50% is unscheduled.
+ * Preserves manual schedules by default.
  */
 export function assessAddTaskFeasibility(
   newTask: Task,
@@ -22,7 +23,7 @@ export function assessAddTaskFeasibility(
   existingStudyPlans: StudyPlan[],
   precomputedPlans?: StudyPlan[]
 ): AddTaskFeasibility {
-  const plansToUse = precomputedPlans || generateNewStudyPlan(updatedTasks, settings, fixedCommitments, existingStudyPlans).plans;
+  const plansToUse = precomputedPlans || generateNewStudyPlanWithPreservation(updatedTasks, settings, fixedCommitments, existingStudyPlans).plans;
 
   // Compute scheduled hours for the new task, excluding skipped sessions
   const scheduledHoursMap: Record<string, number> = {};

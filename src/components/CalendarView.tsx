@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
-import withDragAndDrop, { withDragAndDropProps } from 'react-big-calendar/lib/addons/dragAndDrop';
+import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import moment from 'moment';
@@ -8,7 +8,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 import { StudyPlan, FixedCommitment, Task, StudySession, UserSettings } from '../types';
 import { BookOpen, Clock, Settings, X, Calendar as CalendarIcon } from 'lucide-react';
-import { checkSessionStatus, validateTimeSlot, doesCommitmentApplyToDate } from '../utils/scheduling';
+import { checkSessionStatus, doesCommitmentApplyToDate } from '../utils/scheduling';
 import { getLocalDateString } from '../utils/scheduling';
 import MobileCalendarView from './MobileCalendarView';
 
@@ -34,7 +34,9 @@ interface CalendarEvent {
   allDay?: boolean;
   resource: {
     type: 'study' | 'commitment';
-    data: any;
+    data: StudySession | FixedCommitment;
+    taskId?: string;
+    planDate?: string; // For study sessions, which plan date they belong to
   };
 }
 
@@ -47,7 +49,7 @@ const intervalOptions = [
 ];
 
 
-const DEFAULT_UNCATEGORIZED_TASK_COLOR = '#9ca3af'; // Light gray for uncategorized tasks
+// Removed unused constant
 
 // Default color for commitments
 const COMMITMENT_DEFAULT_COLOR = '#3b82f6'; // Blue for commitments
@@ -207,8 +209,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         
         // Both are not missed, prioritize chronological order for manually rescheduled sessions
         // Check if either session has been manually rescheduled
-        const aIsRescheduled = a.schedulingMetadata?.state === 'rescheduled' || a.originalTime;
-        const bIsRescheduled = b.schedulingMetadata?.state === 'rescheduled' || b.originalTime;
+        const aIsRescheduled = a.schedulingMetadata?.state === 'redistributed' || a.originalTime;
+        const bIsRescheduled = b.schedulingMetadata?.state === 'redistributed' || b.originalTime;
         
         // If both are rescheduled or both are not rescheduled, sort by time
         if (aIsRescheduled === bIsRescheduled) {
@@ -258,7 +260,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             end,
             resource: {
               type: 'study',
-              data: { ...session, task, planDate } // Always include planDate
+              data: session,
+              planDate // Always include planDate
             }
           });
         });
@@ -466,20 +469,21 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const handleSelectEvent = (event: CalendarEvent) => {
     if (event.resource.type === 'study') {
+      const session = event.resource.data as StudySession;
       // Prevent clicking on done sessions
-      if (event.resource.data.done) return;
+      if (session.done) return;
       const today = getLocalDateString();
-      // Always use planDate from event.resource.data, fallback to event.start if missing
-      let planDate = event.resource.data.planDate;
+      // Always use planDate from event.resource, fallback to event.start if missing
+      let planDate = event.resource.planDate;
       if (!planDate && event.start) {
         planDate = event.start.toISOString().split('T')[0];
       }
       if ((planDate === today)) {
         if (onSelectTask) {
-          onSelectTask(event.resource.data.task, {
+          onSelectTask(tasks.find(t => t.id === session.taskId)!, {
             allocatedHours: moment(event.end).diff(moment(event.start), 'hours', true),
             planDate: planDate,
-            sessionNumber: event.resource.data.sessionNumber
+            sessionNumber: session.sessionNumber
           });
         }
       }
@@ -620,7 +624,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     const session = event.resource.data as StudySession;
     const targetDate = moment(start).format('YYYY-MM-DD');
-    const originalDate = session.planDate || event.resource.data.planDate;
+    const originalDate = event.resource.planDate || moment(event.start).format('YYYY-MM-DD');
     const sessionDuration = session.allocatedHours;
 
     // Check if session is missed - missed sessions cannot be moved
@@ -667,7 +671,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
 
     // Calculate the time difference to inform user if session was moved
-    const targetTime = moment(start).format('HH:mm');
     const actualTime = moment(availableSlot.start).format('HH:mm');
     const timeDifferenceMinutes = Math.abs(moment(availableSlot.start).diff(moment(start), 'minutes'));
 
@@ -682,7 +685,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
 
     // Get the original plan date where the session was dragged from
-    const originalPlanDate = event.resource.data.planDate;
+    const originalPlanDate = event.resource.planDate;
 
     // Update the study plans
     const updatedPlans = studyPlans.map(plan => {
@@ -779,8 +782,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     let backgroundSize = 'auto';
     
     if (event.resource.type === 'study') {
+      const session = event.resource.data as StudySession;
+      // Find the task for this session
+      const task = tasks.find(t => t.id === session.taskId);
+      
       // Use category-based colors for study tasks
-      const task = event.resource.data.task;
       if (task?.category && categoryColorMap[task.category]) {
         backgroundColor = categoryColorMap[task.category];
       } else {
@@ -788,18 +794,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       }
       
       // Check session status
-      const sessionStatus = checkSessionStatus(event.resource.data, moment(start).format('YYYY-MM-DD'));
+      const sessionStatus = checkSessionStatus(session, moment(start).format('YYYY-MM-DD'));
       
       // Debug logging for session status
-      console.log(`Calendar event "${event.title}" on ${moment(start).format('YYYY-MM-DD')}: status=${sessionStatus}, done=${event.resource.data.done}, startTime=${event.resource.data.startTime}, endTime=${event.resource.data.endTime}`);
+      console.log(`Calendar event "${event.title}" on ${moment(start).format('YYYY-MM-DD')}: status=${sessionStatus}, done=${session.done}, startTime=${session.startTime}, endTime=${session.endTime}`);
       
       // Hide skipped sessions from calendar
-      if (event.resource.data.status === 'skipped') {
+      if (session.status === 'skipped') {
         display = 'none';
         opacity = 0;
       }
       // If session is done, gray it out
-      else if (event.resource.data.done || sessionStatus === 'completed') {
+      else if (session.done || sessionStatus === 'completed') {
         backgroundColor = colorSettings.completedColor;
         opacity = 0.5;
       }
@@ -824,7 +830,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       }
 
     } else if (event.resource.type === 'commitment') {
-      const commitment = event.resource.data;
+      const commitment = event.resource.data as FixedCommitment;
       // Use category-based colors for commitments, same as tasks
       if (commitment.category && categoryColorMap[commitment.category]) {
         backgroundColor = categoryColorMap[commitment.category];
@@ -844,7 +850,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     let borderStyle = 'none';
     
     if (event.resource.type === 'study') {
-      const task = event.resource.data.task;
+      const session = event.resource.data as StudySession;
+      const task = tasks.find(t => t.id === session.taskId);
       if (task && !task.importance && backgroundImage === 'none') {
         // Add more visible dot pattern for not important tasks (only if no other pattern is set)
         backgroundImage = 'radial-gradient(circle, rgba(255,255,255,0.25) 1.5px, transparent 1.5px)';
@@ -897,7 +904,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       case 'health':
         return '🏥';
       case 'learning':
-        return '����';
+        return '🎯';
       case 'finance':
         return '💰';
       case 'home':
@@ -939,19 +946,21 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       let statusIndicator = '';
       let duration = '';
 
-      // Calculate duration more accurately
-      const durationMs = moment(event.end).diff(moment(event.start));
-      const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
-      const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+      // Calculate duration more accurately, but hide for all-day commitments
+      if (!isAllDay || event.resource.type === 'study') {
+        const durationMs = moment(event.end).diff(moment(event.start));
+        const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
+        const durationMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
 
-      if (durationHours >= 1) {
-        if (durationMinutes > 0) {
-          duration = `(${durationHours}h ${durationMinutes}m)`;
+        if (durationHours >= 1) {
+          if (durationMinutes > 0) {
+            duration = `(${durationHours}h ${durationMinutes}m)`;
+          } else {
+            duration = `(${durationHours}h)`;
+          }
         } else {
-          duration = `(${durationHours}h)`;
+          duration = `(${durationMinutes}m)`;
         }
-      } else {
-        duration = `(${durationMinutes}m)`;
       }
 
       if (event.resource.type === 'study') {
@@ -1089,7 +1098,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               className="p-2 rounded-lg bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 transition-colors"
               title="Learn about Drag & Drop"
             >
-              <svg size={20} className="text-blue-600 dark:text-blue-300" fill="currentColor" viewBox="0 0 24 24" width="20" height="20">
+              <svg className="text-blue-600 dark:text-blue-300" fill="currentColor" viewBox="0 0 24 24" width="20" height="20">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
               </svg>
             </button>
@@ -1169,8 +1178,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         <DragAndDropCalendar
           localizer={localizer}
           events={events}
-          startAccessor="start"
-          endAccessor="end"
+          startAccessor={(event: any) => (event as CalendarEvent).start}
+          endAccessor={(event: any) => (event as CalendarEvent).end}
           style={{ height: '100%' }}
           views={[Views.MONTH, Views.WEEK, Views.DAY]}
           defaultView={Views.WEEK}
@@ -1184,8 +1193,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           }
           min={minTime}
           max={maxTime}
-          onSelectEvent={handleSelectEvent}
-          eventPropGetter={eventStyleGetter}
+          onSelectEvent={(event: any) => handleSelectEvent(event as CalendarEvent)}
+          eventPropGetter={(event: any, start: Date, end: Date, isSelected: boolean) => eventStyleGetter(event as CalendarEvent, start, end, isSelected)}
           formats={{
             timeGutterFormat: customGutterHeader,
             eventTimeRangeFormat: ({ start, end }) =>
@@ -1197,21 +1206,28 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           }}
           rtl={false}
           dayLayoutAlgorithm="no-overlap"
-          draggableAccessor={(event) => {
-            if (event.resource.type !== 'study') return false;
+          draggableAccessor={(event: any) => {
+            const calendarEvent = event as CalendarEvent;
+            if (calendarEvent.resource.type !== 'study') return false;
 
             // Check session status - only allow dragging of pending/active sessions
-            const session = event.resource.data;
-            const planDate = session.planDate || moment(event.start).format('YYYY-MM-DD');
-            const sessionStatus = checkSessionStatus(session, planDate);
+            const session = calendarEvent.resource.data;
+            if (calendarEvent.resource.type === 'study') {
+              const planDate = calendarEvent.resource.planDate || moment(calendarEvent.start).format('YYYY-MM-DD');
+              const sessionStatus = checkSessionStatus(session as StudySession, planDate);
 
-            // Don't allow dragging of missed, completed, or done sessions
-            return sessionStatus !== 'missed' &&
-                   sessionStatus !== 'completed' &&
-                   !session.done;
+              // Don't allow dragging of missed, completed, or done sessions
+              return sessionStatus !== 'missed' &&
+                     sessionStatus !== 'completed' &&
+                     !(session as StudySession).done;
+            }
+            return false;
           }}
           resizable={false}
-          onEventDrop={handleEventDrop}
+          onEventDrop={(args: any) => {
+            const { event, start, end } = args;
+            handleEventDrop({ event: event as CalendarEvent, start, end });
+          }}
           onDragStart={handleDragStart}
         />
       </div>

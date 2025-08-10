@@ -2304,8 +2304,8 @@ export const redistributeAfterTaskDeletion = (
   existingStudyPlans: StudyPlan[]
 ): StudyPlan[] => {
   if (settings.studyPlanMode !== 'even') {
-    // For smart mode, just regenerate from scratch
-    const { plans } = generateNewStudyPlan(tasks, settings, fixedCommitments);
+    // For smart mode, just regenerate from scratch, preserving manual schedules
+    const { plans } = generateNewStudyPlanWithPreservation(tasks, settings, fixedCommitments, existingStudyPlans);
     return plans;
   }
 
@@ -2972,4 +2972,106 @@ const combineSessionsOnSameDayWithValidation = (studyPlans: StudyPlan[], setting
     plan.plannedTasks = combinedSessions;
     plan.totalStudyHours = combinedSessions.reduce((sum, session) => sum + session.allocatedHours, 0);
   }
+};
+
+/**
+ * Preserves manual schedules from existing study plans when generating new ones
+ * This ensures that manually rescheduled sessions maintain their exact positions
+ * and are treated as fixed constraints by the scheduling algorithm
+ */
+export const preserveManualSchedules = (
+  newPlans: StudyPlan[],
+  existingPlans: StudyPlan[]
+): StudyPlan[] => {
+  // Create a map of manually rescheduled sessions by their unique identifier
+  const manualSchedules = new Map<string, StudySession>();
+  
+  existingPlans.forEach(plan => {
+    plan.plannedTasks.forEach(session => {
+      if (session.originalTime && session.originalDate && session.isManualOverride) {
+        const key = `${session.taskId}-${session.sessionNumber}`;
+        manualSchedules.set(key, { ...session });
+      }
+    });
+  });
+
+  // Apply manual schedule preservation to new plans
+  newPlans.forEach(plan => {
+    const prevPlan = existingPlans.find(p => p.date === plan.date);
+    if (!prevPlan) return;
+
+    plan.plannedTasks.forEach(session => {
+      const prevSession = prevPlan.plannedTasks.find(s => 
+        s.taskId === session.taskId && s.sessionNumber === session.sessionNumber
+      );
+      
+      if (prevSession) {
+        // Preserve done sessions
+        if (prevSession.done) {
+          session.done = true;
+          session.status = prevSession.status;
+          session.actualHours = prevSession.actualHours;
+          session.completedAt = prevSession.completedAt;
+        }
+        // Preserve skipped sessions
+        else if (prevSession.status === 'skipped') {
+          session.status = 'skipped';
+        }
+        // Preserve manual reschedules with their exact positions
+        else if (prevSession.originalTime && prevSession.originalDate && prevSession.isManualOverride) {
+          // Preserve all the original reschedule metadata
+          session.originalTime = prevSession.originalTime;
+          session.originalDate = prevSession.originalDate;
+          session.rescheduledAt = prevSession.rescheduledAt;
+          session.isManualOverride = prevSession.isManualOverride;
+          
+          // Preserve the actual rescheduled times and positions
+          session.startTime = prevSession.startTime;
+          session.endTime = prevSession.endTime;
+          
+          // If the session was moved to a different date, ensure it stays there
+          if (prevSession.originalDate !== plan.date) {
+            const targetPlan = newPlans.find(p => p.date === prevSession.originalDate);
+            if (targetPlan) {
+              // Move session to the correct plan
+              targetPlan.plannedTasks.push(session);
+              plan.plannedTasks = plan.plannedTasks.filter(s => s !== session);
+            }
+          }
+        }
+        // Preserve other rescheduled sessions (but allow regeneration of times)
+        else if (prevSession.originalTime && prevSession.originalDate) {
+          session.originalTime = prevSession.originalTime;
+          session.originalDate = prevSession.originalDate;
+          session.rescheduledAt = prevSession.rescheduledAt;
+          session.isManualOverride = prevSession.isManualOverride;
+        }
+      }
+    });
+  });
+
+  return newPlans;
+};
+
+/**
+ * Enhanced study plan generation that respects existing manual schedules
+ * This function ensures that manually rescheduled sessions are treated as
+ * fixed constraints when generating new schedules
+ */
+export const generateNewStudyPlanWithPreservation = (
+  tasks: Task[],
+  settings: UserSettings,
+  fixedCommitments: FixedCommitment[],
+  existingStudyPlans: StudyPlan[] = []
+): { plans: StudyPlan[]; suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> } => {
+  // First, generate the new study plan
+  const result = generateNewStudyPlan(tasks, settings, fixedCommitments, existingStudyPlans);
+  
+  // Then apply manual schedule preservation
+  const preservedPlans = preserveManualSchedules(result.plans, existingStudyPlans);
+  
+  return {
+    plans: preservedPlans,
+    suggestions: result.suggestions
+  };
 };
