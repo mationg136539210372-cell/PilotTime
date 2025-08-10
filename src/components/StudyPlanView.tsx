@@ -1018,7 +1018,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Study Plan</h2>
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Note: you should always refresh plan (reset all) when adding or editing tasks</h2>
             </div>
             <button
               onClick={handleRefreshClick}
