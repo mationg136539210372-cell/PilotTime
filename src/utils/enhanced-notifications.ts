@@ -38,8 +38,8 @@ export interface NotificationSummary {
 }
 
 /**
- * Calculates truly unscheduled hours from actual study plan generation
- * Now correctly excludes sessions marked as 'skipped' from the calculation.
+ * Calculates truly unscheduled hours from actual study plan generation.
+ * This version treats sessions marked as 'skipped' or 'redistributed' as work that has been accounted for and should not be flagged as unscheduled.
  */
 export function getAccurateUnscheduledTasks(
   tasks: Task[],
@@ -49,14 +49,15 @@ export function getAccurateUnscheduledTasks(
   const today = new Date().toISOString().split('T')[0];
   const unscheduledTasks: UnscheduledTaskNotification[] = [];
 
-  // Calculate scheduled hours per task from all sessions that are either completed, pending, or missed
+  // Calculate scheduled hours per task from all non-missed sessions.
   const taskScheduledHours: Record<string, number> = {};
   
   studyPlans.forEach(plan => {
     plan.plannedTasks.forEach(session => {
-      // The fix is here: only count sessions towards scheduled hours if they are not
-      // 'skipped'. This is the correct logic for a skipped session.
-      if (session.status !== 'skipped' && session.status !== 'missed') {
+      // The fix is here: we now count 'skipped' sessions towards the scheduled hours,
+      // as they are considered accounted for and do not need to be rescheduled.
+      // 'Missed' sessions, however, are still considered unscheduled work.
+      if (session.status !== 'missed') {
         taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
       }
     });
