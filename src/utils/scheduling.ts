@@ -377,11 +377,15 @@ export function findNextAvailableTimeSlot(
     effectiveEndHour = effectiveWindow.endHour;
   }
   // Build a list of all busy intervals (sessions and commitments)
+  // Exclude completed sessions as they don't block new scheduling
   const busyIntervals: Array<{ start: number; end: number }> = [];
   existingSessions.forEach(s => {
-    const [sh, sm] = s.startTime.split(":").map(Number);
-    const [eh, em] = s.endTime.split(":").map(Number);
-    busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
+    // Skip completed sessions as they don't block new time slots
+    if (!s.done && s.status !== 'completed') {
+      const [sh, sm] = s.startTime.split(":").map(Number);
+      const [eh, em] = s.endTime.split(":").map(Number);
+      busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
+    }
   });
   
   // Filter commitments to exclude deleted occurrences and check date range applicability
@@ -1078,11 +1082,11 @@ export const generateNewStudyPlan = (
     const suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> = [];
     let taskScheduledHours: { [taskId: string]: number } = {};
     
-    // Calculate how many hours each task actually got scheduled (excluding skipped sessions)
+    // Calculate how many hours each task actually got scheduled (excluding skipped and completed sessions)
     for (const plan of studyPlans) {
       for (const session of plan.plannedTasks) {
-        // Skip sessions that are marked as skipped - they shouldn't count towards scheduled hours
-        if (session.status !== 'skipped') {
+        // Skip sessions that are marked as skipped or completed - they shouldn't count towards scheduled hours
+        if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
           taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
         }
       }
@@ -1126,12 +1130,12 @@ export const generateNewStudyPlan = (
         }
       }
       
-      // Recalculate scheduled hours after global redistribution (excluding skipped sessions)
+      // Recalculate scheduled hours after global redistribution (excluding skipped and completed sessions)
       taskScheduledHours = {};
     for (const plan of studyPlans) {
       for (const session of plan.plannedTasks) {
-        // Skip sessions that are marked as skipped - they shouldn't count towards scheduled hours
-        if (session.status !== 'skipped') {
+        // Skip sessions that are marked as skipped or completed - they shouldn't count towards scheduled hours
+        if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
           taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
         }
       }
@@ -1269,8 +1273,12 @@ export const generateNewStudyPlan = (
           const plan = studyPlans.find(p => p.date === currentDate);
 
           if (plan) {
-            // Calculate available time on this day
-            const usedHours = plan.plannedTasks.reduce((sum, session) => sum + session.allocatedHours, 0);
+            // Calculate available time on this day (excluding completed sessions)
+            const usedHours = plan.plannedTasks.reduce((sum, session) => {
+              // Don't count completed sessions toward used hours
+              if (session.done || session.status === 'completed') return sum;
+              return sum + session.allocatedHours;
+            }, 0);
             const availableHours = plan.availableHours - usedHours;
 
             // Check if we have enough time for minimum session
@@ -1604,7 +1612,11 @@ export const generateNewStudyPlan = (
         let planIndex = 0;
         while (remainingHours > 0 && planIndex < studyPlans.length) {
           const plan = studyPlans[planIndex];
-          const usedHours = plan.plannedTasks.reduce((sum, session) => sum + session.allocatedHours, 0);
+          const usedHours = plan.plannedTasks.reduce((sum, session) => {
+            // Don't count completed sessions toward used hours
+            if (session.done || session.status === 'completed') return sum;
+            return sum + session.allocatedHours;
+          }, 0);
           const availableHours = plan.availableHours - usedHours;
 
           if (availableHours >= minSessionHours) {
@@ -1845,7 +1857,11 @@ export const generateNewStudyPlan = (
       for (const plan of studyPlans) {
         if (remainingHours <= 0) break;
 
-        const usedHours = plan.plannedTasks.reduce((sum, session) => sum + session.allocatedHours, 0);
+        const usedHours = plan.plannedTasks.reduce((sum, session) => {
+          // Don't count completed sessions toward used hours
+          if (session.done || session.status === 'completed') return sum;
+          return sum + session.allocatedHours;
+        }, 0);
         const availableHours = plan.availableHours - usedHours;
 
         if (availableHours >= minSessionHours) {
@@ -2437,12 +2453,12 @@ export const redistributeAfterTaskDeletion = (
     });
   });
 
-  // Account for existing sessions (excluding missed and redistributed sessions from daily limit)
+  // Account for existing sessions (excluding missed, redistributed, and completed sessions from daily limit)
   existingStudyPlans.forEach(plan => {
     if (availableDays.includes(plan.date)) {
       plan.plannedTasks.forEach(session => {
-        if (session.status !== 'skipped') {
-          // Only count regular sessions toward daily capacity
+        if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
+          // Only count non-completed sessions toward daily capacity
           if (!isMissedOrRedistributedSession(session, plan.date)) {
             dailyRemainingHours[plan.date] -= session.allocatedHours;
           }
@@ -2628,13 +2644,13 @@ export const redistributeAfterTaskDeletion = (
     let taskScheduledHours: { [taskId: string]: number } = {};
     for (const plan of studyPlans) {
       for (const session of plan.plannedTasks) {
-        // Skip sessions that are marked as skipped - they shouldn't count towards scheduled hours
-        if (session.status !== 'skipped') {
+        // Skip sessions that are marked as skipped or completed - they shouldn't count towards scheduled hours
+        if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
           taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
         }
       }
     }
-    
+
     // Find tasks with unscheduled hours
     const tasksWithUnscheduledHours = tasksEven.filter(task => {
       const scheduledHours = taskScheduledHours[task.id] || 0;
