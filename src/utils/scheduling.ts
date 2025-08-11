@@ -3094,12 +3094,16 @@ export const preserveManualSchedules = (
       );
       
       if (prevSession) {
-        // Preserve done sessions
+        // Preserve done sessions completely - including duration and timing
         if (prevSession.done) {
           session.done = true;
           session.status = prevSession.status;
           session.actualHours = prevSession.actualHours;
           session.completedAt = prevSession.completedAt;
+          // Critical: preserve the duration and timing for completed sessions
+          session.allocatedHours = prevSession.allocatedHours;
+          session.startTime = prevSession.startTime;
+          session.endTime = prevSession.endTime;
         }
         // Preserve skipped sessions
         else if (prevSession.status === 'skipped') {
