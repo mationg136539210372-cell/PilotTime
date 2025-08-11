@@ -2059,7 +2059,7 @@ function App() {
                                 + Add Task
                             </button>
                                     {showTaskInput && (
-          <TaskInput onAddTask={handleAddTask} onCancel={() => setShowTaskInput(false)} userSettings={settings} />
+          <TaskInput onAddTask={handleAddTask} onCancel={() => setShowTaskInput(false)} userSettings={settings} existingStudyPlans={studyPlans} fixedCommitments={fixedCommitments} />
                             )}
                             <TaskList
                                 tasks={tasks}
