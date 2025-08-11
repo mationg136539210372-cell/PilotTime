@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Clock, BookOpen, TrendingUp, Calendar, Bell, CheckCircle2, AlertTriangle, Clock3, X } from 'lucide-react';
 import { Task, StudyPlan } from '../types';
 import { formatTime, getLocalDateString, checkSessionStatus } from '../utils/scheduling';
@@ -657,7 +657,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
                 <div className="text-4xl mb-4">📚</div>
                 <h3 className="text-xl font-semibold text-gray-800 mb-2 dark:text-white">No Sessions Planned</h3>
                 <p className="text-gray-600 dark:text-gray-300">
-                  You have no study sessions planned for today. Time to generate a study plan! 🚀
+                  You have no study sessions planned for today. Time to generate a study plan! ����
                 </p>
               </div>
             </div>

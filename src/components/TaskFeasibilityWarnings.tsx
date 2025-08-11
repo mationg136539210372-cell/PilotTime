@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, AlertCircle, Info, Clock, Calendar, Target, Lightbulb, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { FeasibilityWarning, TaskFeasibilityResult } from '../utils/task-feasibility';
 
