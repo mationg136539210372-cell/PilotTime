@@ -47,7 +47,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
       }
     }
   }, [editFormData.deadline, editingTaskId]);
-  
+
   // Get today's date in YYYY-MM-DD format for min attribute
   const today = new Date().toISOString().split('T')[0];
 
@@ -63,6 +63,61 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
     return daysUntilDeadline <= 3 && editFormData.importance === false;
   }, [editFormData.deadline, editFormData.importance]);
+
+  // Check time restrictions for frequency preferences (similar to TaskInput)
+  const frequencyRestrictions = useMemo(() => {
+    if (!editFormData.deadline || editFormData.deadlineType === 'none') {
+      return { disableWeekly: false, disable3xWeek: false };
+    }
+
+    const startDate = new Date(editFormData.startDate || new Date().toISOString().split('T')[0]);
+    const deadlineDate = new Date(editFormData.deadline);
+    const timeDiff = deadlineDate.getTime() - startDate.getTime();
+    const daysUntilDeadline = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+    return {
+      disableWeekly: daysUntilDeadline < 14, // Less than 2 weeks
+      disable3xWeek: daysUntilDeadline < 7   // Less than 1 week
+    };
+  }, [editFormData.deadline, editFormData.deadlineType, editFormData.startDate]);
+
+  // Auto-adjust frequency when restrictions change (similar to TaskInput)
+  React.useEffect(() => {
+    if (editingTaskId) {
+      if (frequencyRestrictions.disableWeekly && editFormData.targetFrequency === 'weekly') {
+        setEditFormData(prev => ({ ...prev, targetFrequency: 'daily' }));
+      }
+      if (frequencyRestrictions.disable3xWeek && editFormData.targetFrequency === '3x-week') {
+        setEditFormData(prev => ({ ...prev, targetFrequency: 'daily' }));
+      }
+    }
+  }, [frequencyRestrictions.disableWeekly, frequencyRestrictions.disable3xWeek, editFormData.targetFrequency, editingTaskId]);
+
+  // Validation error messages
+  const getValidationErrors = (): string[] => {
+    const errors: string[] = [];
+    if (!editFormData.title?.trim()) errors.push('Task title is required');
+    if (editFormData.title && editFormData.title.trim().length > 100) errors.push('Task title must be 100 characters or less');
+
+    const totalHours = (editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60);
+    if (totalHours <= 0) errors.push('Estimated time must be greater than 0');
+    if (totalHours > 100) errors.push('Estimated time seems unreasonably high (over 100 hours)');
+
+    if (!editFormData.impact) errors.push('Please select task importance');
+    if (editFormData.deadline && editFormData.deadline < today) errors.push('Deadline cannot be in the past');
+    if (editFormData.startDate && editFormData.startDate < today && !editFormData.isOneTimeTask) errors.push('Start date cannot be in the past');
+
+    if (editFormData.category === 'Custom...' && (!editFormData.customCategory?.trim() || editFormData.customCategory.trim().length > 50)) {
+      errors.push('Custom category must be between 1-50 characters');
+    }
+
+    if (editFormData.isOneTimeTask) {
+      if (!editFormData.deadline || editFormData.deadline.trim() === '') errors.push('One-sitting tasks require a deadline');
+      if (totalHours > userSettings.dailyAvailableHours) errors.push(`One-sitting task (${totalHours}h) exceeds your daily available hours (${userSettings.dailyAvailableHours}h)`);
+    }
+
+    return errors;
+  };
   
   // Check if deadline is in the past
   const isDeadlinePast = editFormData.deadline ? editFormData.deadline < today : false;
@@ -156,17 +211,30 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     setShowAdvancedOptions(false);
   };
 
-  // Form validation for edit form
+  // Enhanced form validation for edit form with TaskInput restrictions
   const isEditFormValid = React.useMemo(() => {
     if (!editFormData.title?.trim()) return false;
+    if (editFormData.title && editFormData.title.trim().length > 100) return false; // Title length limit
+
     const totalHours = (editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60);
     if (totalHours <= 0) return false;
+    if (totalHours > 100) return false; // Reasonable hour limit
+
     if (!editFormData.impact) return false;
     if (editFormData.deadline && editFormData.deadline < today) return false;
     if (editFormData.startDate && editFormData.startDate < today) return false;
-    if (editFormData.category === 'Custom...' && !editFormData.customCategory?.trim()) return false;
+
+    // Custom category validation (1-50 characters)
+    if (editFormData.category === 'Custom...' && (!editFormData.customCategory?.trim() || editFormData.customCategory.trim().length > 50)) return false;
+
+    // One-sitting task validation
+    if (editFormData.isOneTimeTask) {
+      if (!editFormData.deadline || editFormData.deadline.trim() === '') return false; // One-sitting requires deadline
+      if (totalHours > userSettings.dailyAvailableHours) return false; // Can't exceed daily hours
+    }
+
     return true;
-  }, [editFormData, today]);
+  }, [editFormData, today, userSettings]);
 
   const saveEdit = () => {
     if (editingTaskId && isEditFormValid) {
@@ -180,6 +248,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
         deadline: editFormData.deadlineType === 'none' ? '' : (editFormData.deadline || ''),
         deadlineType: editFormData.deadline ? editFormData.deadlineType : 'none',
         importance: editFormData.impact === 'high',
+        priority: editFormData.impact === 'high', // Add priority field
         // Ensure all advanced fields are properly updated
         targetFrequency: editFormData.targetFrequency,
         respectFrequencyForDeadlines: editFormData.respectFrequencyForDeadlines,
@@ -372,8 +441,18 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                             className="w-full px-3 py-2 border rounded-lg text-base bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
                             <option value="daily"> Daily progress - Work a bit each day</option>
-                            <option value="3x-week"> Few times per week - Every 2-3 days</option>
-                            <option value="weekly"> Weekly sessions - Once per week</option>
+                            <option
+                              value="3x-week"
+                              disabled={frequencyRestrictions.disable3xWeek}
+                            >
+                               Few times per week - Every 2-3 days{frequencyRestrictions.disable3xWeek ? ' (Need 1+ week)' : ''}
+                            </option>
+                            <option
+                              value="weekly"
+                              disabled={frequencyRestrictions.disableWeekly}
+                            >
+                               Weekly sessions - Once per week{frequencyRestrictions.disableWeekly ? ' (Need 2+ weeks)' : ''}
+                            </option>
                             <option value="flexible"> When I have time - Flexible scheduling</option>
                           </select>
 
@@ -595,15 +674,62 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                       </div>
                     )}
 
-                    {/* Validation errors display */}
-                    {!isEditFormValid && editFormData.title && (
-                      <div className="text-red-600 text-sm space-y-1">
-                        {!editFormData.title?.trim() && <div> Task title is required</div>}
-                        {((editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60)) <= 0 && <div> Estimated time must be greater than 0</div>}
-                        {!editFormData.impact && <div> Priority level is required</div>}
-                        {editFormData.deadline && editFormData.deadline < today && <div> Deadline cannot be in the past</div>}
-                        {editFormData.startDate && editFormData.startDate < today && <div> Start date cannot be in the past</div>}
-                        {editFormData.category === 'Custom...' && !editFormData.customCategory?.trim() && <div> Custom category is required</div>}
+                    {/* Enhanced validation errors display */}
+                    {!isEditFormValid && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-2 dark:bg-red-900/20 dark:border-red-700">
+                        <div className="text-red-800 dark:text-red-200 font-medium mb-2">Please fix these issues:</div>
+                        <ul className="text-red-700 dark:text-red-300 text-sm space-y-1">
+                          {getValidationErrors().map((error, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <span className="text-red-500 mt-0.5">•</span>
+                              <span>{error}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Frequency restriction warnings */}
+                    {(frequencyRestrictions.disableWeekly || frequencyRestrictions.disable3xWeek) && (
+                      <div className="mt-2 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <span className="text-orange-500 text-sm">⚠️</span>
+                          <div className="text-xs text-orange-700 dark:text-orange-200">
+                            <div className="font-medium mb-1">Frequency Options Limited</div>
+                            {frequencyRestrictions.disableWeekly && (
+                              <div className="mb-1">• Weekly sessions need at least 2 weeks between start date and deadline</div>
+                            )}
+                            {frequencyRestrictions.disable3xWeek && (
+                              <div className="mb-1">• 2-3 days frequency needs at least 1 week between start date and deadline</div>
+                            )}
+                            <div className="text-orange-600 dark:text-orange-300 font-medium">Consider extending your deadline or using daily progress instead.</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Deadline conflict warning */}
+                    {deadlineConflict.hasConflict && (
+                      <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
+                        <div className="font-medium">Frequency preference may not allow completion before deadline</div>
+                        {deadlineConflict.reason && (
+                          <div className="mt-1">{deadlineConflict.reason}</div>
+                        )}
+                        {deadlineConflict.recommendedFrequency && (
+                          <div className="mt-1">
+                            <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Low-priority urgent warning */}
+                    {isLowPriorityUrgent && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2 dark:bg-yellow-900/20 dark:border-yellow-700">
+                        <div className="text-yellow-800 dark:text-yellow-200 font-medium mb-1">Warning: low priority with urgent deadline</div>
+                        <div className="text-yellow-700 dark:text-yellow-300 text-sm">
+                          This task is low priority but has an urgent deadline. It may not be scheduled if you have more important urgent tasks.
+                        </div>
                       </div>
                     )}
 
