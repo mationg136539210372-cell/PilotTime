@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
@@ -36,72 +36,120 @@ import './utils/test-data-setup'; // Import test data setup for testing
 import { assessAddTaskFeasibility } from './utils/task-feasibility';
 
 function App() {
+    // Load data from localStorage after component mounts
+    useEffect(() => {
+        try {
+            // Load tasks
+            const savedTasks = localStorage.getItem('timepilot-tasks');
+            if (savedTasks) {
+                const parsed = JSON.parse(savedTasks);
+                if (Array.isArray(parsed)) {
+                    setTasks(parsed);
+                }
+            }
+
+            // Load study plans
+            const savedStudyPlans = localStorage.getItem('timepilot-studyPlans');
+            if (savedStudyPlans) {
+                const parsed = JSON.parse(savedStudyPlans);
+                if (Array.isArray(parsed)) {
+                    setStudyPlans(parsed);
+                }
+            }
+
+            // Load fixed commitments
+            const savedCommitments = localStorage.getItem('timepilot-commitments');
+            if (savedCommitments) {
+                const parsed = JSON.parse(savedCommitments);
+                if (Array.isArray(parsed)) {
+                    // Migrate existing commitments to include recurring field
+                    const migratedCommitments = parsed.map((commitment: any) => {
+                        if (commitment.recurring === undefined) {
+                            return {
+                                ...commitment,
+                                recurring: true,
+                                specificDates: commitment.specificDates || []
+                            };
+                        }
+                        return commitment;
+                    });
+                    setFixedCommitments(migratedCommitments);
+                }
+            }
+
+            // Load settings
+            const savedSettings = localStorage.getItem('timepilot-settings');
+            if (savedSettings) {
+                const parsed = JSON.parse(savedSettings);
+                if (parsed && typeof parsed === 'object') {
+                    const defaultSettings = {
+                        dailyAvailableHours: 6,
+                        workDays: [0, 1, 2, 3, 4, 5, 6],
+                        bufferDays: 0,
+                        minSessionLength: 15,
+                        bufferTimeBetweenSessions: 0,
+                        studyWindowStartHour: 6,
+                        studyWindowEndHour: 23,
+                        shortBreakDuration: 5,
+                        longBreakDuration: 15,
+                        maxConsecutiveHours: 4,
+                        avoidTimeRanges: [],
+                        weekendStudyHours: 4,
+                        autoCompleteSessions: false,
+                        enableNotifications: true,
+                        userPrefersPressure: false,
+                        studyPlanMode: 'even',
+                        dateSpecificStudyWindows: []
+                    };
+                    setSettings({ ...defaultSettings, ...parsed });
+                }
+            }
+
+            // Load gamification data
+            const savedGamification = localStorage.getItem('timepilot-gamification');
+            if (savedGamification) {
+                const parsed = JSON.parse(savedGamification);
+                setGamificationData(parsed);
+            }
+
+            // Load dark mode
+            const savedDarkMode = localStorage.getItem('timepilot-darkmode');
+            if (savedDarkMode) {
+                const parsed = JSON.parse(savedDarkMode);
+                setDarkMode(parsed);
+            }
+
+            setHasLoadedFromStorage(true);
+        } catch (error) {
+            console.error('Error loading data from localStorage:', error);
+            setHasLoadedFromStorage(true);
+        }
+    }, []);
+
     const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'plan' | 'timer' | 'calendar' | 'commitments' | 'settings'>('dashboard');
-    const [tasks, setTasks] = useState<Task[]>(() => {
-        const saved = localStorage.getItem('timepilot-tasks');
-        try {
-            const parsed = saved ? JSON.parse(saved) : [];
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
-    });
-    const [studyPlans, setStudyPlans] = useState<StudyPlan[]>(() => {
-        const saved = localStorage.getItem('timepilot-studyPlans');
-        try {
-            const parsed = saved ? JSON.parse(saved) : [];
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
-    });
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([]);
     const [currentTask, setCurrentTask] = useState<Task | null>(null);
     const [currentSession, setCurrentSession] = useState<{ allocatedHours: number; planDate?: string; sessionNumber?: number } | null>(null);
-    const [fixedCommitments, setFixedCommitments] = useState<FixedCommitment[]>(() => {
-        const saved = localStorage.getItem('timepilot-commitments');
-        try {
-            const parsed = saved ? JSON.parse(saved) : [];
-            if (Array.isArray(parsed)) {
-                // Migrate existing commitments to include recurring field
-                return parsed.map((commitment: any) => {
-                    if (commitment.recurring === undefined) {
-                        // Legacy commitment - assume it's recurring and migrate
-                        return {
-                            ...commitment,
-                            recurring: true,
-                            specificDates: commitment.specificDates || []
-                        };
-                    }
-                    return commitment;
-                });
-            }
-            return [];
-        } catch {
-            return [];
-        }
-    });
-    const [settings, setSettings] = useState<UserSettings>(() => {
-        const saved = localStorage.getItem('timepilot-settings');
-        try {
-            const parsed = saved ? JSON.parse(saved) : null;
-            // Remove breakDuration and preferredSessionLength from default/parsed settings
-            const defaultSettings = {
-                dailyAvailableHours: 6,
-                workDays: [0, 1, 2, 3, 4, 5, 6],
-                bufferDays: 0,
-                minSessionLength: 15
-            };
-            return parsed && typeof parsed === 'object'
-                ? { ...defaultSettings, ...parsed, breakDuration: undefined, preferredSessionLength: undefined } // Ensure they are removed even if present in old localStorage
-                : defaultSettings;
-        } catch {
-            return {
-                dailyAvailableHours: 6,
-                workDays: [0, 1, 2, 3, 4, 5, 6],
-                bufferDays: 0,
-                minSessionLength: 15
-            };
-        }
+    const [fixedCommitments, setFixedCommitments] = useState<FixedCommitment[]>([]);
+    const [settings, setSettings] = useState<UserSettings>({
+        dailyAvailableHours: 6,
+        workDays: [0, 1, 2, 3, 4, 5, 6],
+        bufferDays: 0,
+        minSessionLength: 15,
+        bufferTimeBetweenSessions: 0,
+        studyWindowStartHour: 6,
+        studyWindowEndHour: 23,
+        shortBreakDuration: 5,
+        longBreakDuration: 15,
+        maxConsecutiveHours: 4,
+        avoidTimeRanges: [],
+        weekendStudyHours: 4,
+        autoCompleteSessions: false,
+        enableNotifications: true,
+        userPrefersPressure: false,
+        studyPlanMode: 'even',
+        dateSpecificStudyWindows: []
     });
     const [, setIsPlanStale] = useState(false);
     const [, setLastPlanStaleReason] = useState<"settings" | "commitment" | "task" | null>(null);
@@ -138,40 +186,34 @@ function App() {
 
     // Gamification state
     const [showGamificationPanel, setShowGamificationPanel] = useState(false);
-    const [gamificationData, setGamificationData] = useState<GamificationData>(() => {
-        const saved = localStorage.getItem('timepilot-gamification');
-        if (saved) {
-            return JSON.parse(saved);
-        }
-        return {
-            achievements: ACHIEVEMENTS,
-            unlockedAchievements: [],
-            stats: {
-                totalStudyHours: 0,
-                totalTasksCompleted: 0,
-                currentStreak: 0,
-                longestStreak: 0,
-                perfectWeeks: 0,
-                earlyFinishes: 0,
-                totalSessions: 0,
-                averageSessionLength: 0,
-                favoriteStudyTime: 'morning' as const,
-                efficiencyScore: 100,
-                level: 1,
-                totalPoints: 0,
-                joinedDate: new Date().toISOString(),
-                lastActiveDate: new Date().toISOString()
-            },
-            streak: {
-                current: 0,
-                longest: 0,
-                lastStudyDate: '',
-                streakDates: []
-            },
-            milestones: [],
-            level: calculateLevel(0),
-            recentUnlocks: []
-        };
+    const [gamificationData, setGamificationData] = useState<GamificationData>({
+        achievements: ACHIEVEMENTS,
+        unlockedAchievements: [],
+        stats: {
+            totalStudyHours: 0,
+            totalTasksCompleted: 0,
+            currentStreak: 0,
+            longestStreak: 0,
+            perfectWeeks: 0,
+            earlyFinishes: 0,
+            totalSessions: 0,
+            averageSessionLength: 0,
+            favoriteStudyTime: 'morning' as const,
+            efficiencyScore: 100,
+            level: 1,
+            totalPoints: 0,
+            joinedDate: new Date().toISOString(),
+            lastActiveDate: new Date().toISOString()
+        },
+        streak: {
+            current: 0,
+            longest: 0,
+            lastStudyDate: '',
+            streakDates: []
+        },
+        milestones: [],
+        level: calculateLevel(0),
+        recentUnlocks: []
     });
     const [achievementNotification, setAchievementNotification] = useState<Achievement | null>(null);
     const [motivationalToast, setMotivationalToast] = useState<{
@@ -181,10 +223,7 @@ function App() {
     } | null>(null);
 
     // Dark mode state
-    const [darkMode, setDarkMode] = useState(() => {
-        const saved = localStorage.getItem('timepilot-darkmode');
-        return saved ? JSON.parse(saved) : false;
-    });
+    const [darkMode, setDarkMode] = useState(false);
 
     // Persist gamification data
     useEffect(() => {
@@ -972,27 +1011,97 @@ function App() {
         const updatedTasks = tasks.map(task =>
             task.id === taskId ? { ...task, ...updates } : task
         );
-        
-        // Check if estimated time changed and adjust preserved manual schedules
-        const timeChanged = originalTask && updates.estimatedHours !== undefined && 
+
+        // Check if estimated time changed and adjust sessions intelligently
+        const timeChanged = originalTask && updates.estimatedHours !== undefined &&
                            originalTask.estimatedHours !== updates.estimatedHours;
-        
+
         if (timeChanged && originalTask) {
-            const timeRatio = updates.estimatedHours! / (originalTask.estimatedHours || 1);
-            // Update preserved manual session durations proportionally
+            const oldEstimatedHours = originalTask.estimatedHours;
+            const newEstimatedHours = updates.estimatedHours!;
+
+            // Calculate completed/skipped hours to preserve them
+            let completedHours = 0;
+            let remainingSessions: any[] = [];
+
+            studyPlans.forEach(plan => {
+                plan.plannedTasks.forEach(session => {
+                    if (session.taskId === taskId) {
+                        if (session.done || session.status === 'completed' || session.status === 'skipped') {
+                            // This session is completed/skipped - preserve it and count its hours
+                            completedHours += session.allocatedHours;
+                        } else {
+                            // This is a remaining session that can be adjusted
+                            remainingSessions.push({...session, planDate: plan.date});
+                        }
+                    }
+                });
+            });
+
+            // Calculate new remaining hours after accounting for completed work
+            const newRemainingHours = Math.max(0, newEstimatedHours - completedHours);
+
+            if (remainingSessions.length > 0 && newRemainingHours > 0) {
+                // Distribute the new remaining hours across the remaining sessions
+                const hoursPerSession = newRemainingHours / remainingSessions.length;
+
+                // Update the remaining sessions with new durations
+                studyPlans.forEach(plan => {
+                    plan.plannedTasks.forEach(session => {
+                        if (session.taskId === taskId && !session.done && session.status !== 'completed' && session.status !== 'skipped') {
+                            // Update session duration
+                            session.allocatedHours = hoursPerSession;
+
+                            // Update end time based on new duration
+                            const [startHour, startMinute] = session.startTime.split(':').map(Number);
+                            const durationMinutes = Math.round(hoursPerSession * 60);
+                            const newEndTime = new Date();
+                            newEndTime.setHours(startHour, startMinute + durationMinutes, 0, 0);
+                            session.endTime = `${newEndTime.getHours().toString().padStart(2, '0')}:${newEndTime.getMinutes().toString().padStart(2, '0')}`;
+                        }
+                    });
+                });
+            } else if (remainingSessions.length > 0 && newRemainingHours === 0) {
+                // New estimated time is less than or equal to completed work - remove remaining sessions
+                studyPlans.forEach(plan => {
+                    plan.plannedTasks = plan.plannedTasks.filter(session => {
+                        if (session.taskId === taskId) {
+                            // Keep completed/skipped sessions, remove others
+                            return session.done || session.status === 'completed' || session.status === 'skipped';
+                        }
+                        return true;
+                    });
+                });
+
+                // Mark task as completed if all remaining work is done
+                if (completedHours >= newEstimatedHours) {
+                    updatedTasks.forEach(task => {
+                        if (task.id === taskId) {
+                            task.status = 'completed';
+                            task.estimatedHours = completedHours; // Set to actual completed hours
+                        }
+                    });
+                }
+            }
+
+            // Also handle manual override sessions proportionally (existing logic)
             studyPlans.forEach(plan => {
                 plan.plannedTasks.forEach(session => {
                     if (session.taskId === taskId && session.isManualOverride && session.originalTime && session.originalDate) {
-                        const [startHour, startMinute] = session.startTime.split(':').map(Number);
-                        const [endHour, endMinute] = session.endTime.split(':').map(Number);
-                        const currentDuration = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
-                        const newDuration = Math.max(15, Math.round(currentDuration * timeRatio)); // Minimum 15 minutes
-                        
-                        // Update the end time based on new duration
-                        const newEndTime = new Date();
-                        newEndTime.setHours(startHour, startMinute + newDuration, 0, 0);
-                        session.endTime = `${newEndTime.getHours().toString().padStart(2, '0')}:${newEndTime.getMinutes().toString().padStart(2, '0')}`;
-                        session.allocatedHours = newDuration / 60;
+                        // Only adjust if this session wasn't already handled above (i.e., it's not completed)
+                        if (!session.done && session.status !== 'completed' && session.status !== 'skipped') {
+                            const [startHour, startMinute] = session.startTime.split(':').map(Number);
+                            const [endHour, endMinute] = session.endTime.split(':').map(Number);
+                            const currentDuration = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+                            const timeRatio = newEstimatedHours / (oldEstimatedHours || 1);
+                            const newDuration = Math.max(15, Math.round(currentDuration * timeRatio)); // Minimum 15 minutes
+
+                            // Update the end time based on new duration
+                            const newEndTime = new Date();
+                            newEndTime.setHours(startHour, startMinute + newDuration, 0, 0);
+                            session.endTime = `${newEndTime.getHours().toString().padStart(2, '0')}:${newEndTime.getMinutes().toString().padStart(2, '0')}`;
+                            session.allocatedHours = newDuration / 60;
+                        }
                     }
                 });
             });
@@ -1000,26 +1109,34 @@ function App() {
         
         // Generate new study plan with updated tasks, preserving manual schedules
         const { plans: newPlans } = generateNewStudyPlanWithPreservation(updatedTasks, settings, fixedCommitments, studyPlans);
-        
+
         // Preserve session status from previous plan
         newPlans.forEach(plan => {
             const prevPlan = studyPlans.find(p => p.date === plan.date);
             if (!prevPlan) return;
-            
+
             // Preserve session status and properties
             plan.plannedTasks.forEach(session => {
                 const prevSession = prevPlan.plannedTasks.find(s => s.taskId === session.taskId && s.sessionNumber === session.sessionNumber);
                 if (prevSession) {
-                    // Preserve done sessions
+                    // Preserve done sessions completely - including duration
                     if (prevSession.done) {
                         session.done = true;
                         session.status = prevSession.status;
                         session.actualHours = prevSession.actualHours;
                         session.completedAt = prevSession.completedAt;
+                        // Critical: preserve the duration and timing for completed sessions
+                        session.allocatedHours = prevSession.allocatedHours;
+                        session.startTime = prevSession.startTime;
+                        session.endTime = prevSession.endTime;
                     }
-                    // Preserve skipped sessions
+                    // Preserve skipped sessions completely - including duration
                     else if (prevSession.status === 'skipped') {
                         session.status = 'skipped';
+                        // Also preserve duration for skipped sessions
+                        session.allocatedHours = prevSession.allocatedHours;
+                        session.startTime = prevSession.startTime;
+                        session.endTime = prevSession.endTime;
                     }
                     // Preserve rescheduled sessions
                     else if (prevSession.originalTime && prevSession.originalDate) {
@@ -1031,7 +1148,7 @@ function App() {
                 }
             });
         });
-        
+
         setTasks(updatedTasks);
         setStudyPlans(newPlans);
         setLastPlanStaleReason("task");
