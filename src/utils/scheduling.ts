@@ -357,7 +357,7 @@ const optimizeSessionDistribution = (task: Task, totalHours: number, daysForTask
 // Remove calculatePriorityScore, calculateTaskPriorityScore, and TaskWithPriority
 
 // Helper to find the next available time slot for a session on a given day
-function findNextAvailableTimeSlot(
+export function findNextAvailableTimeSlot(
   requiredHours: number,
   existingSessions: StudySession[],
   commitments: FixedCommitment[],
@@ -873,26 +873,98 @@ export const generateNewStudyPlan = (
       // Apply frequency preference if enabled and no conflict detected
       if (task.respectFrequencyForDeadlines !== false && task.targetFrequency) {
         const conflictCheck = checkFrequencyDeadlineConflict(task, settings);
-        
+
         if (!conflictCheck.hasConflict) {
           // Apply frequency filtering to respect user preference
           let sessionGap = 1; // Days between sessions
-          if (task.targetFrequency === 'weekly') sessionGap = 7;
-          else if (task.targetFrequency === '3x-week') sessionGap = 2;
-          else if (task.targetFrequency === 'flexible') {
+          if (task.targetFrequency === 'weekly') {
+            // Enhanced weekly scheduling: prioritize filling days with most available time slots
+            // Ensure we have at least 2 weeks to work with before applying weekly preference
+            const taskStartDate = new Date(task.startDate || now.toISOString().split('T')[0]);
+            const taskDeadlineDate = new Date(task.deadline);
+            const timeDiff = taskDeadlineDate.getTime() - taskStartDate.getTime();
+            const daysAvailable = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+            if (daysAvailable >= 14) { // At least 2 weeks available
+              // Calculate available hours for each day and prioritize days with most available time
+              const daysWithAvailability = daysForTask.map(date => {
+                let availableTimeOnDay = dailyRemainingHours[date] || settings.dailyAvailableHours;
+
+                // Consider existing commitments for this day
+                const commitmentsForDay = fixedCommitments.filter(commitment =>
+                  doesCommitmentApplyToDate(commitment, date)
+                );
+
+                // Calculate time occupied by commitments
+                let occupiedTime = 0;
+                commitmentsForDay.forEach(commitment => {
+                  if (!commitment.isAllDay && commitment.startTime && commitment.endTime) {
+                    const [startH, startM] = commitment.startTime.split(':').map(Number);
+                    const [endH, endM] = commitment.endTime.split(':').map(Number);
+                    const duration = (endH * 60 + endM) - (startH * 60 + startM);
+                    occupiedTime += duration / 60; // Convert to hours
+                  } else if (commitment.isAllDay) {
+                    occupiedTime = settings.dailyAvailableHours; // All day is occupied
+                  }
+                });
+
+                availableTimeOnDay = Math.max(0, availableTimeOnDay - occupiedTime);
+
+                return {
+                  date,
+                  availableTime: availableTimeOnDay
+                };
+              });
+
+              // Sort by available time (descending) to prioritize days with most availability
+              daysWithAvailability.sort((a, b) => b.availableTime - a.availableTime);
+
+              // Select one day per week, prioritizing days with most available time
+              const weeklyFilteredDays: string[] = [];
+              const usedWeeks = new Set<string>();
+
+              for (const { date } of daysWithAvailability) {
+                const dateObj = new Date(date);
+                // Create a week identifier (year-week)
+                const weekStart = new Date(dateObj);
+                weekStart.setDate(dateObj.getDate() - dateObj.getDay()); // Start of week (Sunday)
+                const weekId = weekStart.toISOString().split('T')[0];
+
+                if (!usedWeeks.has(weekId)) {
+                  weeklyFilteredDays.push(date);
+                  usedWeeks.add(weekId);
+                }
+              }
+
+              // Sort the selected days chronologically
+              weeklyFilteredDays.sort();
+              daysForTask = weeklyFilteredDays;
+            } else {
+              // Less than 2 weeks available, use regular gap-based scheduling
+              sessionGap = 7;
+              const frequencyFilteredDays: string[] = [];
+              for (let i = 0; i < daysForTask.length; i += sessionGap) {
+                frequencyFilteredDays.push(daysForTask[i]);
+              }
+              daysForTask = frequencyFilteredDays;
+            }
+          } else if (task.targetFrequency === '3x-week') {
+            sessionGap = 2;
+            const frequencyFilteredDays: string[] = [];
+            for (let i = 0; i < daysForTask.length; i += sessionGap) {
+              frequencyFilteredDays.push(daysForTask[i]);
+            }
+            daysForTask = frequencyFilteredDays;
+          } else if (task.targetFrequency === 'flexible') {
             // For flexible tasks, adapt the gap based on available time and task urgency
             sessionGap = task.importance ? 2 : 3; // More frequent for important tasks
-          }
-          // daily frequency uses sessionGap = 1 (no filtering needed)
-          
-          if (sessionGap > 1) {
-            // Filter days to respect frequency preference
             const frequencyFilteredDays: string[] = [];
             for (let i = 0; i < daysForTask.length; i += sessionGap) {
               frequencyFilteredDays.push(daysForTask[i]);
             }
             daysForTask = frequencyFilteredDays;
           }
+          // daily frequency uses sessionGap = 1 (no filtering needed)
         }
       }
       
