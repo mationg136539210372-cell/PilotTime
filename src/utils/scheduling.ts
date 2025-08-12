@@ -957,96 +957,20 @@ export const generateNewStudyPlan = (
               daysForTask = frequencyFilteredDays;
             }
           } else if (task.targetFrequency === '3x-week') {
-            // Enhanced 3x-week scheduling: maintain 2-3 day gaps while distributing sessions until deadline
-            // This respects the frequency preference pattern rather than just optimizing for availability
-
-            sessionGap = 2; // Start with 2-day gap (every 2-3 days)
+            sessionGap = 2;
             const frequencyFilteredDays: string[] = [];
-            let currentIndex = 0;
-            let nextGap = 2; // Alternate between 2 and 3 day gaps
-
-            // Calculate sessions needed and available timeframe
-            const estimatedSessions = Math.ceil(task.estimatedHours / Math.min(2, settings.dailyAvailableHours));
-            const timeframeInDays = daysForTask.length;
-
-            // If we have plenty of time, use consistent 2-3 day pattern
-            // If time is tight, adjust gap to fit more sessions
-            let adaptiveGap = 2;
-            if (estimatedSessions > 0) {
-              const minDaysNeeded = estimatedSessions * 2; // Minimum if using 2-day gaps
-              if (minDaysNeeded > timeframeInDays) {
-                // Adjust to fit in available time while maintaining frequency preference
-                adaptiveGap = Math.max(1, Math.floor(timeframeInDays / estimatedSessions));
-              }
+            for (let i = 0; i < daysForTask.length; i += sessionGap) {
+              frequencyFilteredDays.push(daysForTask[i]);
             }
-
-            // Select days with 2-3 day gaps, distributed across the deadline timeframe
-            while (currentIndex < daysForTask.length) {
-              frequencyFilteredDays.push(daysForTask[currentIndex]);
-
-              // Alternate between 2 and 3 day gaps for natural variation
-              const gapToUse = adaptiveGap === 2 ? nextGap : adaptiveGap;
-              currentIndex += gapToUse;
-
-              // Alternate gap for next iteration (2 -> 3 -> 2 -> 3...)
-              if (adaptiveGap === 2) {
-                nextGap = nextGap === 2 ? 3 : 2;
-              }
-            }
-
             daysForTask = frequencyFilteredDays;
-            console.log(`Applied 3x-week frequency for task "${task.title}": ${daysForTask.length} days selected from ${availableDays.filter(d => d >= startDateStr && d <= deadlineDateStr).length} available days`);
           } else if (task.targetFrequency === 'flexible') {
-            // Enhanced flexible scheduling: truly adaptive based on available time and task characteristics
-            // This frequency should take advantage of any available gaps in the schedule
-
-            // Calculate available hours for each day
-            const daysWithAvailability = daysForTask.map(date => {
-              let availableTimeOnDay = dailyRemainingHours[date] || settings.dailyAvailableHours;
-              return {
-                date,
-                availableTime: availableTimeOnDay
-              };
-            });
-
-            // Sort by available time (descending) to prioritize days with most availability
-            daysWithAvailability.sort((a, b) => b.availableTime - a.availableTime);
-
-            // Calculate optimal sessions based on task characteristics
-            const estimatedSessions = Math.ceil(task.estimatedHours / Math.min(2, settings.dailyAvailableHours));
-
-            // For flexible tasks, be more adaptive:
-            // - Important tasks: aim for more frequent sessions (every 1-2 days when time available)
-            // - Regular tasks: spread out more but still opportunistic (every 2-4 days when time available)
-            const minSessionLength = (settings.minSessionLength || 15) / 60;
-
-            let targetSessionCount;
-            if (task.importance) {
-              // Important flexible tasks: schedule more frequently when time is available
-              targetSessionCount = Math.min(
-                estimatedSessions,
-                daysWithAvailability.filter(day => day.availableTime >= minSessionLength).length
-              );
-            } else {
-              // Regular flexible tasks: more spread out, but still opportunistic
-              const availableDaysWithTime = daysWithAvailability.filter(day => day.availableTime >= minSessionLength);
-              targetSessionCount = Math.min(
-                estimatedSessions,
-                Math.ceil(availableDaysWithTime.length * 0.6) // Use about 60% of available days
-              );
+            // For flexible tasks, adapt the gap based on available time and task urgency
+            sessionGap = task.importance ? 2 : 3; // More frequent for important tasks
+            const frequencyFilteredDays: string[] = [];
+            for (let i = 0; i < daysForTask.length; i += sessionGap) {
+              frequencyFilteredDays.push(daysForTask[i]);
             }
-
-            // Select the best days (most available time) up to our target
-            const selectedDays: string[] = [];
-            for (let i = 0; i < Math.min(targetSessionCount, daysWithAvailability.length); i++) {
-              if (daysWithAvailability[i].availableTime >= minSessionLength) {
-                selectedDays.push(daysWithAvailability[i].date);
-              }
-            }
-
-            // Sort chronologically
-            selectedDays.sort();
-            daysForTask = selectedDays;
+            daysForTask = frequencyFilteredDays;
           }
           // daily frequency uses sessionGap = 1 (no filtering needed)
         }
@@ -1108,14 +1032,11 @@ export const generateNewStudyPlan = (
         }
       } else {
         // Regular task scheduling (can be split)
-        // For frequency preferences, distribute sessions across the timeline respecting gaps
-        let sessionIndex = 0;
-
-        for (let dayIndex = 0; dayIndex < daysForTask.length && sessionIndex < sessionLengths.length; dayIndex++) {
-          const date = daysForTask[dayIndex];
+        for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
+          const date = daysForTask[i];
           let dayPlan = studyPlans.find(p => p.date === date)!;
           let availableHours = dailyRemainingHours[date];
-          const thisSessionLength = Math.min(sessionLengths[sessionIndex], availableHours);
+          const thisSessionLength = Math.min(sessionLengths[i], availableHours);
 
           if (thisSessionLength > 0) {
             const roundedSessionLength = Math.round(thisSessionLength * 60) / 60;
@@ -1132,22 +1053,10 @@ export const generateNewStudyPlan = (
             dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
             dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
             totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
-            sessionIndex++; // Move to next session only after successfully scheduling
           } else {
-            // If we can't fit the session on this day, track unscheduled hours
-            // but don't increment sessionIndex - try this session on the next available day
-            if (dayIndex === daysForTask.length - 1) {
-              // If this is the last day and we still can't fit, mark as unscheduled
-              unscheduledHours += sessionLengths[sessionIndex];
-              sessionIndex++;
-            }
+            // Track unscheduled hours for redistribution
+            unscheduledHours += sessionLengths[i];
           }
-        }
-
-        // If we have remaining sessions that couldn't be scheduled, mark them as unscheduled
-        while (sessionIndex < sessionLengths.length) {
-          unscheduledHours += sessionLengths[sessionIndex];
-          sessionIndex++;
         }
       }
       
@@ -1348,10 +1257,9 @@ export const generateNewStudyPlan = (
         } else if (task.targetFrequency === '3x-week') {
           sessionGap = Math.min(2, Math.floor(availableDaysForTask / Math.max(1, estimatedSessionsNeeded)));
         } else if (task.targetFrequency === 'flexible') {
-          // For flexible no-deadline tasks, be truly adaptive - use available time slots efficiently
-          // This means we'll use a more dynamic approach in the scheduling loop below
-          // rather than a fixed gap
-          sessionGap = 1; // We'll handle flexible logic in the main loop
+          // For flexible tasks, adapt the gap based on available time and task urgency
+          const optimalGap = Math.floor(availableDaysForTask / Math.max(1, estimatedSessionsNeeded));
+          sessionGap = task.importance ? Math.max(1, Math.min(2, optimalGap)) : Math.max(1, Math.min(3, optimalGap));
         }
 
         let sessionNumber = 1;
@@ -1385,14 +1293,6 @@ export const generateNewStudyPlan = (
             maxSessionHours = Math.min(maxSessionHours * 2, remainingHours); // Longer sessions for weekly tasks
           } else if (task.targetFrequency === 'daily') {
             maxSessionHours = Math.min(maxSessionHours * 0.75, remainingHours); // Shorter sessions for daily tasks
-          } else if (task.targetFrequency === 'flexible') {
-            // For flexible tasks, adapt session length based on available time
-            // Take advantage of larger time blocks when available
-            if (availableHours >= maxSessionHours * 1.5) {
-              maxSessionHours = Math.min(maxSessionHours * 1.5, remainingHours); // Longer sessions when lots of time available
-            } else if (availableHours <= maxSessionHours * 0.5) {
-              maxSessionHours = Math.min(availableHours, remainingHours); // Use what's available
-            }
           }
 
           const sessionHours = Math.min(
@@ -1446,19 +1346,7 @@ export const generateNewStudyPlan = (
               }
 
               // Apply session gap for next scheduling
-              // For flexible tasks, be more adaptive about gaps
-              if (task.targetFrequency === 'flexible') {
-                // For flexible tasks, skip ahead based on recent success/failure
-                if (sessionHours >= task.maxSessionLength || sessionHours >= remainingHours * 0.5) {
-                  // Had a good session, can wait a bit longer
-                  dayIndex += task.importance ? 2 : 3;
-                } else {
-                  // Small session, try again sooner
-                  dayIndex += 1;
-                }
-              } else {
-                dayIndex += sessionGap;
-              }
+              dayIndex += sessionGap;
             } else {
               dayIndex++;
             }
