@@ -957,37 +957,45 @@ export const generateNewStudyPlan = (
               daysForTask = frequencyFilteredDays;
             }
           } else if (task.targetFrequency === '3x-week') {
-            // Enhanced 3x-week scheduling: prioritize filling days with most available time slots
-            // Sessions don't need to be at least one day apart - focus on availability optimization
+            // Enhanced 3x-week scheduling: maintain 2-3 day gaps while distributing sessions until deadline
+            // This respects the frequency preference pattern rather than just optimizing for availability
 
-            // Calculate available hours for each day and prioritize days with most available time
-            const daysWithAvailability = daysForTask.map(date => {
-              let availableTimeOnDay = dailyRemainingHours[date] || settings.dailyAvailableHours;
+            sessionGap = 2; // Start with 2-day gap (every 2-3 days)
+            const frequencyFilteredDays: string[] = [];
+            let currentIndex = 0;
+            let nextGap = 2; // Alternate between 2 and 3 day gaps
 
-              return {
-                date,
-                availableTime: availableTimeOnDay
-              };
-            });
-
-            // Sort by available time (descending) to prioritize days with most availability
-            daysWithAvailability.sort((a, b) => b.availableTime - a.availableTime);
-
-            // Calculate how many sessions we need for this task
+            // Calculate sessions needed and available timeframe
             const estimatedSessions = Math.ceil(task.estimatedHours / Math.min(2, settings.dailyAvailableHours));
-            // For 3x-week, aim for about 3 sessions per week, adjusting based on task needs
-            const weeksAvailable = Math.ceil(daysForTask.length / 7);
-            const targetSessions = Math.min(estimatedSessions, Math.max(weeksAvailable * 3, estimatedSessions));
+            const timeframeInDays = daysForTask.length;
 
-            // Select the days with the most available time, up to our target sessions
-            const selectedDays: string[] = [];
-            for (let i = 0; i < Math.min(targetSessions, daysWithAvailability.length); i++) {
-              selectedDays.push(daysWithAvailability[i].date);
+            // If we have plenty of time, use consistent 2-3 day pattern
+            // If time is tight, adjust gap to fit more sessions
+            let adaptiveGap = 2;
+            if (estimatedSessions > 0) {
+              const minDaysNeeded = estimatedSessions * 2; // Minimum if using 2-day gaps
+              if (minDaysNeeded > timeframeInDays) {
+                // Adjust to fit in available time while maintaining frequency preference
+                adaptiveGap = Math.max(1, Math.floor(timeframeInDays / estimatedSessions));
+              }
             }
 
-            // Sort the selected days chronologically
-            selectedDays.sort();
-            daysForTask = selectedDays;
+            // Select days with 2-3 day gaps, distributed across the deadline timeframe
+            while (currentIndex < daysForTask.length) {
+              frequencyFilteredDays.push(daysForTask[currentIndex]);
+
+              // Alternate between 2 and 3 day gaps for natural variation
+              const gapToUse = adaptiveGap === 2 ? nextGap : adaptiveGap;
+              currentIndex += gapToUse;
+
+              // Alternate gap for next iteration (2 -> 3 -> 2 -> 3...)
+              if (adaptiveGap === 2) {
+                nextGap = nextGap === 2 ? 3 : 2;
+              }
+            }
+
+            daysForTask = frequencyFilteredDays;
+            console.log(`Applied 3x-week frequency for task "${task.title}": ${daysForTask.length} days selected from ${availableDays.filter(d => d >= startDateStr && d <= deadlineDateStr).length} available days`);
           } else if (task.targetFrequency === 'flexible') {
             // Enhanced flexible scheduling: truly adaptive based on available time and task characteristics
             // This frequency should take advantage of any available gaps in the schedule
@@ -1100,11 +1108,14 @@ export const generateNewStudyPlan = (
         }
       } else {
         // Regular task scheduling (can be split)
-        for (let i = 0; i < sessionLengths.length && i < daysForTask.length; i++) {
-          const date = daysForTask[i];
+        // For frequency preferences, distribute sessions across the timeline respecting gaps
+        let sessionIndex = 0;
+
+        for (let dayIndex = 0; dayIndex < daysForTask.length && sessionIndex < sessionLengths.length; dayIndex++) {
+          const date = daysForTask[dayIndex];
           let dayPlan = studyPlans.find(p => p.date === date)!;
           let availableHours = dailyRemainingHours[date];
-          const thisSessionLength = Math.min(sessionLengths[i], availableHours);
+          const thisSessionLength = Math.min(sessionLengths[sessionIndex], availableHours);
 
           if (thisSessionLength > 0) {
             const roundedSessionLength = Math.round(thisSessionLength * 60) / 60;
@@ -1121,10 +1132,22 @@ export const generateNewStudyPlan = (
             dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
             dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
             totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+            sessionIndex++; // Move to next session only after successfully scheduling
           } else {
-            // Track unscheduled hours for redistribution
-            unscheduledHours += sessionLengths[i];
+            // If we can't fit the session on this day, track unscheduled hours
+            // but don't increment sessionIndex - try this session on the next available day
+            if (dayIndex === daysForTask.length - 1) {
+              // If this is the last day and we still can't fit, mark as unscheduled
+              unscheduledHours += sessionLengths[sessionIndex];
+              sessionIndex++;
+            }
           }
+        }
+
+        // If we have remaining sessions that couldn't be scheduled, mark them as unscheduled
+        while (sessionIndex < sessionLengths.length) {
+          unscheduledHours += sessionLengths[sessionIndex];
+          sessionIndex++;
         }
       }
       
