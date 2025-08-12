@@ -317,6 +317,29 @@ const optimizeSessionDistribution = (task: Task, totalHours: number, daysForTask
     return [totalHours];
   }
 
+  // If task has a preferred session duration (from session-based estimation), use it
+  if (task.preferredSessionDuration && task.preferredSessionDuration > 0) {
+    const preferredDuration = task.preferredSessionDuration;
+    const numNeededSessions = Math.ceil(totalHours / preferredDuration);
+
+    // If we have enough days for the needed sessions, use preferred duration
+    if (numNeededSessions <= daysForTask.length) {
+      const sessions: number[] = [];
+      let remainingHours = totalHours;
+
+      for (let i = 0; i < numNeededSessions && remainingHours > 0; i++) {
+        const sessionLength = Math.min(preferredDuration, remainingHours);
+        if (sessionLength >= minSessionLength) {
+          sessions.push(sessionLength);
+          remainingHours -= sessionLength;
+        }
+      }
+
+      return sessions;
+    }
+    // If not enough days, fall through to default distribution
+  }
+
   // Try to create fewer, larger sessions
   let optimalSessions: number[] = [];
   let remainingHours = totalHours;
@@ -3094,24 +3117,16 @@ export const preserveManualSchedules = (
       );
       
       if (prevSession) {
-        // Preserve done sessions completely - including duration and timing
+        // Preserve done sessions
         if (prevSession.done) {
           session.done = true;
           session.status = prevSession.status;
           session.actualHours = prevSession.actualHours;
           session.completedAt = prevSession.completedAt;
-          // Critical: preserve the duration and timing for completed sessions
-          session.allocatedHours = prevSession.allocatedHours;
-          session.startTime = prevSession.startTime;
-          session.endTime = prevSession.endTime;
         }
-        // Preserve skipped sessions completely - including duration and timing
+        // Preserve skipped sessions
         else if (prevSession.status === 'skipped') {
           session.status = 'skipped';
-          // Also preserve duration and timing for skipped sessions
-          session.allocatedHours = prevSession.allocatedHours;
-          session.startTime = prevSession.startTime;
-          session.endTime = prevSession.endTime;
         }
         // Preserve manual reschedules with their exact positions
         else if (prevSession.originalTime && prevSession.originalDate && prevSession.isManualOverride) {
