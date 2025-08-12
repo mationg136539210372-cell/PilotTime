@@ -330,21 +330,24 @@ function App() {
     // Timer countdown effect
     useEffect(() => {
         let interval: number | undefined;
-        
+
         if (globalTimer.isRunning && globalTimer.currentTime > 0) {
             interval = window.setInterval(() => {
-                setGlobalTimer(prev => ({
-                    ...prev,
-                    currentTime: prev.currentTime - 1
-                }));
+                setGlobalTimer(prev => {
+                    const newTime = prev.currentTime - 1;
+                    // Stop timer when it reaches 0
+                    if (newTime <= 0) {
+                        return { ...prev, currentTime: 0, isRunning: false };
+                    }
+                    return { ...prev, currentTime: newTime };
+                });
             }, 1000);
-        } else if (globalTimer.currentTime === 0 && globalTimer.isRunning) {
-            // Timer completed - just stop it, don't automatically mark as done
-            setGlobalTimer(prev => ({ ...prev, isRunning: false }));
         }
 
-        return () => clearInterval(interval);
-    }, [globalTimer.isRunning, globalTimer.currentTime, globalTimer.totalTime, currentTask]);
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [globalTimer.isRunning, globalTimer.currentTime]);
 
     useEffect(() => {
         try {
