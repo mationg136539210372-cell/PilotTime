@@ -327,6 +327,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       schedulingPreference: formData.schedulingPreference,
       targetFrequency: formData.targetFrequency,
       maxSessionLength: formData.deadlineType === 'none' ? formData.maxSessionLength : undefined,
+      preferredSessionDuration: formData.estimationMode === 'session' ? convertToDecimalHours(formData.sessionDurationHours, formData.sessionDurationMinutes) : undefined,
       isOneTimeTask: formData.isOneTimeTask,
       startDate: formData.startDate || today,
     });
