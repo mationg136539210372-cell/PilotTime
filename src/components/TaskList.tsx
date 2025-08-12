@@ -314,6 +314,9 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
         preferredTimeSlots: editFormData.preferredTimeSlots,
         minWorkBlock: editFormData.minWorkBlock,
         maxSessionLength: editFormData.maxSessionLength,
+        preferredSessionDuration: editFormData.estimationMode === 'session' ?
+          (parseInt(editFormData.sessionDurationHours || '0') + parseInt(editFormData.sessionDurationMinutes || '0') / 60) :
+          undefined,
         isOneTimeTask: editFormData.isOneTimeTask,
         schedulingPreference: editFormData.schedulingPreference,
         startDate: editFormData.startDate || today,
