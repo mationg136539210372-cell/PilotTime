@@ -29,6 +29,10 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     maxSessionLength: 2, // Default 2 hours for no-deadline tasks
     isOneTimeTask: false,
     startDate: new Date().toISOString().split('T')[0],
+    // Session-based estimation fields
+    estimationMode: 'total' as 'total' | 'session',
+    sessionDurationHours: '',
+    sessionDurationMinutes: '30',
   });
 
   const [showTimeEstimationModal, setShowTimeEstimationModal] = useState(false);
@@ -39,6 +43,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   
   // Quick time presets
   const [showTimePresets, setShowTimePresets] = useState(false);
+  const [showSessionPresets, setShowSessionPresets] = useState(false);
   const timePresets = [
     { label: '15m', hours: '0', minutes: '15' },
     { label: '30m', hours: '0', minutes: '30' },
@@ -47,6 +52,15 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     { label: '1h 30m', hours: '1', minutes: '30' },
     { label: '2h', hours: '2', minutes: '0' },
     { label: '3h', hours: '3', minutes: '0' },
+  ];
+
+  const sessionPresets = [
+    { label: '15m', hours: '0', minutes: '15' },
+    { label: '30m', hours: '0', minutes: '30' },
+    { label: '45m', hours: '0', minutes: '45' },
+    { label: '1h', hours: '1', minutes: '0' },
+    { label: '1h 30m', hours: '1', minutes: '30' },
+    { label: '2h', hours: '2', minutes: '0' },
   ];
 
   // Auto-detect deadline type based on whether deadline is set
@@ -65,14 +79,57 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   // Reset conflicting options when one-sitting task is toggled
   useEffect(() => {
     if (formData.isOneTimeTask) {
-      // One-sitting tasks don't need frequency preferences and don't use start dates
-      setFormData(f => ({ ...f, targetFrequency: 'daily' }));
+      // One-sitting tasks don't need frequency preferences, don't use start dates, and must use total time estimation
+      setFormData(f => ({ ...f, targetFrequency: 'daily', estimationMode: 'total' }));
     }
   }, [formData.isOneTimeTask]);
 
   // Validation functions
   const convertToDecimalHours = (hours: string, minutes: string): number => {
     return parseInt(hours || '0') + parseInt(minutes || '0') / 60;
+  };
+
+  // Calculate total time from session-based estimation
+  const calculateSessionBasedTotal = useMemo(() => {
+    if (formData.estimationMode !== 'session' || !formData.deadline || formData.deadlineType === 'none') {
+      return 0;
+    }
+
+    const sessionDuration = convertToDecimalHours(formData.sessionDurationHours, formData.sessionDurationMinutes);
+    if (sessionDuration <= 0) return 0;
+
+    const startDate = new Date(formData.startDate || new Date().toISOString().split('T')[0]);
+    const deadlineDate = new Date(formData.deadline);
+    const timeDiff = deadlineDate.getTime() - startDate.getTime();
+    const totalDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1; // +1 to include start day
+
+    let workDays = 0;
+    switch (formData.targetFrequency) {
+      case 'daily':
+        workDays = totalDays;
+        break;
+      case '3x-week':
+        workDays = Math.floor((totalDays / 7) * 3) + Math.min(3, totalDays % 7);
+        break;
+      case 'weekly':
+        workDays = Math.ceil(totalDays / 7);
+        break;
+      case 'flexible':
+        workDays = Math.ceil(totalDays * 0.7); // Assume 70% of days for flexible
+        break;
+      default:
+        workDays = totalDays;
+    }
+
+    return sessionDuration * workDays;
+  }, [formData.estimationMode, formData.sessionDurationHours, formData.sessionDurationMinutes, formData.deadline, formData.deadlineType, formData.startDate, formData.targetFrequency]);
+
+  // Get effective total time (either direct input or calculated from sessions)
+  const getEffectiveTotalTime = () => {
+    if (formData.estimationMode === 'session') {
+      return calculateSessionBasedTotal;
+    }
+    return convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
   };
 
   // Check time restrictions for frequency preferences
@@ -181,14 +238,14 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const isTitleLengthValid = formData.title.trim().length <= 100;
   const isDeadlineValid = !formData.deadline || new Date(formData.deadline) >= new Date(today);
   const isStartDateValid = !formData.startDate || new Date(formData.startDate) >= new Date(today);
-  const totalTime = convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
+  const totalTime = getEffectiveTotalTime();
   const isEstimatedValid = totalTime > 0;
   const isEstimatedReasonable = totalTime <= 100;
   const isImpactValid = formData.impact !== '';
   const isCustomCategoryValid = !showCustomCategory || (formData.customCategory && formData.customCategory.trim().length > 0 && formData.customCategory.trim().length <= 50);
 
   const isDeadlineRequiredForOneSitting = formData.isOneTimeTask && (!formData.deadline || formData.deadline.trim() === '');
-  const estimatedDecimalHours = convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
+  const estimatedDecimalHours = getEffectiveTotalTime();
   const isOneSittingTooLong = formData.isOneTimeTask && estimatedDecimalHours > userSettings.dailyAvailableHours;
   const isOneSittingNoTimeSlot = formData.isOneTimeTask && !oneSittingTimeSlotCheck.hasAvailableSlot;
 
@@ -207,7 +264,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     }
     const taskForCheck = {
       deadline: formData.deadline,
-      estimatedHours: estimatedDecimalHours,
+      estimatedHours: getEffectiveTotalTime(),
       targetFrequency: formData.targetFrequency,
       deadlineType: formData.deadlineType,
       startDate: formData.startDate,
@@ -254,7 +311,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   }
     
     const category = showCustomCategory ? formData.customCategory : formData.category;
-    const decimalHours = convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
+    const decimalHours = getEffectiveTotalTime();
     
     onAddTask({
       title: formData.title.trim(),
@@ -291,6 +348,9 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       maxSessionLength: 2,
       isOneTimeTask: false,
       startDate: today,
+      estimationMode: 'total',
+      sessionDurationHours: '',
+      sessionDurationMinutes: '30',
     });
     // Hide the form after successful submission
     onCancel?.();
@@ -346,11 +406,11 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
             </div>
           </div>
 
-          {/* Category & Deadline - Two Column Layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Category, Deadline & Start Date - Optimized Layout */}
+          <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                Category <span className="text-gray-400"></span>
+                Category
               </label>
               <select
                 value={formData.category}
@@ -363,7 +423,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                 ))}
               </select>
               {showCustomCategory && (
-                <div className="relative mt-2">
+                <div className="relative mt-1">
                   <input
                     type="text"
                     value={formData.customCategory}
@@ -386,156 +446,306 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                Deadline <span className="text-gray-400"></span>
-              </label>
-              <input
-                type="date"
-                min={today}
-                value={formData.deadline}
-                onChange={e => setFormData(f => ({ ...f, deadline: e.target.value }))}
-                className="w-full px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white/70 dark:bg-black/20 dark:text-white"
-                placeholder="Select deadline (optional)"
-              />
-              {!isDeadlineValid && formData.deadline && (
-                <div className="text-red-600 text-xs mt-1">
-                  Deadline cannot be in the past. Please select today or a future date.
-                </div>
-              )}
-              {/* Quick deadline shortcuts */}
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                <button
-                  type="button"
-                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
-                  onClick={() => setFormData(f => ({ ...f, deadline: today }))}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 1);
-                    const iso = d.toISOString().split('T')[0];
-                    setFormData(f => ({ ...f, deadline: iso }));
-                  }}
-                >
-                  Tomorrow
-                </button>
-                <button
-                  type="button"
-                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 7);
-                    const iso = d.toISOString().split('T')[0];
-                    setFormData(f => ({ ...f, deadline: iso }));
-                  }}
-                >
-                  Next week
-                </button>
-                <button
-                  type="button"
-                  className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
-                  onClick={() => setFormData(f => ({ ...f, deadline: '' }))}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Time Estimation - Simplified Display */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
-              Time Estimation <span className="text-red-500">*</span>
-            </label>
-            <div className="flex items-center space-x-3">
-              <div className="flex-1 p-3 border border-white/30 dark:border-white/20 rounded-xl bg-white/70 dark:bg-black/20">
-                <div className="flex items-center justify-between">
-                  <div className="text-lg font-medium text-gray-800 dark:text-white">
-                    {totalTime > 0 ? formatTimeDisplay(formData.estimatedHours, formData.estimatedMinutes) : 'Not set'}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {formData.estimatedHours && (
-                      <button
-                        type="button"
-                        aria-label="Clear hours"
-                        title="Clear hours"
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        onClick={() => setFormData(f => ({ ...f, estimatedHours: '' }))}
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
-                    {(formData.estimatedMinutes && formData.estimatedMinutes !== '0') && (
-                      <button
-                        type="button"
-                        aria-label="Clear minutes"
-                        title="Clear minutes"
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                        onClick={() => setFormData(f => ({ ...f, estimatedMinutes: '0' }))}
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {formData.taskType && (
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Task type (optional, select a task type to help you estimate): {formData.taskType}
+            {/* Deadline and Start Date - Side by Side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                  Deadline
+                </label>
+                <input
+                  type="date"
+                  min={today}
+                  value={formData.deadline}
+                  onChange={e => setFormData(f => ({ ...f, deadline: e.target.value }))}
+                  className="w-full px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white/70 dark:bg-black/20 dark:text-white"
+                  placeholder="Select deadline (optional)"
+                />
+                {!isDeadlineValid && formData.deadline && (
+                  <div className="text-red-600 text-xs mt-1">
+                    Deadline cannot be in the past.
                   </div>
                 )}
               </div>
+
+              {!formData.isOneTimeTask && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    min={today}
+                    value={formData.startDate}
+                    onChange={e => setFormData(f => ({ ...f, startDate: e.target.value || today }))}
+                    className="w-full px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                  {!isStartDateValid && formData.startDate && (
+                    <div className="text-red-600 text-xs mt-1">
+                      Start date cannot be in the past.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Quick deadline shortcuts - more compact */}
+            <div className="flex flex-wrap gap-1 text-xs">
               <button
                 type="button"
-                onClick={() => setShowTimeEstimationModal(true)}
-                className="flex items-center space-x-2 px-4 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-colors"
+                className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                onClick={() => setFormData(f => ({ ...f, deadline: today }))}
               >
-                <Clock size={18} />
-                <span>Estimate</span>
+                Today
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + 1);
+                  const iso = d.toISOString().split('T')[0];
+                  setFormData(f => ({ ...f, deadline: iso }));
+                }}
+              >
+                Tomorrow
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() + 7);
+                  const iso = d.toISOString().split('T')[0];
+                  setFormData(f => ({ ...f, deadline: iso }));
+                }}
+              >
+                Next week
+              </button>
+              <button
+                type="button"
+                className="px-2 py-1 rounded border bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                onClick={() => setFormData(f => ({ ...f, deadline: '' }))}
+              >
+                Clear
               </button>
             </div>
           </div>
-          <div className="mt-1">
-            <button
-              type="button"
-              onClick={() => setShowTimeEstimationModal(true)}
-              className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
-            >
-              Need help estimating?
-            </button>
-          </div>
-          {/* Time Presets - Hidden by default */}
-          <div className="mt-2">
-            <button
-              type="button"
-              onClick={() => setShowTimePresets(!showTimePresets)}
-              className="text-xs text-violet-600 dark:text-violet-400 hover:underline"
-            >
-              {showTimePresets ? 'Hide quick presets' : 'Show quick presets'}
-            </button>
-            {showTimePresets && (
-              <div className="mt-1">
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Quick presets:</div>
-                <div className="flex flex-wrap gap-1">
-                  {timePresets.map((preset, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => setFormData(f => ({
-                        ...f,
-                        estimatedHours: preset.hours,
-                        estimatedMinutes: preset.minutes,
-                      }))}
-                      className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white rounded border transition-colors"
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+
+          {/* Time Estimation - Dual Mode Interface */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">
+                Time Estimation <span className="text-red-500">*</span>
+              </label>
+              {!formData.isOneTimeTask && (
+                <div className="flex bg-white/50 dark:bg-black/30 rounded-lg p-1 border border-white/30 dark:border-white/20">
+                  <button
+                    type="button"
+                    onClick={() => setFormData(f => ({ ...f, estimationMode: 'total' }))}
+                    className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                      formData.estimationMode === 'total'
+                        ? 'bg-violet-600 text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-black/30'
+                    }`}
+                  >
+                    Total Time
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData(f => ({ ...f, estimationMode: 'session' }))}
+                    className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                      formData.estimationMode === 'session'
+                        ? 'bg-violet-600 text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-black/30'
+                    }`}
+                  >
+                    Session-Based
+                  </button>
                 </div>
+              )}
+            </div>
+
+            {formData.estimationMode === 'total' ? (
+              // Total Time Mode (existing)
+              <div className="space-y-2">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-1 p-3 border border-white/30 dark:border-white/20 rounded-xl bg-white/70 dark:bg-black/20">
+                    <div className="flex items-center justify-between">
+                      <div className="text-lg font-medium text-gray-800 dark:text-white">
+                        {totalTime > 0 ? formatTimeDisplay(formData.estimatedHours, formData.estimatedMinutes) : 'Not set'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {formData.estimatedHours && (
+                          <button
+                            type="button"
+                            aria-label="Clear hours"
+                            title="Clear hours"
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            onClick={() => setFormData(f => ({ ...f, estimatedHours: '' }))}
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+                        {(formData.estimatedMinutes && formData.estimatedMinutes !== '0') && (
+                          <button
+                            type="button"
+                            aria-label="Clear minutes"
+                            title="Clear minutes"
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            onClick={() => setFormData(f => ({ ...f, estimatedMinutes: '0' }))}
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {formData.taskType && (
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        Task type: {formData.taskType}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTimeEstimationModal(true)}
+                    className="flex items-center space-x-2 px-4 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-colors"
+                  >
+                    <Clock size={18} />
+                    <span>Estimate</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-4 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setShowTimeEstimationModal(true)}
+                    className="text-violet-600 dark:text-violet-400 hover:underline"
+                  >
+                    Need help estimating?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTimePresets(!showTimePresets)}
+                    className="text-violet-600 dark:text-violet-400 hover:underline"
+                  >
+                    {showTimePresets ? 'Hide quick presets' : 'Show quick presets'}
+                  </button>
+                </div>
+                {showTimePresets && (
+                  <div className="mt-1">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Quick presets:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {timePresets.map((preset, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => setFormData(f => ({
+                            ...f,
+                            estimatedHours: preset.hours,
+                            estimatedMinutes: preset.minutes,
+                          }))}
+                          className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white rounded border transition-colors"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Session-Based Mode (new)
+              <div className="space-y-3">
+                <div className="p-3 border border-white/30 dark:border-white/20 rounded-xl bg-white/70 dark:bg-black/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-200">Session Duration</div>
+                    <div className="flex items-center gap-2">
+                      {formData.sessionDurationHours && (
+                        <button
+                          type="button"
+                          aria-label="Clear session hours"
+                          title="Clear session hours"
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                          onClick={() => setFormData(f => ({ ...f, sessionDurationHours: '' }))}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={formData.sessionDurationHours}
+                        onChange={e => setFormData(f => ({ ...f, sessionDurationHours: e.target.value }))}
+                        className="w-16 px-2 py-1 text-sm border border-white/30 dark:border-white/20 rounded bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500"
+                        placeholder="0"
+                        min="0"
+                        max="8"
+                      />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">h</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={formData.sessionDurationMinutes}
+                        onChange={e => setFormData(f => ({ ...f, sessionDurationMinutes: e.target.value }))}
+                        className="w-16 px-2 py-1 text-sm border border-white/30 dark:border-white/20 rounded bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500"
+                        placeholder="0"
+                        min="0"
+                        max="59"
+                        step="5"
+                      />
+                      <span className="text-sm text-gray-600 dark:text-gray-300">m</span>
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300">per session</div>
+                  </div>
+                  {calculateSessionBasedTotal > 0 && (
+                    <div className="text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 rounded p-2">
+                      <div className="font-medium">Calculated total: {formatTimeDisplay(Math.floor(calculateSessionBasedTotal).toString(), Math.round((calculateSessionBasedTotal % 1) * 60).toString())}</div>
+                      <div className="text-xs mt-1">
+                        Based on {formData.targetFrequency === 'daily' ? 'daily' :
+                                formData.targetFrequency === '3x-week' ? '3x per week' :
+                                formData.targetFrequency === 'weekly' ? 'weekly' : 'flexible'} frequency until deadline
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setShowSessionPresets(!showSessionPresets)}
+                    className="text-violet-600 dark:text-violet-400 hover:underline"
+                  >
+                    {showSessionPresets ? 'Hide session presets' : 'Show session presets'}
+                  </button>
+                </div>
+                {showSessionPresets && (
+                  <div className="mt-1">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Common session durations:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {sessionPresets.map((preset, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => setFormData(f => ({
+                            ...f,
+                            sessionDurationHours: preset.hours,
+                            sessionDurationMinutes: preset.minutes,
+                          }))}
+                          className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white rounded border transition-colors"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {formData.estimationMode === 'session' && (!formData.deadline || formData.deadlineType === 'none') && (
+                  <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded text-xs text-yellow-700 dark:text-yellow-200">
+                    Session-based estimation requires a deadline to calculate total time.
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -602,7 +812,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
               )}
           </div>
 
-          {/* Task Impact */}
+          {/* Task Impact - More Compact */}
           <div>
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">
               Task Importance <span className="text-red-500">*</span>
@@ -615,8 +825,8 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                 <HelpCircle size={14} />
               </button>
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center gap-3 p-3 border border-white/30 dark:border-white/20 rounded-xl hover:bg-white/50 dark:hover:bg-black/30 cursor-pointer transition-colors">
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 p-2 border border-white/30 dark:border-white/20 rounded-lg hover:bg-white/50 dark:hover:bg-black/30 cursor-pointer transition-colors">
                 <input
                   type="radio"
                   name="impact"
@@ -626,11 +836,11 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                   className="text-violet-600"
                 />
                 <div>
-                  <div className="text-sm font-medium text-gray-800 dark:text-white"> Important</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">High priority, scheduled first</div>
+                  <div className="text-sm font-medium text-gray-800 dark:text-white">Important</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">High priority</div>
                 </div>
               </label>
-              <label className="flex items-center gap-3 p-3 border border-white/30 dark:border-white/20 rounded-xl hover:bg-white/50 dark:hover:bg-black/30 cursor-pointer transition-colors">
+              <label className="flex items-center gap-2 p-2 border border-white/30 dark:border-white/20 rounded-lg hover:bg-white/50 dark:hover:bg-black/30 cursor-pointer transition-colors">
                 <input
                   type="radio"
                   name="impact"
@@ -640,7 +850,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                   className="text-violet-600"
                 />
                 <div>
-                  <div className="text-sm font-medium text-gray-800 dark:text-white"> Standard</div>
+                  <div className="text-sm font-medium text-gray-800 dark:text-white">Standard</div>
                   <div className="text-xs text-gray-600 dark:text-gray-400">Normal priority</div>
                 </div>
               </label>
@@ -674,21 +884,10 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       <option value="flexible"> When I have time - Flexible scheduling</option>
     </select>
 
-    {/* Frequency Restriction Warnings */}
-    {(frequencyRestrictions.disableWeekly || frequencyRestrictions.disable3xWeek) && (
+    {false && (
       <div className="mt-2 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
         <div className="flex items-start gap-2">
-          <span className="text-orange-500 text-sm">⚠️</span>
-          <div className="text-xs text-orange-700 dark:text-orange-200">
-            <div className="font-medium mb-1">Frequency Options Limited</div>
-            {frequencyRestrictions.disableWeekly && (
-              <div className="mb-1">• Weekly sessions need at least 2 weeks between start date and deadline</div>
-            )}
-            {frequencyRestrictions.disable3xWeek && (
-              <div className="mb-1">• 2-3 days frequency needs at least 1 week between start date and deadline</div>
-            )}
-            <div className="text-orange-600 dark:text-orange-300 font-medium">Consider extending your deadline or using daily progress instead.</div>
-          </div>
+          <span className="text-orange-500 text-sm">⚠��</span>
         </div>
       </div>
     )}
@@ -709,7 +908,8 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   </div>
 )}
 
-          {/* Advanced Timeline Options */}
+          {/* Advanced Timeline Options - Only show for tasks without deadline */}
+          {!formData.deadline && (
           <div>
             <button
               type="button"
@@ -721,92 +921,42 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
             </button>
 
             {showTaskTimeline && (
-              <div className="mt-3 p-4 bg-white/30 dark:bg-black/20 rounded-xl border border-white/20 dark:border-white/10">
-                {/* Deadline Type - Only show if deadline is set */}
-                {formData.deadline && formData.deadline.trim() !== '' && (
-                  <div className="space-y-2 mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Deadline Type</label>
-                    <div className="space-y-2">
-                      {[
-                        { value: 'hard', label: 'Hard deadline (must finish by date)' },
-                        { value: 'soft', label: 'Flexible target date' }
-                      ].map(option => (
-                        <label key={option.value} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="deadlineType"
-                            value={option.value}
-                            checked={formData.deadlineType === option.value}
-                            onChange={() => setFormData(f => ({ ...f, deadlineType: option.value as any }))}
-                            className="text-violet-600"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-200">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Start Date */}
-                {!formData.isOneTimeTask && (
-                  <div className="space-y-1 mb-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">Start Date</label>
-                    <input
-                      type="date"
-                      min={today}
-                      value={formData.startDate}
-                      onChange={e => setFormData(f => ({ ...f, startDate: e.target.value || today }))}
-                      className="w-full px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                    />
-                    {!isStartDateValid && formData.startDate && (
-                      <div className="text-red-600 text-xs mt-1">
-                        Start date cannot be in the past. Please select today or a future date.
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Default is today. Sessions won't be scheduled before this date.</div>
-                  </div>
-                )}
-
+              <div className="mt-2 p-3 bg-white/30 dark:bg-black/20 rounded-lg border border-white/20 dark:border-white/10">
                 {formData.isOneTimeTask && (
-                  <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-700">
+                  <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
                     <div className="text-sm text-blue-800 dark:text-blue-200">
-                      📅 <strong>One-sitting tasks are always scheduled on the deadline day</strong> regardless of importance level. Start date is not applicable.
+                      📅 <strong>One-sitting tasks are always scheduled on the deadline day</strong> regardless of importance level.
                     </div>
                   </div>
                 )}
 
-                {/* Working Advanced Options */}
-                <div className="space-y-4">
-
-
-                  {/* Maximum Session Length (only for no-deadline tasks) */}
-                  {formData.deadlineType === 'none' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                        Maximum session length
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={formData.maxSessionLength}
-                          onChange={e => setFormData(f => ({ ...f, maxSessionLength: Math.max(0.5, Math.min(8, parseFloat(e.target.value) || 2)) }))}
-                          min="0.5"
-                          max="8"
-                          step="0.5"
-                          className="w-20 px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                        />
-                        <span className="text-sm text-gray-700 dark:text-gray-200">hours</span>
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Maximum length for each study session (0.5-8 hours)
-                      </div>
+                {/* Maximum Session Length (only for no-deadline tasks) */}
+                {formData.deadlineType === 'none' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Maximum session length
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={formData.maxSessionLength}
+                        onChange={e => setFormData(f => ({ ...f, maxSessionLength: Math.max(0.5, Math.min(8, parseFloat(e.target.value) || 2)) }))}
+                        min="0.5"
+                        max="8"
+                        step="0.5"
+                        className="w-20 px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-200">hours</span>
                     </div>
-                  )}
-
-                </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Maximum length for each study session (0.5-8 hours)
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
+          )}
 
           {/* Validation Feedback */}
           {!isFormValid && showValidationErrors && (
@@ -864,7 +1014,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                     ))}
                     {isFormInvalid && (
                       <li className="flex items-start gap-1">
-                        <span className="text-red-500 mt-0.5">•</span>
+                        <span className="text-red-500 mt-0.5">���</span>
                         <span>Selected frequency preference is not compatible with the deadline timeframe</span>
                       </li>
                     )}
