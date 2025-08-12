@@ -864,16 +864,16 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     Undo
                   </button>
                 )}
-                {/* Undo button for rescheduled sessions */}
-                {isRescheduled && session.originalTime && (
+                {/* Skip button for all sessions */}
+                {!isDone && !isCompleted && (
                   <div className="flex space-x-2 ml-4">
                     <button
-                      onClick={e => { 
-                        e.stopPropagation(); 
+                      onClick={e => {
+                        e.stopPropagation();
                         onSkipMissedSession(todaysPlan.date, session.sessionNumber || 0, session.taskId);
                       }}
                       className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
-                      title="Skip this rescheduled session"
+                      title="Skip this session"
                     >
                       Skip
                     </button>
@@ -1018,7 +1018,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white"></h2>
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Note: you should always refresh plan (reset all) when adding or editing tasks</h2>
             </div>
             <button
               onClick={handleRefreshClick}
