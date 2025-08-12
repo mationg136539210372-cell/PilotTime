@@ -914,28 +914,9 @@ export const generateNewStudyPlan = (
 
             if (daysAvailable >= 14) { // At least 2 weeks available
               // Calculate available hours for each day and prioritize days with most available time
+              // For frequency preferences, only consider existing tasks, not commitments
               const daysWithAvailability = daysForTask.map(date => {
                 let availableTimeOnDay = dailyRemainingHours[date] || settings.dailyAvailableHours;
-
-                // Consider existing commitments for this day
-                const commitmentsForDay = fixedCommitments.filter(commitment =>
-                  doesCommitmentApplyToDate(commitment, date)
-                );
-
-                // Calculate time occupied by commitments
-                let occupiedTime = 0;
-                commitmentsForDay.forEach(commitment => {
-                  if (!commitment.isAllDay && commitment.startTime && commitment.endTime) {
-                    const [startH, startM] = commitment.startTime.split(':').map(Number);
-                    const [endH, endM] = commitment.endTime.split(':').map(Number);
-                    const duration = (endH * 60 + endM) - (startH * 60 + startM);
-                    occupiedTime += duration / 60; // Convert to hours
-                  } else if (commitment.isAllDay) {
-                    occupiedTime = settings.dailyAvailableHours; // All day is occupied
-                  }
-                });
-
-                availableTimeOnDay = Math.max(0, availableTimeOnDay - occupiedTime);
 
                 return {
                   date,
