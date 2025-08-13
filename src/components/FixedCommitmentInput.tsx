@@ -21,6 +21,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
     location: '',
     description: '',
     isAllDay: false,
+    isFixed: false,
     dateRange: {
       startDate: '',
       endDate: ''
@@ -129,6 +130,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
       location: '',
       description: '',
       isAllDay: false,
+      isFixed: false,
       dateRange: {
         startDate: '',
         endDate: ''
@@ -243,11 +245,28 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
             <input
               type="checkbox"
               checked={formData.isAllDay}
-              onChange={(e) => setFormData({ ...formData, isAllDay: e.target.checked })}
+              onChange={(e) => setFormData({ ...formData, isAllDay: e.target.checked, isFixed: e.target.checked ? formData.isFixed : false })}
               className="text-blue-600 focus:ring-blue-500"
             />
             <span>All-day event (no specific time)</span>
           </label>
+
+          {formData.isAllDay && (
+            <div className="mt-2 ml-6">
+              <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={formData.isFixed}
+                  onChange={(e) => setFormData({ ...formData, isFixed: e.target.checked })}
+                  className="text-red-600 focus:ring-red-500"
+                />
+                <span>Fixed commitment (no tasks will be scheduled on this day)</span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1 ml-6 dark:text-gray-400">
+                When enabled, the scheduling system will not assign any study tasks on days with this commitment.
+              </p>
+            </div>
+          )}
         </div>
 
         {!formData.isAllDay && (
@@ -377,27 +396,65 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({ onAddCommit
                 </p>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <div className="relative flex-1">
-                  <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <div className="relative flex-1">
+                    <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                    <input
+                      type="text"
+                      placeholder="Type date (YYYY-MM-DD) or use calendar below"
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const dateValue = (e.target as HTMLInputElement).value;
+                          const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                          if (dateRegex.test(dateValue)) {
+                            const date = new Date(dateValue);
+                            if (!isNaN(date.getTime()) && date >= new Date(new Date().toDateString()) && !formData.specificDates.includes(dateValue)) {
+                              setFormData({
+                                ...formData,
+                                specificDates: [...formData.specificDates, dateValue].sort()
+                              });
+                              (e.target as HTMLInputElement).value = '';
+                            }
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Press Enter to add</span>
+                </div>
+
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">
+                    Or select from calendar:
+                  </label>
                   <input
                     type="date"
-                    key={formData.specificDates.length} // This will reset the input after each date is added
-                    min={new Date().toISOString().split('T')[0]} // Prevent selecting past dates
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                    onClick={(e) => {
+                      // Store the current value to compare later
+                      (e.target as HTMLInputElement).dataset.previousValue = (e.target as HTMLInputElement).value;
+                    }}
                     onChange={(e) => {
-                      if (e.target.value && !formData.specificDates.includes(e.target.value)) {
+                      const currentValue = e.target.value;
+                      const previousValue = e.target.dataset.previousValue || '';
+
+                      // Only add if the user actually selected a date (not just navigating)
+                      if (currentValue && currentValue !== previousValue && !formData.specificDates.includes(currentValue)) {
                         setFormData({
                           ...formData,
-                          specificDates: [...formData.specificDates, e.target.value].sort()
+                          specificDates: [...formData.specificDates, currentValue].sort()
                         });
-                        // Reset the input by changing its key (handled above)
+                        // Clear the input
+                        e.target.value = '';
+                        e.target.dataset.previousValue = '';
                       }
                     }}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                    placeholder="Select a date"
                   />
                 </div>
-                <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Click to add</span>
               </div>
               
               {formData.specificDates.length > 0 && (
