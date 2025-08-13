@@ -152,6 +152,7 @@ export interface FixedCommitment {
   description?: string;
   createdAt: string;
   isAllDay?: boolean; // New field for all-day events with no specific time
+  isFixed?: boolean; // New field: for all-day events, determines if tasks can be scheduled on this day
   dateRange?: { // New field for recurring commitments with date range
     startDate: string; // YYYY-MM-DD format
     endDate: string; // YYYY-MM-DD format
