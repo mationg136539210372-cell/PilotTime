@@ -22,6 +22,7 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
     location: commitment.location || '',
     description: commitment.description || '',
     isAllDay: commitment.isAllDay || false,
+    isFixed: commitment.isFixed || false,
     dateRange: {
       startDate: commitment.dateRange?.startDate || '',
       endDate: commitment.dateRange?.endDate || ''
@@ -94,7 +95,8 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
         category: formData.category,
         location: formData.location,
         description: formData.description,
-        isAllDay: formData.isAllDay
+        isAllDay: formData.isAllDay,
+        isFixed: formData.isFixed
       };
 
       // Only include startTime and endTime if not an all-day event
@@ -222,11 +224,28 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
             <input
               type="checkbox"
               checked={formData.isAllDay}
-              onChange={(e) => setFormData({ ...formData, isAllDay: e.target.checked })}
+              onChange={(e) => setFormData({ ...formData, isAllDay: e.target.checked, isFixed: e.target.checked ? formData.isFixed : false })}
               className="text-blue-600 focus:ring-blue-500"
             />
             <span>All-day event (no specific time)</span>
           </label>
+
+          {formData.isAllDay && (
+            <div className="mt-2 ml-6">
+              <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={formData.isFixed}
+                  onChange={(e) => setFormData({ ...formData, isFixed: e.target.checked })}
+                  className="text-red-600 focus:ring-red-500"
+                />
+                <span>Fixed commitment (no tasks will be scheduled on this day)</span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1 ml-6 dark:text-gray-400">
+                When enabled, the scheduling system will not assign any study tasks on days with this commitment.
+              </p>
+            </div>
+          )}
         </div>
 
         {!formData.isAllDay && (
@@ -345,43 +364,100 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
             <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
               Specific Dates
             </label>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center space-x-2">
+                <div className="relative flex-1">
+                  <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Type date (YYYY-MM-DD) or use calendar below"
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const dateValue = (e.target as HTMLInputElement).value;
+                        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                        if (dateRegex.test(dateValue)) {
+                          const date = new Date(dateValue);
+                          if (!isNaN(date.getTime()) && date >= new Date(new Date().toDateString()) && !formData.specificDates.includes(dateValue)) {
+                            setFormData({
+                              ...formData,
+                              specificDates: [...formData.specificDates, dateValue].sort()
+                            });
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Press Enter to add</span>
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">
+                  Or select from calendar:
+                </label>
                 <input
                   type="date"
-                  value=""
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white text-sm"
+                  onClick={(e) => {
+                    // Store the current value to compare later
+                    (e.target as HTMLInputElement).dataset.previousValue = (e.target as HTMLInputElement).value;
+                  }}
                   onChange={(e) => {
-                    if (e.target.value && !formData.specificDates.includes(e.target.value)) {
+                    const currentValue = e.target.value;
+                    const previousValue = e.target.dataset.previousValue || '';
+
+                    // Only add if the user actually selected a date (not just navigating)
+                    if (currentValue && currentValue !== previousValue && !formData.specificDates.includes(currentValue)) {
                       setFormData({
                         ...formData,
-                        specificDates: [...formData.specificDates, e.target.value].sort()
+                        specificDates: [...formData.specificDates, currentValue].sort()
                       });
+                      // Clear the input
+                      e.target.value = '';
+                      e.target.dataset.previousValue = '';
                     }
                   }}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
-                <span className="text-sm text-gray-500 dark:text-gray-400">Add date</span>
               </div>
               {formData.specificDates.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {formData.specificDates.map((date) => (
-                    <div
-                      key={date}
-                      className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg dark:bg-blue-900/20 dark:text-blue-300"
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                      Selected Dates ({formData.specificDates.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, specificDates: [] })}
+                      className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200"
                     >
-                      <span className="text-sm">{new Date(date).toLocaleDateString()}</span>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({
-                          ...formData,
-                          specificDates: formData.specificDates.filter(d => d !== date)
-                        })}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                    {formData.specificDates.map((date) => (
+                      <div
+                        key={date}
+                        className="flex items-center justify-between bg-blue-100 text-blue-800 px-3 py-2 rounded-lg dark:bg-blue-900/20 dark:text-blue-300"
                       >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                        <span className="text-sm font-medium">{new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({
+                            ...formData,
+                            specificDates: formData.specificDates.filter(d => d !== date)
+                          })}
+                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-bold text-lg leading-none"
+                          title="Remove this date"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
