@@ -201,29 +201,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
     // Convert study plans to calendar events
     studyPlans.forEach(plan => {
-      // Sort the planned tasks by chronological order first, then by priority
-      const sortedTasks = [...plan.plannedTasks].sort((a, b) => {
-        // Check session status for missed sessions
-        const aStatus = checkSessionStatus(a, plan.date);
-        const bStatus = checkSessionStatus(b, plan.date);
-        
-        // If one is missed and the other isn't, put missed sessions at the end
-        if (aStatus === 'missed' && bStatus !== 'missed') {
-          return 1; // a (missed) goes after b
-        }
-        if (aStatus !== 'missed' && bStatus === 'missed') {
-          return -1; // b (missed) goes after a
-        }
-        if (aStatus === 'missed' && bStatus === 'missed') {
-          // Both are missed, sort by current start time
-          const [aH, aM] = (a.startTime || '00:00').split(':').map(Number);
-          const [bH, bM] = (b.startTime || '00:00').split(':').map(Number);
-          const aMinutes = aH * 60 + aM;
-          const bMinutes = bH * 60 + bM;
-          return aMinutes - bMinutes;
-        }
-        
-        // Both are not missed, prioritize chronological order for manually rescheduled sessions
+      // Filter out past incomplete sessions (forward focus approach)
+      const today = getLocalDateString();
+      const relevantTasks = plan.plannedTasks.filter(session => {
+        // Always show sessions for today and future
+        if (plan.date >= today) return true;
+
+        // For past dates, only show completed sessions
+        return session.done || session.status === 'completed' || session.status === 'skipped';
+      });
+
+      // Sort the relevant tasks by chronological order first, then by priority
+      const sortedTasks = [...relevantTasks].sort((a, b) => {
+        // Prioritize chronological order for manually rescheduled sessions
         // Check if either session has been manually rescheduled
         const aIsRescheduled = a.schedulingMetadata?.state === 'redistributed' || a.originalTime;
         const bIsRescheduled = b.schedulingMetadata?.state === 'redistributed' || b.originalTime;
@@ -652,13 +642,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const originalDate = event.resource.planDate || moment(event.start).format('YYYY-MM-DD');
     const sessionDuration = session.allocatedHours;
 
-    // Check if session is missed - missed sessions cannot be moved
+    // Check session status for restrictions
     const sessionStatus = checkSessionStatus(session, originalDate);
-    if (sessionStatus === 'missed') {
-      setDragFeedback('Missed sessions cannot be rescheduled');
-      setTimeout(() => setDragFeedback(''), 3000);
-      return;
-    }
 
     // Restrict movement to same day only
     if (targetDate !== originalDate) {
@@ -834,16 +819,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         backgroundColor = colorSettings.completedColor;
         opacity = 0.5;
       }
-      // If session is missed, make it red and strikethrough
-      else if (sessionStatus === 'missed') {
-        backgroundColor = colorSettings.missedColor;
-        opacity = 0.8;
-        textDecoration = 'line-through';
-        // Add a diagonal stripe pattern for missed sessions
-        backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.1) 4px, rgba(255,255,255,0.1) 8px)';
-        backgroundSize = '8px 8px';
-        console.log(`Missed session "${event.title}" styled with red color and strikethrough`);
-      }
 
     } else if (event.resource.type === 'commitment') {
       const commitment = event.resource.data as FixedCommitment;
@@ -983,11 +958,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       const task = event.resource.data.task;
       categoryEmoji = getCategoryEmoji(task?.category);
 
-      // Add status indicators for missed sessions
+      // Check session status
       const sessionStatus = checkSessionStatus(event.resource.data, moment(event.start).format('YYYY-MM-DD'));
-      if (sessionStatus === 'missed') {
-        statusIndicator = '❌'; // Red X for missed
-      }
 
       // Debug logging for calendar event status
       console.log(`Calendar event "${event.title}" status: ${sessionStatus}, indicator: ${statusIndicator}`);
@@ -1233,9 +1205,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               const planDate = calendarEvent.resource.planDate || moment(calendarEvent.start).format('YYYY-MM-DD');
               const sessionStatus = checkSessionStatus(session as StudySession, planDate);
 
-              // Don't allow dragging of missed, completed, or done sessions
-              return sessionStatus !== 'missed' &&
-                     sessionStatus !== 'completed' &&
+              // Don't allow dragging of completed or done sessions
+              return sessionStatus !== 'completed' &&
                      !(session as StudySession).done;
             }
             return false;
@@ -1627,7 +1598,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     <div className="flex items-start space-x-3">
                       <span className="text-orange-600 dark:text-orange-400 font-bold mt-0.5">⚠</span>
                       <p className="text-gray-700 dark:text-gray-300">
-                        <strong>Restrictions:</strong> Completed, missed sessions, and commitments cannot be moved
+                        <strong>Restrictions:</strong> Completed sessions and commitments cannot be moved
                       </p>
                     </div>
                   </div>
