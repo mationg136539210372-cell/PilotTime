@@ -154,63 +154,6 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     }
   }, [editFormData.isOneTimeTask]);
 
-  // Get effective total time (either direct input or calculated from sessions)
-  const getEffectiveTotalTime = () => {
-    if (editFormData.estimationMode === 'session') {
-      return calculateSessionBasedTotal;
-    }
-    return (editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60);
-  };
-
-  // Validation error messages
-  const getValidationErrors = (): string[] => {
-    const errors: string[] = [];
-    if (!editFormData.title?.trim()) errors.push('Task title is required');
-    if (editFormData.title && editFormData.title.trim().length > 100) errors.push('Task title must be 100 characters or less');
-
-    const totalHours = getEffectiveTotalTime();
-    if (totalHours <= 0) errors.push('Estimated time must be greater than 0');
-    if (totalHours > 100) errors.push('Estimated time seems unreasonably high (over 100 hours)');
-
-    if (!editFormData.impact) errors.push('Please select task importance');
-    if (editFormData.deadline && editFormData.deadline < today) errors.push('Deadline cannot be in the past');
-    // Start date validation removed for editing tasks - tasks are already created
-
-    if (editFormData.category === 'Custom...' && (!editFormData.customCategory?.trim() || editFormData.customCategory.trim().length > 50)) {
-      errors.push('Custom category must be between 1-50 characters');
-    }
-
-    if (editFormData.isOneTimeTask) {
-      if (!editFormData.deadline || editFormData.deadline.trim() === '') errors.push('One-sitting tasks require a deadline');
-      if (totalHours > userSettings.dailyAvailableHours) errors.push(`One-sitting task (${totalHours}h) exceeds your daily available hours (${userSettings.dailyAvailableHours}h)`);
-    }
-
-    return errors;
-  };
-  
-  // Check if deadline is in the past
-  const isDeadlinePast = editFormData.deadline ? editFormData.deadline < today : false;
-  // Start date validation removed for editing tasks
-
-  // Check for deadline conflict with frequency preference
-  const deadlineConflict = useMemo(() => {
-    if (!editFormData.deadline || editFormData.deadlineType === 'none') {
-      return { hasConflict: false };
-    }
-
-    const totalHours = getEffectiveTotalTime();
-    const taskForCheck = {
-      deadline: editFormData.deadline,
-      estimatedHours: totalHours,
-      targetFrequency: editFormData.targetFrequency,
-      deadlineType: editFormData.deadlineType,
-      minWorkBlock: editFormData.minWorkBlock,
-      startDate: editFormData.startDate
-    };
-    
-    return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
-  }, [editFormData.deadline, editFormData.estimatedHours, editFormData.estimatedMinutes, editFormData.targetFrequency, editFormData.deadlineType, editFormData.minWorkBlock, editFormData.startDate, userSettings]);
-
   // Calculate total time from session-based estimation
   const calculateSessionBasedTotal = React.useMemo(() => {
     if (editFormData.estimationMode !== 'session' || !editFormData.deadline || editFormData.deadlineType === 'none') {
@@ -245,6 +188,63 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
 
     return sessionDuration * workDays;
   }, [editFormData.estimationMode, editFormData.sessionDurationHours, editFormData.sessionDurationMinutes, editFormData.deadline, editFormData.deadlineType, editFormData.startDate, editFormData.targetFrequency]);
+
+  // Get effective total time (either direct input or calculated from sessions)
+  const getEffectiveTotalTime = () => {
+    if (editFormData.estimationMode === 'session') {
+      return calculateSessionBasedTotal;
+    }
+    return (editFormData.estimatedHours || 0) + ((editFormData.estimatedMinutes || 0) / 60);
+  };
+
+  // Validation error messages
+  const getValidationErrors = (): string[] => {
+    const errors: string[] = [];
+    if (!editFormData.title?.trim()) errors.push('Task title is required');
+    if (editFormData.title && editFormData.title.trim().length > 100) errors.push('Task title must be 100 characters or less');
+
+    const totalHours = getEffectiveTotalTime();
+    if (totalHours <= 0) errors.push('Estimated time must be greater than 0');
+    if (totalHours > 100) errors.push('Estimated time seems unreasonably high (over 100 hours)');
+
+    if (!editFormData.impact) errors.push('Please select task importance');
+    if (editFormData.deadline && editFormData.deadline < today) errors.push('Deadline cannot be in the past');
+    // Start date validation removed for editing tasks - tasks are already created
+
+    if (editFormData.category === 'Custom...' && (!editFormData.customCategory?.trim() || editFormData.customCategory.trim().length > 50)) {
+      errors.push('Custom category must be between 1-50 characters');
+    }
+
+    if (editFormData.isOneTimeTask) {
+      if (!editFormData.deadline || editFormData.deadline.trim() === '') errors.push('One-sitting tasks require a deadline');
+      if (totalHours > userSettings.dailyAvailableHours) errors.push(`One-sitting task (${totalHours}h) exceeds your daily available hours (${userSettings.dailyAvailableHours}h)`);
+    }
+
+    return errors;
+  };
+
+  // Check if deadline is in the past
+  const isDeadlinePast = editFormData.deadline ? editFormData.deadline < today : false;
+  // Start date validation removed for editing tasks
+
+  // Check for deadline conflict with frequency preference
+  const deadlineConflict = useMemo(() => {
+    if (!editFormData.deadline || editFormData.deadlineType === 'none') {
+      return { hasConflict: false };
+    }
+
+    const totalHours = getEffectiveTotalTime();
+    const taskForCheck = {
+      deadline: editFormData.deadline,
+      estimatedHours: totalHours,
+      targetFrequency: editFormData.targetFrequency,
+      deadlineType: editFormData.deadlineType,
+      minWorkBlock: editFormData.minWorkBlock,
+      startDate: editFormData.startDate
+    };
+
+    return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
+  }, [editFormData.deadline, editFormData.estimatedHours, editFormData.estimatedMinutes, editFormData.targetFrequency, editFormData.deadlineType, editFormData.minWorkBlock, editFormData.startDate, editFormData.estimationMode, editFormData.sessionDurationHours, editFormData.sessionDurationMinutes, calculateSessionBasedTotal, userSettings]);
 
   const getUrgencyColor = (deadline: string): string => {
     const now = new Date();
@@ -342,7 +342,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
 
     if (!editFormData.impact) return false;
     if (editFormData.deadline && editFormData.deadline < today) return false;
-    if (editFormData.startDate && editFormData.startDate < today) return false;
+    // Start date validation removed for editing tasks - tasks are already created
 
     // Custom category validation (1-50 characters)
     if (editFormData.category === 'Custom...' && (!editFormData.customCategory?.trim() || editFormData.customCategory.trim().length > 50)) return false;
@@ -354,7 +354,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     }
 
     return true;
-  }, [editFormData, today, userSettings]);
+  }, [editFormData, today, userSettings, calculateSessionBasedTotal]);
 
   const saveEdit = () => {
     if (editingTaskId && isEditFormValid) {
