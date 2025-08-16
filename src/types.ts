@@ -62,7 +62,7 @@ export interface StudySession {
   isFlexible?: boolean; // Can this session be moved around?
   isManualOverride?: boolean; // New property: true if manually edited
   done?: boolean; // New: true if session is marked as done
-  status?: 'scheduled' | 'in_progress' | 'completed' | 'missed' | 'overdue' | 'rescheduled' | 'skipped' | 'missed_original' | 'redistributed' | 'failed_redistribution' | 'skipped_user' | 'skipped_system'; // Enhanced session states for clear state management
+  status?: 'scheduled' | 'in_progress' | 'completed' | 'skipped'; // Simplified session states - forward focus approach
   actualHours?: number; // New: actual hours spent (may differ from allocatedHours)
   completedAt?: string; // New: timestamp when session was completed
   // Enhanced rescheduling metadata
