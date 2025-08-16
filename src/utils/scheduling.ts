@@ -571,6 +571,229 @@ function validateSessionTimes(
   return true;
 }
 
+/**
+ * Reshuffle existing study plan to balance workload across available days
+ * Preserves session durations and organization while respecting deadlines and frequency preferences
+ * @param existingStudyPlans Current study plans to reshuffle
+ * @param tasks All tasks for reference
+ * @param settings User settings
+ * @param fixedCommitments Fixed commitments to avoid conflicts
+ * @returns Reshuffled study plans with balanced workload distribution
+ */
+export const reshuffleStudyPlan = (
+  existingStudyPlans: StudyPlan[],
+  tasks: Task[],
+  settings: UserSettings,
+  fixedCommitments: FixedCommitment[]
+): { plans: StudyPlan[]; suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> } => {
+  if (existingStudyPlans.length === 0) {
+    return { plans: [], suggestions: [] };
+  }
+
+  // Step 1: Extract all sessions from existing plans (excluding completed/skipped)
+  const allSessions: Array<{
+    session: StudySession;
+    originalDate: string;
+    task: Task;
+  }> = [];
+
+  for (const plan of existingStudyPlans) {
+    for (const session of plan.plannedTasks) {
+      // Skip completed, skipped, or done sessions - they shouldn't be moved
+      if (session.done || session.status === 'completed' || session.status === 'skipped') {
+        continue;
+      }
+
+      const task = tasks.find(t => t.id === session.taskId);
+      if (task && task.status === 'pending') {
+        allSessions.push({
+          session: { ...session },
+          originalDate: plan.date,
+          task
+        });
+      }
+    }
+  }
+
+  if (allSessions.length === 0) {
+    return { plans: existingStudyPlans, suggestions: [] };
+  }
+
+  // Step 2: Calculate workload distribution and identify imbalances
+  const workloadByDate: { [date: string]: number } = {};
+  const availableDates = existingStudyPlans.map(p => p.date).sort();
+
+  // Initialize workload tracking
+  for (const date of availableDates) {
+    workloadByDate[date] = 0;
+  }
+
+  // Calculate current workload including fixed sessions
+  for (const plan of existingStudyPlans) {
+    for (const session of plan.plannedTasks) {
+      if (!session.done && session.status !== 'completed' && session.status !== 'skipped') {
+        workloadByDate[plan.date] += session.allocatedHours;
+      }
+    }
+  }
+
+  // Step 3: Group sessions by task to maintain task organization
+  const sessionsByTask: { [taskId: string]: Array<{ session: StudySession; originalDate: string; task: Task }> } = {};
+
+  for (const sessionData of allSessions) {
+    if (!sessionsByTask[sessionData.task.id]) {
+      sessionsByTask[sessionData.task.id] = [];
+    }
+    sessionsByTask[sessionData.task.id].push(sessionData);
+  }
+
+  // Step 4: Create fresh study plans
+  const reshuffledPlans: StudyPlan[] = availableDates.map(date => ({
+    id: `plan-${date}`,
+    date,
+    plannedTasks: [],
+    totalStudyHours: 0,
+    availableHours: settings.dailyAvailableHours
+  }));
+
+  // Copy over completed/skipped sessions first
+  for (const plan of existingStudyPlans) {
+    const newPlan = reshuffledPlans.find(p => p.date === plan.date);
+    if (newPlan) {
+      for (const session of plan.plannedTasks) {
+        if (session.done || session.status === 'completed' || session.status === 'skipped') {
+          newPlan.plannedTasks.push({ ...session });
+          newPlan.totalStudyHours += session.allocatedHours;
+        }
+      }
+    }
+  }
+
+  // Step 5: Calculate ideal workload per day
+  const totalHoursToDistribute = allSessions.reduce((sum, s) => sum + s.session.allocatedHours, 0);
+  const idealHoursPerDay = totalHoursToDistribute / availableDates.length;
+
+  // Step 6: Redistribute individual sessions across days for workload balance
+  // Create a flat list of all sessions to redistribute individually
+  const sessionsToRedistribute: Array<{
+    session: StudySession;
+    originalDate: string;
+    task: Task;
+  }> = [];
+
+  for (const sessionData of allSessions) {
+    sessionsToRedistribute.push(sessionData);
+  }
+
+  // Sort sessions by task priority first, then randomly to ensure fair distribution
+  sessionsToRedistribute.sort((a, b) => {
+    // Priority by importance and deadline urgency
+    const aDaysUntilDeadline = a.task.deadline ?
+      (new Date(a.task.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) : 9999;
+    const bDaysUntilDeadline = b.task.deadline ?
+      (new Date(b.task.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) : 9999;
+
+    const aPriority = a.task.importance ?
+      (aDaysUntilDeadline <= 3 ? 1 : 2) :
+      (aDaysUntilDeadline <= 3 ? 3 : 4);
+    const bPriority = b.task.importance ?
+      (bDaysUntilDeadline <= 3 ? 1 : 2) :
+      (bDaysUntilDeadline <= 3 ? 3 : 4);
+
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return aDaysUntilDeadline - bDaysUntilDeadline;
+  });
+
+  const suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> = [];
+
+  // Step 7: Distribute each session individually to balance workload
+  for (const sessionData of sessionsToRedistribute) {
+    const task = sessionData.task;
+
+    // Calculate valid days for this task (respecting deadline and start date)
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const startDate = task.startDate ? new Date(task.startDate) : today;
+    const startDateStr = startDate > today ? task.startDate! : todayStr;
+
+    let validDays = availableDates.filter(date => date >= startDateStr);
+
+    if (task.deadline && task.deadlineType !== 'none') {
+      const deadline = new Date(task.deadline);
+      if (settings.bufferDays > 0) {
+        deadline.setDate(deadline.getDate() - settings.bufferDays);
+      }
+      const deadlineStr = deadline.toISOString().split('T')[0];
+      validDays = validDays.filter(date => date <= deadlineStr);
+    }
+
+    if (validDays.length === 0) {
+      // No valid days for this task, add to suggestions
+      suggestions.push({
+        taskTitle: task.title,
+        unscheduledMinutes: Math.round(sessionData.session.allocatedHours * 60)
+      });
+      continue;
+    }
+
+    // Find the day with the least current workload that's valid for this task
+    const sortedValidDays = validDays.map(date => ({
+      date,
+      currentWorkload: reshuffledPlans.find(p => p.date === date)!.totalStudyHours,
+      plan: reshuffledPlans.find(p => p.date === date)!
+    })).sort((a, b) => a.currentWorkload - b.currentWorkload);
+
+    let sessionPlaced = false;
+
+    // Try to place the session on the day with least workload
+    for (const targetDay of sortedValidDays) {
+      // Find available time slot for this session
+      const commitmentsForDay = fixedCommitments.filter(commitment =>
+        doesCommitmentApplyToDate(commitment, targetDay.date)
+      );
+
+      const timeSlot = findNextAvailableTimeSlot(
+        sessionData.session.allocatedHours,
+        targetDay.plan.plannedTasks,
+        commitmentsForDay,
+        settings.studyWindowStartHour || 6,
+        settings.studyWindowEndHour || 23,
+        settings.bufferTimeBetweenSessions || 0,
+        targetDay.date,
+        settings
+      );
+
+      if (timeSlot) {
+        // Successfully found a slot, add the session
+        const newSession: StudySession = {
+          ...sessionData.session,
+          startTime: timeSlot.start,
+          endTime: timeSlot.end,
+          sessionNumber: targetDay.plan.plannedTasks.filter(s => s.taskId === task.id && s.status !== 'skipped' && !s.done && s.status !== 'completed').length + 1,
+          isManualOverride: targetDay.date !== sessionData.originalDate ? true : sessionData.session.isManualOverride,
+          originalTime: targetDay.date !== sessionData.originalDate ? sessionData.session.startTime : sessionData.session.originalTime,
+          originalDate: targetDay.date !== sessionData.originalDate ? sessionData.originalDate : sessionData.session.originalDate
+        };
+
+        targetDay.plan.plannedTasks.push(newSession);
+        targetDay.plan.totalStudyHours += sessionData.session.allocatedHours;
+        sessionPlaced = true;
+        break;
+      }
+    }
+
+    if (!sessionPlaced) {
+      // Couldn't find a slot anywhere, add to suggestions
+      suggestions.push({
+        taskTitle: task.title,
+        unscheduledMinutes: Math.round(sessionData.session.allocatedHours * 60)
+      });
+    }
+  }
+
+  return { plans: reshuffledPlans, suggestions };
+};
+
 export const generateNewStudyPlan = (
   tasks: Task[],
   settings: UserSettings,
