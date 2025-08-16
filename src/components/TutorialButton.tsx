@@ -6,34 +6,39 @@ interface TutorialButtonProps {
   hasCompletedTutorial: boolean;
   hasTasks: boolean;
   isTutorialActive?: boolean; // New prop to control visibility
+  hasCompletedOnboarding?: boolean; // New prop to check onboarding status
 }
 
-const TutorialButton: React.FC<TutorialButtonProps> = ({ 
-  onStartTutorial, 
-  hasCompletedTutorial, 
+const TutorialButton: React.FC<TutorialButtonProps> = ({
+  onStartTutorial,
+  hasCompletedTutorial,
   hasTasks,
-  isTutorialActive = false // Default to false if not provided
+  isTutorialActive = false,
+  hasCompletedOnboarding = true
 }) => {
   // Hide button if tutorial is running
   if (isTutorialActive) return null;
 
-  // Show button only for new users: tutorial not completed (regardless of tasks)
-  const shouldShow = !hasCompletedTutorial;
-  
+  // Don't show for users who haven't completed onboarding (they need to finish that first)
+  if (!hasCompletedOnboarding) return null;
+
+  // Only show for users who have data but haven't completed the advanced tutorial
+  const shouldShow = hasTasks && !hasCompletedTutorial;
+
   if (!shouldShow) return null;
 
   return (
     <div className="fixed bottom-6 right-6 z-30">
       <button
         onClick={onStartTutorial}
-        className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-full shadow-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2 animate-pulse"
-        title="Start tutorial to learn how to use TimePilot effectively"
+        className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white px-4 py-2 rounded-full shadow-lg hover:from-purple-600 hover:to-indigo-700 transition-all duration-200 flex items-center space-x-2 hover:scale-105"
+        title="Learn advanced TimePilot features"
       >
-        <BookOpen size={20} />
-        <span className="font-medium">Start Tutorial</span>
+        <BookOpen size={18} />
+        <span className="font-medium text-sm">Advanced Tips</span>
       </button>
     </div>
   );
 };
 
-export default TutorialButton; 
+export default TutorialButton;
