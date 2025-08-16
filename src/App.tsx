@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan } from './utils/scheduling';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
@@ -69,6 +69,7 @@ function App() {
     const [, setLastPlanStaleReason] = useState<"settings" | "commitment" | "task" | null>(null);
     const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false);
     const [hasFirstChangeOccurred, setHasFirstChangeOccurred] = useState(false);
+    const hasProcessedPastSessions = useRef(false);
 
     // Add state to track last-timed session and ready-to-mark-done
     const [lastTimedSession, setLastTimedSession] = useState<{ planDate: string; sessionNumber: number } | null>(null);
@@ -259,6 +260,74 @@ function App() {
             document.documentElement.classList.remove('dark');
         }
     }, [darkMode]);
+
+    // Check for past sessions and automatically mark them as skipped (run once after initial load)
+    useEffect(() => {
+        // Only run this check after data has been loaded from storage and we have plans
+        if (!hasLoadedFromStorage || studyPlans.length === 0 || hasProcessedPastSessions.current) return;
+
+        // Mark past incomplete sessions as skipped
+        const updatedPlans = markPastSessionsAsSkipped(studyPlans);
+
+        // Check if any sessions were actually updated
+        const hasChanges = JSON.stringify(updatedPlans) !== JSON.stringify(studyPlans);
+
+        if (hasChanges) {
+            setStudyPlans(updatedPlans);
+
+            // Count how many sessions were automatically skipped
+            let skippedCount = 0;
+            updatedPlans.forEach(plan => {
+                plan.plannedTasks.forEach(session => {
+                    if (session.status === 'skipped' &&
+                        session.skipMetadata?.reason === 'overload' &&
+                        session.skipMetadata?.skippedAt) {
+                        const skippedDate = new Date(session.skipMetadata.skippedAt);
+                        const now = new Date();
+                        // Only count if skipped recently (within last 5 minutes to avoid counting old ones)
+                        if (now.getTime() - skippedDate.getTime() < 5 * 60 * 1000) {
+                            skippedCount++;
+                        }
+                    }
+                });
+            });
+
+            // Show notification if sessions were automatically skipped
+            if (skippedCount > 0) {
+                setNotificationMessage(
+                    `📅 ${skippedCount} past incomplete session${skippedCount > 1 ? 's' : ''} ${skippedCount > 1 ? 'were' : 'was'} automatically marked as skipped. They will not be rescheduled.`
+                );
+                setTimeout(() => setNotificationMessage(null), 6000);
+            }
+        }
+
+        // Mark that we've processed past sessions to avoid running again
+        hasProcessedPastSessions.current = true;
+    }, [hasLoadedFromStorage, studyPlans]);
+
+    // Daily check for past sessions - runs when app loads and date has changed
+    useEffect(() => {
+        if (!hasLoadedFromStorage) return;
+
+        const lastCheckDate = localStorage.getItem('timepilot-last-past-session-check');
+        const today = getLocalDateString();
+
+        // If we haven't checked today, or this is the first time
+        if (lastCheckDate !== today && studyPlans.length > 0) {
+            // Mark past incomplete sessions as skipped
+            const updatedPlans = markPastSessionsAsSkipped(studyPlans);
+
+            // Check if any sessions were actually updated
+            const hasChanges = JSON.stringify(updatedPlans) !== JSON.stringify(studyPlans);
+
+            if (hasChanges) {
+                setStudyPlans(updatedPlans);
+            }
+
+            // Update the last check date
+            localStorage.setItem('timepilot-last-past-session-check', today);
+        }
+    }, [hasLoadedFromStorage]); // Run when app loads
 
     // Update gamification when study data changes
     const updateGamificationData = (updatedStudyPlans?: StudyPlan[], updatedTasks?: Task[]) => {
