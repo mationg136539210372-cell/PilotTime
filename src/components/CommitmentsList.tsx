@@ -216,13 +216,23 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                     <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white truncate">
                       {commitment.title}
                     </h3>
-                    <span
-                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded-full flex-shrink-0 ${getCategoryColor(
-                        commitment.category
-                      )}`}
-                    >
-                      {commitment.category}
-                    </span>
+                    <div className="flex items-center space-x-2 flex-shrink-0">
+                      <span
+                        className={`px-2 sm:px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(
+                          commitment.category
+                        )}`}
+                      >
+                        {commitment.category}
+                      </span>
+                      {commitment.countsTowardDailyHours && (
+                        <span
+                          className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                          title="Counts toward daily available hours"
+                        >
+                          📊 Work Time
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-2">
                     {commitment.isAllDay ? (
