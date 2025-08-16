@@ -231,78 +231,29 @@ export const checkFrequencyDeadlineConflict = (
   return { hasConflict: false };
 };
 
-export const checkSessionStatus = (session: StudySession, planDate: string): 'scheduled' | 'in_progress' | 'completed' | 'missed' | 'overdue' | 'rescheduled' => {
+export const checkSessionStatus = (session: StudySession, planDate: string): 'scheduled' | 'in_progress' | 'completed' => {
   const now = new Date();
   const today = getLocalDateString();
   const sessionStartTime = new Date(`${planDate}T${session.startTime}:00`);
   const sessionEndTime = new Date(`${planDate}T${session.endTime}:00`);
 
-  // Debug logging for session status calculation
-  console.log(`checkSessionStatus debug: planDate="${planDate}", today="${today}", planDate < today = ${planDate < today}, session.done=${session.done}, session.status=${session.status}`);
-
-  // Check completion status first - completed sessions are never missed
-  if (session.done || session.status === 'completed') {
+  // Check completion status first
+  if (session.done || session.status === 'completed' || session.status === 'skipped') {
     return 'completed';
   }
 
-  // Check if session is skipped - skipped sessions should not be treated as missed
-  if (session.status === 'skipped') {
-    return 'completed'; // Treat skipped sessions as completed for display purposes
-  }
-
-  // Check if session was manually rescheduled or has been redistributed
-  if (session.originalTime && session.originalDate) {
-    return 'rescheduled';
-  }
-
-  // Check if session has redistribution metadata indicating it was properly moved
-  if (session.schedulingMetadata?.rescheduleHistory && session.schedulingMetadata.rescheduleHistory.length > 0) {
-    const lastReschedule = session.schedulingMetadata.rescheduleHistory[session.schedulingMetadata.rescheduleHistory.length - 1];
-    // If this session was redistributed to this date, don't mark as missed
-    if (lastReschedule.to.date === planDate && lastReschedule.reason === 'redistribution') {
-      console.log(`Session redistributed to ${planDate} - not marking as missed`);
-      return 'scheduled';
-    }
-  }
-
-  // Only mark as missed if not completed and from past date
-  // AND the session was originally scheduled for that past date (not redistributed there)
-  if (planDate < today) {
-    // Additional check: if session has manual override flag, it was moved intentionally
-    if (session.isManualOverride) {
-      console.log(`Session has manual override on ${planDate} - not marking as missed`);
-      return 'scheduled';
-    }
-
-    // If session was marked as 'rescheduled' status, don't mark as missed
-    if (session.status === 'rescheduled') {
-      console.log(`Session marked as rescheduled on ${planDate} - not marking as missed`);
-      return 'rescheduled';
-    }
-
-    console.log(`Session from past date ${planDate} marked as MISSED`);
-    return 'missed';
-  }
-
+  // For today's sessions, check if they're in progress
   if (planDate === today) {
-    if (now < sessionStartTime) {
-      return 'scheduled';
-    } else if (now >= sessionStartTime && now <= sessionEndTime) {
+    if (now >= sessionStartTime && now <= sessionEndTime) {
       return 'in_progress';
-    } else {
-      console.log(`Session from today ${planDate} marked as OVERDUE`);
-      return 'overdue';
     }
   }
 
+  // All other sessions (past, present, future) are simply 'scheduled'
+  // Past sessions are ignored rather than marked as missed
   return 'scheduled';
 };
 
-// Helper function to check if a session is a missed or redistributed session
-const isMissedOrRedistributedSession = (session: StudySession, planDate: string): boolean => {
-  const status = checkSessionStatus(session, planDate);
-  return status === 'missed' || session.isManualOverride === true || (!!session.originalTime && !!session.originalDate);
-};
 
 // Helper function to optimize session distribution by trying to create larger sessions
 const optimizeSessionDistribution = (task: Task, totalHours: number, daysForTask: string[], settings: UserSettings) => {
@@ -957,96 +908,20 @@ export const generateNewStudyPlan = (
               daysForTask = frequencyFilteredDays;
             }
           } else if (task.targetFrequency === '3x-week') {
-            // Enhanced 2-3 day scheduling: prioritize filling days with most available time slots
-            // Like weekly preference, but allow 2-3 sessions per week instead of 1
-            const taskStartDate = new Date(task.startDate || now.toISOString().split('T')[0]);
-            const taskDeadlineDate = new Date(task.deadline);
-            const timeDiff = taskDeadlineDate.getTime() - taskStartDate.getTime();
-            const daysAvailable = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-
-            // Calculate available hours for each day and prioritize by availability
-            const daysWithAvailability = daysForTask.map(date => {
-              let availableTimeOnDay = dailyRemainingHours[date] || settings.dailyAvailableHours;
-              return { date, availableTime: availableTimeOnDay };
-            });
-
-            // Sort by available time (descending) to prioritize high-availability days
-            daysWithAvailability.sort((a, b) => b.availableTime - a.availableTime);
-
-            // Select 2-3 days per week, prioritizing days with most available time
-            const filteredDays: string[] = [];
-            const usedWeeks = new Map<string, number>(); // Track sessions per week
-
-            for (const { date } of daysWithAvailability) {
-              const dateObj = new Date(date);
-              // Create week identifier (year-week)
-              const weekStart = new Date(dateObj);
-              weekStart.setDate(dateObj.getDate() - dateObj.getDay());
-              const weekId = weekStart.toISOString().split('T')[0];
-
-              const sessionsThisWeek = usedWeeks.get(weekId) || 0;
-
-              // Allow up to 3 sessions per week for '3x-week' preference
-              if (sessionsThisWeek < 3) {
-                filteredDays.push(date);
-                usedWeeks.set(weekId, sessionsThisWeek + 1);
-              }
+            sessionGap = 2;
+            const frequencyFilteredDays: string[] = [];
+            for (let i = 0; i < daysForTask.length; i += sessionGap) {
+              frequencyFilteredDays.push(daysForTask[i]);
             }
-
-            // Sort the selected days chronologically
-            filteredDays.sort();
-            daysForTask = filteredDays;
+            daysForTask = frequencyFilteredDays;
           } else if (task.targetFrequency === 'flexible') {
-            // Enhanced flexible scheduling: adaptively select optimal days based on availability and urgency
-            const taskStartDate = new Date(task.startDate || now.toISOString().split('T')[0]);
-            const taskDeadlineDate = new Date(task.deadline);
-            const timeDiff = taskDeadlineDate.getTime() - taskStartDate.getTime();
-            const daysAvailable = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-
-            // Calculate available hours for each day and prioritize by availability
-            const daysWithAvailability = daysForTask.map(date => {
-              let availableTimeOnDay = dailyRemainingHours[date] || settings.dailyAvailableHours;
-              return { date, availableTime: availableTimeOnDay };
-            });
-
-            // Sort by available time (descending) to prioritize high-availability days
-            daysWithAvailability.sort((a, b) => b.availableTime - a.availableTime);
-
-            // For flexible tasks, adapt frequency based on time pressure and importance
-            let maxSessionsPerWeek = 4; // More flexible than 3x-week
-            if (task.importance) {
-              maxSessionsPerWeek = 5; // Important tasks can be scheduled more frequently
+            // For flexible tasks, adapt the gap based on available time and task urgency
+            sessionGap = task.importance ? 2 : 3; // More frequent for important tasks
+            const frequencyFilteredDays: string[] = [];
+            for (let i = 0; i < daysForTask.length; i += sessionGap) {
+              frequencyFilteredDays.push(daysForTask[i]);
             }
-
-            // If time is very constrained, allow daily scheduling
-            const estimatedSessionsNeeded = Math.ceil(task.estimatedHours / 2); // Assume 2h avg per session
-            const weeksAvailable = Math.max(1, daysAvailable / 7);
-            if (estimatedSessionsNeeded / weeksAvailable > maxSessionsPerWeek) {
-              maxSessionsPerWeek = 7; // Allow daily if needed
-            }
-
-            // Select optimal days per week based on availability
-            const filteredDays: string[] = [];
-            const usedWeeks = new Map<string, number>(); // Track sessions per week
-
-            for (const { date } of daysWithAvailability) {
-              const dateObj = new Date(date);
-              // Create week identifier (year-week)
-              const weekStart = new Date(dateObj);
-              weekStart.setDate(dateObj.getDate() - dateObj.getDay());
-              const weekId = weekStart.toISOString().split('T')[0];
-
-              const sessionsThisWeek = usedWeeks.get(weekId) || 0;
-
-              if (sessionsThisWeek < maxSessionsPerWeek) {
-                filteredDays.push(date);
-                usedWeeks.set(weekId, sessionsThisWeek + 1);
-              }
-            }
-
-            // Sort the selected days chronologically
-            filteredDays.sort();
-            daysForTask = filteredDays;
+            daysForTask = frequencyFilteredDays;
           }
           // daily frequency uses sessionGap = 1 (no filtering needed)
         }
