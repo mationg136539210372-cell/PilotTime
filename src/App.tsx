@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
@@ -32,6 +32,9 @@ import InteractiveTutorial from './components/InteractiveTutorial';
 import TutorialButton from './components/TutorialButton';
 import ErrorBoundary from './components/ErrorBoundary';
 import TimePilotIcon from './components/TimePilotIcon';
+import WelcomeOnboarding from './components/WelcomeOnboarding';
+import GuidedTaskInput from './components/GuidedTaskInput';
+import Confetti from './components/Confetti';
 import './utils/test-data-setup'; // Import test data setup for testing
 import { assessAddTaskFeasibility } from './utils/task-feasibility';
 
@@ -133,6 +136,12 @@ function App() {
     // Dark mode state
     const [darkMode, setDarkMode] = useState(false);
 
+    // Onboarding state
+    const [showOnboarding, setShowOnboarding] = useState(false);
+    const [showGuidedInput, setShowGuidedInput] = useState(false);
+    const [isFirstTimeUser, setIsFirstTimeUser] = useState(false);
+    const [showConfetti, setShowConfetti] = useState(false);
+
     // Load data from localStorage after component mounts
     useEffect(() => {
         try {
@@ -214,6 +223,18 @@ function App() {
             if (savedDarkMode) {
                 const parsed = JSON.parse(savedDarkMode);
                 setDarkMode(parsed);
+            }
+
+            // Clean up localStorage keys from removed missed sessions feature
+            localStorage.removeItem('timepilot-showMissedSessions');
+
+            // Check if this is a first-time user (no onboarding completion flag)
+            const hasCompletedOnboarding = localStorage.getItem('timepilot-onboarding-completed');
+            const hasAnyData = savedTasks || savedStudyPlans || savedCommitments;
+
+            if (!hasCompletedOnboarding && !hasAnyData) {
+                setIsFirstTimeUser(true);
+                setShowOnboarding(true);
             }
 
             setHasLoadedFromStorage(true);
@@ -490,6 +511,33 @@ function App() {
     // Manual study plan generation handler
     const handleGenerateStudyPlan = async () => {
         if (tasks.length > 0) {
+            // Smart hour adjustment: Check if regenerating would create overwhelming schedules
+            const today = getLocalDateString();
+            const activeTasks = tasks.filter(task => task.status === 'pending' && task.estimatedHours > 0);
+            const totalRemainingHours = activeTasks.reduce((sum, task) => sum + task.estimatedHours, 0);
+
+            // Calculate available days until the earliest deadline
+            const earliestDeadline = activeTasks.reduce((earliest, task) => {
+                if (!task.deadline) return earliest;
+                const taskDeadline = new Date(task.deadline);
+                return !earliest || taskDeadline < earliest ? taskDeadline : earliest;
+            }, null as Date | null);
+
+            if (earliestDeadline) {
+                const daysUntilDeadline = Math.max(1, Math.ceil((earliestDeadline.getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)));
+                const requiredDailyHours = totalRemainingHours / daysUntilDeadline;
+                const maxReasonableDailyHours = settings.dailyAvailableHours * 1.2; // 20% tolerance
+
+                // If schedule would be overwhelming, show a gentle warning
+                if (requiredDailyHours > maxReasonableDailyHours) {
+                    const reductionNeeded = totalRemainingHours - (maxReasonableDailyHours * daysUntilDeadline);
+                    setNotificationMessage(
+                        `💡 Heads up: Your remaining ${totalRemainingHours.toFixed(1)} hours might be tight to fit in ${daysUntilDeadline} days (needs ${requiredDailyHours.toFixed(1)}h/day vs your ${settings.dailyAvailableHours}h limit). ` +
+                        `Consider reducing task hours by ~${reductionNeeded.toFixed(1)}h or extending deadlines for a more manageable schedule.`
+                    );
+                    setTimeout(() => setNotificationMessage(null), 8000);
+                }
+            }
             // Check if there are manually rescheduled sessions that will be affected
             const hasManualReschedules = studyPlans.some(plan =>
                 plan.plannedTasks.some(session =>
@@ -593,21 +641,6 @@ function App() {
     };
 
 
-    // Handle study plan regeneration (redistribution functionality has been removed)
-    const handleRedistributeMissedSessions = () => {
-        if (tasks.length > 0) {
-            try {
-                // Simply regenerate the study plan
-                handleGenerateStudyPlan();
-                setNotificationMessage('Study plan regenerated successfully!');
-                setTimeout(() => setNotificationMessage(''), 5000);
-            } catch (error) {
-                console.error('Study plan regeneration failed:', error);
-                setNotificationMessage('Failed to regenerate study plan. Please try again.');
-                setTimeout(() => setNotificationMessage(''), 5000);
-            }
-        }
-    };
 
     // Handle refresh study plan with preserve option (no browser dialog)
     const handleRefreshStudyPlan = (preserveManualReschedules: boolean) => {
@@ -1452,38 +1485,6 @@ function App() {
         return false; // Task was not handled
     };
 
-    // Handler to mark a missed session as done
-    const handleMarkMissedSessionDone = (planDate: string, sessionNumber: number, taskId: string) => {
-        setStudyPlans(prevPlans => {
-            return prevPlans.map(plan => {
-                if (plan.date !== planDate) return plan;
-
-                return {
-                    ...plan,
-                    plannedTasks: plan.plannedTasks.map(session => {
-                        if (session.taskId === taskId && session.sessionNumber === sessionNumber) {
-                            return {
-                                ...session,
-                                done: true,
-                                status: 'completed' as const,
-                                actualHours: session.allocatedHours, // Assume full session time was completed
-                                completedAt: new Date().toISOString()
-                            };
-                        }
-                        return session;
-                    })
-                };
-            });
-        });
-
-        // Check if this completes the task (but don't regenerate study plan)
-        setTimeout(() => {
-            const wasHandled = checkAndHandleSkippedOnlyTask(taskId);
-            if (!wasHandled) {
-                checkAndCompleteTask(taskId);
-            }
-        }, 0);
-    };
 
     // Handler to mark a session as done in studyPlans
     const handleMarkSessionDone = (planDate: string, sessionNumber: number) => {
@@ -1600,6 +1601,59 @@ function App() {
             
             return updatedPlans;
         });
+    };
+
+    // Handler to skip a session
+    const handleSkipSession = (planDate: string, taskId: string, sessionNumber: number) => {
+        setStudyPlans(prevPlans => {
+            const updatedPlans = prevPlans.map(plan => {
+                if (plan.date !== planDate) return plan;
+                return {
+                    ...plan,
+                    plannedTasks: plan.plannedTasks.map(session => {
+                        // Only skip the session if it matches both taskId and sessionNumber
+                        if (session.taskId === taskId && session.sessionNumber === sessionNumber) {
+                            return { ...session, status: 'skipped' };
+                        }
+                        return session;
+                    })
+                };
+            });
+
+            // Check if skipping this session completes the task or handles edge cases
+            setTimeout(() => {
+                const wasHandled = checkAndHandleSkippedOnlyTask(taskId, updatedPlans);
+                if (!wasHandled) {
+                    // Check if all sessions are now done (including skipped sessions)
+                    const allSessionsForTask = updatedPlans.flatMap(plan => plan.plannedTasks).filter(s => s.taskId === taskId);
+                    const allSessionsDone = allSessionsForTask.length > 0 && allSessionsForTask.every(session =>
+                        session.done || session.status === 'skipped'
+                    );
+
+                    if (allSessionsDone) {
+                        // Mark task as completed
+                        const task = tasks.find(t => t.id === taskId);
+                        if (task && task.status !== 'completed') {
+                            const updatedTasks = tasks.map(t =>
+                                t.id === taskId
+                                    ? { ...t, status: 'completed' as const }
+                                    : t
+                            );
+                            setTasks(updatedTasks);
+
+                            // Show completion notification
+                            setNotificationMessage(`Task "${task.title}" completed - all sessions done`);
+                            setTimeout(() => setNotificationMessage(null), 3000);
+                        }
+                    }
+                }
+            }, 0);
+
+            return updatedPlans;
+        });
+
+        setNotificationMessage('Session skipped');
+        setTimeout(() => setNotificationMessage(null), 3000);
     };
 
     // Completion flow handlers
@@ -1766,39 +1820,6 @@ function App() {
         setDarkMode(prev => !prev);
     };
 
-    const handleSkipMissedSession = (planDate: string, sessionNumber: number, taskId: string) => {
-        setStudyPlans(prevPlans => {
-            const updatedPlans = prevPlans.map(plan => {
-                if (plan.date === planDate) {
-                    return {
-                        ...plan,
-                        plannedTasks: plan.plannedTasks.map(session => {
-                            if (session.taskId === taskId && session.sessionNumber === sessionNumber) {
-                                return {
-                                    ...session,
-                                    status: 'skipped' as const
-                                };
-                            }
-                            return session;
-                        })
-                    };
-                }
-                return plan;
-            });
-            
-            // After updating the plans, check if this creates the edge case
-            // where a task has only one session and that session is now skipped
-            setTimeout(() => {
-                const wasHandled = checkAndHandleSkippedOnlyTask(taskId, updatedPlans);
-                if (!wasHandled) {
-                    // If the task wasn't deleted, check if it should be completed
-                    checkAndCompleteTask(taskId, updatedPlans);
-                }
-            }, 0);
-            
-            return updatedPlans;
-        });
-    };
 
     // Interactive tutorial handlers
     const handleStartTutorial = () => {
@@ -1821,6 +1842,120 @@ function App() {
         setTimeout(() => setNotificationMessage(null), 3000);
     };
 
+    // Onboarding handlers
+    const handleCreateSampleSchedule = () => {
+        // Create sample tasks and commitments
+        const sampleTasks: Task[] = [
+            {
+                id: 'sample-1',
+                title: 'Study for Math Exam',
+                estimatedHours: 8,
+                deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 week from now
+                importance: true,
+                category: 'Mathematics',
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'sample-2',
+                title: 'Complete History Assignment',
+                estimatedHours: 4,
+                deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 5 days from now
+                importance: false,
+                category: 'History',
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'sample-3',
+                title: 'Prepare Chemistry Lab Report',
+                estimatedHours: 3,
+                deadline: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 3 days from now
+                importance: false,
+                category: 'Chemistry',
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        const sampleCommitments: FixedCommitment[] = [
+            {
+                id: 'sample-commit-1',
+                title: 'Math Class',
+                startTime: '10:00',
+                endTime: '11:30',
+                daysOfWeek: [1, 3, 5], // Mon, Wed, Fri
+                category: 'Academic',
+                location: 'Room 101',
+                recurring: true,
+                createdAt: new Date().toISOString()
+            },
+            {
+                id: 'sample-commit-2',
+                title: 'Part-time Job',
+                startTime: '14:00',
+                endTime: '18:00',
+                daysOfWeek: [2, 4], // Tue, Thu
+                category: 'Work',
+                location: 'Office',
+                recurring: true,
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        setTasks(sampleTasks);
+        setFixedCommitments(sampleCommitments);
+
+        // Generate initial study plan
+        const { plans } = generateNewStudyPlan(sampleTasks, settings, sampleCommitments);
+        setStudyPlans(plans);
+
+        // Complete onboarding
+        setShowOnboarding(false);
+        localStorage.setItem('timepilot-onboarding-completed', 'true');
+        setShowConfetti(true);
+        setNotificationMessage('🎉 Welcome to TimePilot! Your sample schedule is ready. Try the timer and explore features!');
+        setTimeout(() => setNotificationMessage(null), 5000);
+    };
+
+    const handleStartGuided = () => {
+        setShowOnboarding(false);
+        setShowGuidedInput(true);
+    };
+
+    const handleGuidedTaskComplete = (taskData: Omit<Task, 'id' | 'createdAt'>) => {
+        // Add the task
+        const newTask: Task = {
+            ...taskData,
+            id: Date.now().toString(),
+            createdAt: new Date().toISOString()
+        };
+
+        setTasks([newTask]);
+        setShowGuidedInput(false);
+        localStorage.setItem('timepilot-onboarding-completed', 'true');
+
+        // Generate study plan with the new task
+        const { plans } = generateNewStudyPlan([newTask], settings, fixedCommitments);
+        setStudyPlans(plans);
+
+        setShowConfetti(true);
+        setNotificationMessage('🎉 Great job! Your first task is scheduled. TimePilot found the perfect study times for you!');
+        setTimeout(() => setNotificationMessage(null), 5000);
+    };
+
+    const handleBackToWelcome = () => {
+        setShowGuidedInput(false);
+        setShowOnboarding(true);
+    };
+
+    const handleSkipOnboarding = () => {
+        setShowOnboarding(false);
+        localStorage.setItem('timepilot-onboarding-completed', 'true');
+        setNotificationMessage('Welcome to TimePilot! Add your first task to get started.');
+        setTimeout(() => setNotificationMessage(null), 3000);
+    };
+
     const handleInteractiveTutorialSkip = () => {
         setShowInteractiveTutorial(false);
         // Mark tutorial as completed when dismissed so the button and welcome message don't appear again
@@ -1839,9 +1974,6 @@ function App() {
     }, [showInteractiveTutorial]);
 
 
-    // Handle missed sessions and provide rescheduling options
-    // Removed handleMissedSessions, handleIndividualSessionReschedule, and any effect or function using checkSessionStatus, moveMissedSessions, moveIndividualSession, applyUserReschedules, createUserReschedule, or UserReschedule
-    // Removed onHandleMissedSessions and readyToMarkDone props from Dashboard and StudyPlanView
 
     const tabs = [
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -2156,7 +2288,7 @@ function App() {
                             )}
                         </div>
                     )}
-                    {activeTab === 'dashboard' && (
+                    {activeTab === 'dashboard' && !showOnboarding && (
                         <Dashboard
                             tasks={tasks}
                             studyPlans={studyPlans}
@@ -2167,6 +2299,27 @@ function App() {
                             hasCompletedTutorial={localStorage.getItem('timepilot-interactive-tutorial-complete') === 'true'}
                         />
                     )}
+                    {showOnboarding && (
+                        <WelcomeOnboarding
+                            onCreateSampleSchedule={handleCreateSampleSchedule}
+                            onStartGuided={handleStartGuided}
+                            onSkipOnboarding={handleSkipOnboarding}
+                            settings={settings}
+                        />
+                    )}
+                    {showGuidedInput && (
+                        <GuidedTaskInput
+                            onAddTask={handleGuidedTaskComplete}
+                            onBack={handleBackToWelcome}
+                            settings={settings}
+                        />
+                    )}
+
+                    {/* Celebration Confetti */}
+                    <Confetti
+                        show={showConfetti}
+                        onComplete={() => setShowConfetti(false)}
+                    />
 
                     {activeTab === 'tasks' && (
                         <div className="space-y-4 sm:space-y-6">
@@ -2198,13 +2351,11 @@ function App() {
                             onSelectTask={handleSelectTask}
                             onGenerateStudyPlan={handleGenerateStudyPlan}
                             onUndoSessionDone={handleUndoSessionDone}
+                            onSkipSession={handleSkipSession}
                             settings={settings}
                             onAddFixedCommitment={handleAddFixedCommitment}
-                            onSkipMissedSession={handleSkipMissedSession}
-                            onRedistributeMissedSessions={handleRedistributeMissedSessions}
                             onRefreshStudyPlan={handleRefreshStudyPlan}
                             onUpdateTask={handleUpdateTask}
-                            onMarkMissedSessionDone={handleMarkMissedSessionDone}
                         />
                     )}
 
@@ -2408,22 +2559,13 @@ function App() {
 
                                         <details className="group border border-gray-200 dark:border-gray-700 rounded-lg">
                                             <summary className="flex items-center justify-between cursor-pointer p-4 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-gray-100">
-                                                <span>What happens with missed and rescheduled sessions?</span>
+                                                <span>How does session rescheduling work?</span>
                                                 <svg className="w-4 h-4 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                 </svg>
                                             </summary>
                                             <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                                                 <div className="text-sm text-gray-600 dark:text-gray-400 space-y-3">
-                                                    <div>
-                                                        <strong className="text-red-600 dark:text-red-400">Missed Sessions:</strong>
-                                                        <ul className="ml-4 mt-1 space-y-1">
-                                                            <li> Automatically marked as "missed" when the scheduled time passes</li>
-                                                            <li> Hours are automatically redistributed to future available time slots</li>
-                                                            <li> TimePilot tries to maintain deadline compliance when redistributing</li>
-                                                            <li> You can manually mark a session as completed if you studied at a different time</li>
-                                                        </ul>
-                                                    </div>
                                                     <div>
                                                         <strong className="text-blue-600 dark:text-blue-400">Rescheduled Sessions:</strong>
                                                         <ul className="ml-4 mt-1 space-y-1">
@@ -2526,7 +2668,7 @@ function App() {
                                                     <p>TimePilot goes beyond simple to-do lists and basic calendars:</p>
                                                     <ul className="ml-4 space-y-1">
                                                         <li> <strong>Intelligent conflict avoidance:</strong> Never schedules study time over commitments</li>
-                                                        <li> <strong>Automatic redistribution:</strong> Handles missed sessions without manual rescheduling</li>
+                                                        <li> <strong>Flexible rescheduling:</strong> Drag and drop sessions to fit your changing schedule</li>
                                                         <li> <strong>Priority-based scheduling:</strong> Important and urgent tasks get scheduled first</li>
                                                         <li> <strong>Deadline awareness:</strong> Ensures tasks are completed before their deadlines</li>
                                                         <li> <strong>Adaptive learning:</strong> Improves estimates based on your actual completion patterns</li>
@@ -2776,6 +2918,7 @@ function App() {
                     hasCompletedTutorial={localStorage.getItem('timepilot-interactive-tutorial-complete') === 'true'}
                     hasTasks={tasks.length > 0}
                     isTutorialActive={showInteractiveTutorial}
+                    hasCompletedOnboarding={localStorage.getItem('timepilot-onboarding-completed') === 'true'}
                 />
 
                 {/* Gamification Panel */}
