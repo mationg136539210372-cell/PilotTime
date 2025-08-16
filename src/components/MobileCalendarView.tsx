@@ -131,7 +131,17 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
     // --- Study Sessions ---
     const selectedPlan = studyPlans.find(plan => plan.date === selectedDateStr);
     if (selectedPlan) {
-      selectedPlan.plannedTasks.forEach(session => {
+      // Filter out past incomplete sessions (forward focus approach)
+      const today = moment().format('YYYY-MM-DD');
+      const relevantSessions = selectedPlan.plannedTasks.filter(session => {
+        // Always show sessions for today and future
+        if (selectedDateStr >= today) return true;
+
+        // For past dates, only show completed sessions
+        return session.done || session.status === 'completed' || session.status === 'skipped';
+      });
+
+      relevantSessions.forEach(session => {
         const task = tasks.find(t => t.id === session.taskId);
         if (task) {
           // Ensure correct parsing of startTime and endTime for the selectedDate
@@ -478,16 +488,14 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
     // Check if session is missed to prevent dragging
     const isStudySession = event.resource.type === 'study';
     const sessionStatus = isStudySession ? checkSessionStatus(event.resource.data.session, moment(selectedDate).format('YYYY-MM-DD')) : null;
-    const isMissedSession = sessionStatus === 'missed';
-
     const [{ isDragging }, drag] = useDrag(() => ({
       type: 'event',
       item: event,
-      canDrag: isStudySession && !isMissedSession, // Only non-missed study sessions can be dragged
+      canDrag: isStudySession, // All study sessions can be dragged
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
-    }), [event, isMissedSession]);
+    }), [event, isStudySession]);
 
     // Handle drag start/end with useEffect
     React.useEffect(() => {
@@ -499,7 +507,7 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
       }
     }, [isDragging]);
 
-    const canDrag = isStudySession && !isMissedSession;
+    const canDrag = isStudySession;
 
     return (
       <div
@@ -507,7 +515,7 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
         onClick={() => onEventClick(event)}
         className={`mb-2 p-3 rounded-lg text-white text-sm font-medium transition-all duration-200 ${
           isDragging ? 'opacity-50 scale-95' : ''
-        } ${canDrag ? 'cursor-move hover:opacity-80' : isMissedSession ? 'cursor-default opacity-75' : 'cursor-pointer hover:opacity-80'}`}
+        } ${canDrag ? 'cursor-move hover:opacity-80' : 'cursor-pointer hover:opacity-80'}`}
         style={{
           backgroundColor: getEventColor(event),
           touchAction: canDrag ? 'none' : 'auto' // Disable touch scrolling when dragging
@@ -528,7 +536,6 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
                 return '';
               })()}
               {canDrag && <span className="text-xs ml-1">📱</span>}
-              {isMissedSession && <span className="text-xs ml-1">🚫</span>}
             </div>
             <div className="text-xs opacity-90">
               {moment(event.start).format('h:mm A')} - {moment(event.end).format('h:mm A')}
