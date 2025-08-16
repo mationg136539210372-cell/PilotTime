@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation } from './utils/scheduling';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
@@ -647,7 +647,7 @@ function App() {
         if (tasks.length > 0) {
             try {
                 // Generate new study plan
-                const result = preserveManualReschedules 
+                const result = preserveManualReschedules
                     ? generateNewStudyPlanWithPreservation(tasks, settings, fixedCommitments, studyPlans)
                     : generateNewStudyPlan(tasks, settings, fixedCommitments, studyPlans);
                 const newPlans = result.plans;
@@ -730,6 +730,34 @@ function App() {
             } catch (error) {
                 console.error('Study plan refresh failed:', error);
                 setNotificationMessage('Failed to refresh study plan. Please try again.');
+                setTimeout(() => setNotificationMessage(''), 5000);
+            }
+        }
+    };
+
+    // Handle reshuffle study plan to balance workloads
+    const handleReshuffleStudyPlan = () => {
+        if (tasks.length > 0 && studyPlans.length > 0) {
+            try {
+                // Use reshuffle function to redistribute sessions for workload balance
+                const result = reshuffleStudyPlan(studyPlans, tasks, settings, fixedCommitments);
+                const newPlans = result.plans;
+
+                setStudyPlans(newPlans);
+                setLastPlanStaleReason("task");
+                setNotificationMessage('Study plan reshuffled! Sessions redistributed for balanced workload.');
+
+                if (result.suggestions.length > 0) {
+                    const totalUnscheduled = result.suggestions.reduce((sum, s) => sum + s.unscheduledMinutes, 0);
+                    setTimeout(() => {
+                        setNotificationMessage(`Study plan reshuffled! Note: ${Math.round(totalUnscheduled / 60)} hours could not be scheduled. Check the suggestions panel for details.`);
+                    }, 5100);
+                }
+
+                setTimeout(() => setNotificationMessage(''), 5000);
+            } catch (error) {
+                console.error('Study plan reshuffle failed:', error);
+                setNotificationMessage('Failed to reshuffle study plan. Please try again.');
                 setTimeout(() => setNotificationMessage(''), 5000);
             }
         }
@@ -2355,6 +2383,7 @@ function App() {
                             settings={settings}
                             onAddFixedCommitment={handleAddFixedCommitment}
                             onRefreshStudyPlan={handleRefreshStudyPlan}
+                            onReshuffleStudyPlan={handleReshuffleStudyPlan}
                             onUpdateTask={handleUpdateTask}
                         />
                     )}
