@@ -1,5 +1,59 @@
 import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, DateSpecificStudyWindow, SkipMetadata } from '../types';
 
+// Helper function to calculate committed hours for a specific date that count toward daily hours
+const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
+  const targetDate = new Date(date);
+  const dayOfWeek = targetDate.getDay();
+
+  let totalCommittedHours = 0;
+
+  commitments.forEach(commitment => {
+    // Only count commitments that count toward daily hours
+    if (!commitment.countsTowardDailyHours) return;
+
+    // Skip all-day events (they don't have specific duration)
+    if (commitment.isAllDay || !commitment.startTime || !commitment.endTime) return;
+
+    let shouldInclude = false;
+
+    if (commitment.recurring) {
+      // For recurring commitments, check if this day of week is included
+      if (commitment.daysOfWeek.includes(dayOfWeek)) {
+        // Check if the date falls within the date range (if specified)
+        if (commitment.dateRange) {
+          const startDate = new Date(commitment.dateRange.startDate);
+          const endDate = new Date(commitment.dateRange.endDate);
+          if (targetDate >= startDate && targetDate <= endDate) {
+            shouldInclude = true;
+          }
+        } else {
+          // No date range specified, so it's active
+          shouldInclude = true;
+        }
+      }
+    } else {
+      // For one-time commitments, check if this date is in the specific dates
+      if (commitment.specificDates?.includes(date)) {
+        shouldInclude = true;
+      }
+    }
+
+    if (shouldInclude) {
+      // Calculate duration in hours
+      const [startHour, startMin] = commitment.startTime.split(':').map(Number);
+      const [endHour, endMin] = commitment.endTime.split(':').map(Number);
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+      const durationMinutes = endMinutes - startMinutes;
+      const durationHours = durationMinutes / 60;
+
+      totalCommittedHours += durationHours;
+    }
+  });
+
+  return totalCommittedHours;
+};
+
 // Utility functions
 export const getLocalDateString = (): string => {
   const now = new Date();
@@ -900,18 +954,22 @@ export const generateNewStudyPlan = (
       // Sort available days to maintain order
       availableDays.sort();
     }
-    
+
 
     const studyPlans: StudyPlan[] = [];
     const dailyRemainingHours: { [date: string]: number } = {};
     availableDays.forEach(date => {
-      dailyRemainingHours[date] = settings.dailyAvailableHours;
+      // Calculate committed hours for this date that count toward daily hours
+      const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
+      const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+
+      dailyRemainingHours[date] = availableHoursAfterCommitments;
       studyPlans.push({
         id: `plan-${date}`,
         date,
         plannedTasks: [],
         totalStudyHours: 0,
-        availableHours: settings.dailyAvailableHours
+        availableHours: availableHoursAfterCommitments
       });
     });
     let evenTaskScheduledHours: { [taskId: string]: number } = {};
@@ -1698,13 +1756,17 @@ export const generateNewStudyPlan = (
     const studyPlans: StudyPlan[] = [];
     const dailyRemainingHours: { [date: string]: number } = {};
     availableDays.forEach(date => {
-      dailyRemainingHours[date] = settings.dailyAvailableHours;
+      // Calculate committed hours for this date that count toward daily hours
+      const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
+      const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+
+      dailyRemainingHours[date] = availableHoursAfterCommitments;
       studyPlans.push({
         id: `plan-${date}`,
         date,
         plannedTasks: [],
         totalStudyHours: 0,
-        availableHours: settings.dailyAvailableHours
+        availableHours: availableHoursAfterCommitments
       });
     });
 
@@ -1992,19 +2054,23 @@ export const generateNewStudyPlan = (
       }
     });
     // Sort available days to maintain order
-    availableDays.sort();
+  availableDays.sort();
   }
 
   const studyPlans: StudyPlan[] = [];
   const dailyRemainingHours: { [date: string]: number } = {};
   availableDays.forEach(date => {
-    dailyRemainingHours[date] = settings.dailyAvailableHours;
+    // Calculate committed hours for this date that count toward daily hours
+    const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
+    const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+
+    dailyRemainingHours[date] = availableHoursAfterCommitments;
     studyPlans.push({
       id: `plan-${date}`,
       date,
       plannedTasks: [],
       totalStudyHours: 0,
-      availableHours: settings.dailyAvailableHours
+      availableHours: availableHoursAfterCommitments
     });
   });
 
@@ -2691,13 +2757,17 @@ export const redistributeAfterTaskDeletion = (
   const studyPlans: StudyPlan[] = [];
   const dailyRemainingHours: { [date: string]: number } = {};
   availableDays.forEach(date => {
-    dailyRemainingHours[date] = settings.dailyAvailableHours;
+    // Calculate committed hours for this date that count toward daily hours
+    const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
+    const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+
+    dailyRemainingHours[date] = availableHoursAfterCommitments;
     studyPlans.push({
       id: `plan-${date}`,
       date,
       plannedTasks: [],
       totalStudyHours: 0,
-      availableHours: settings.dailyAvailableHours
+      availableHours: availableHoursAfterCommitments
     });
   });
 
