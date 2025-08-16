@@ -1,4 +1,4 @@
-import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, DateSpecificStudyWindow } from '../types';
+import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, DateSpecificStudyWindow, SkipMetadata } from '../types';
 
 // Utility functions
 export const getLocalDateString = (): string => {
@@ -252,6 +252,42 @@ export const checkSessionStatus = (session: StudySession, planDate: string): 'sc
   // All other sessions (past, present, future) are simply 'scheduled'
   // Past sessions are ignored rather than marked as missed
   return 'scheduled';
+};
+
+/**
+ * Automatically mark sessions as skipped if their day has passed and they're not completed
+ * @param studyPlans Array of study plans to check
+ * @returns Updated study plans with past incomplete sessions marked as skipped
+ */
+export const markPastSessionsAsSkipped = (studyPlans: StudyPlan[]): StudyPlan[] => {
+  const today = getLocalDateString();
+
+  return studyPlans.map(plan => {
+    // Only process plans for dates before today
+    if (plan.date >= today) {
+      return plan;
+    }
+
+    return {
+      ...plan,
+      plannedTasks: plan.plannedTasks.map(session => {
+        // Skip sessions that are already done, completed, or skipped
+        if (session.done || session.status === 'completed' || session.status === 'skipped') {
+          return session;
+        }
+
+        // Mark remaining sessions as skipped with metadata
+        return {
+          ...session,
+          status: 'skipped' as const,
+          skipMetadata: {
+            skippedAt: new Date().toISOString(),
+            reason: 'overload' // System automatically skipped due to date passing
+          }
+        };
+      })
+    };
+  });
 };
 
 
