@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRight, ArrowLeft, CheckCircle, Info, Clock, Calendar, Settings, BookOpen, Users, AlertTriangle, Target, Lightbulb, TrendingUp, Zap, Maximize2, Minimize2 } from 'lucide-react';
+import { advancedTutorialSteps } from './AdvancedTutorialSteps';
 
 interface TutorialStep {
   id: string;
@@ -67,33 +68,48 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
   }, [isActive]);
 
   const tutorialSteps: TutorialStep[] = [
-    // Welcome & Overview
+    // Advanced Features Welcome
     {
-      id: 'welcome',
-      title: 'Welcome to TimePilot! 🚀',
-      description: 'TimePilot is an intelligent study planning app that automatically creates optimized schedules based on your tasks, deadlines, and commitments. Let\'s learn how to use it effectively!',
+      id: 'advanced-welcome',
+      title: 'Advanced TimePilot Features 🚀',
+      description: 'Great! You\'ve got the basics down. Now let\'s explore advanced features that will make you a TimePilot power user.',
       position: 'center',
       action: 'observe',
       requiresAction: false,
       customContent: (
-        <div className="space-y-2 text-xs">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
-            <p className="font-medium text-blue-800 dark:text-blue-200 mb-1">What TimePilot Does:</p>
-            <ul className="space-y-0.5 text-blue-700 dark:text-blue-300">
-              <li>• Automatically schedules study sessions</li>
-              <li>• Considers your existing commitments</li>
-              <li>• Adapts to deadline priorities</li>
-              <li>• Tracks your study progress</li>
-            </ul>
+        <div className="space-y-3 text-sm">
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-4 rounded-lg">
+            <p className="font-semibold text-purple-800 dark:text-purple-200 mb-3">🎯 This Advanced Tutorial Covers:</p>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <p className="font-medium text-purple-700 dark:text-purple-300">⚡ Power Features:</p>
+                <ul className="text-purple-600 dark:text-purple-400 space-y-1 mt-1">
+                  <li>• Calendar drag & drop</li>
+                  <li>• Smart rescheduling</li>
+                  <li>• Time optimization</li>
+                </ul>
+              </div>
+              <div>
+                <p className="font-medium text-blue-700 dark:text-blue-300">📊 Analytics & Tips:</p>
+                <ul className="text-blue-600 dark:text-blue-400 space-y-1 mt-1">
+                  <li>• Progress tracking</li>
+                  <li>• Time estimation</li>
+                  <li>• Settings optimization</li>
+                </ul>
+              </div>
+            </div>
           </div>
+          <p className="text-gray-600 dark:text-gray-300 text-center text-xs">
+            💡 <strong>Tip:</strong> These features will save you hours of planning time!
+          </p>
         </div>
       )
     },
 
-    // Core Concepts Explanation
+    // Advanced Calendar Features
     {
-      id: 'core-concepts',
-      title: 'Understanding: Tasks vs Commitments',
+      id: 'calendar-drag-drop',
+      title: 'Master Calendar Drag & Drop 📅',
       description: 'Before we start, let\'s clarify the difference between these two core concepts in TimePilot.',
       position: 'center',
       action: 'observe',
@@ -360,7 +376,7 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
           </div>
           <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded-lg">
             <p className="text-red-700 dark:text-red-300 text-xs">
-              <strong>Note:</strong> If you see unscheduled hours after redistributing missed sessions, this indicates sessions that still need time allocation.
+              <strong>Note:</strong> If you see unscheduled hours after refreshing your study plan, this indicates sessions that still need time allocation.
             </p>
           </div>
         </div>
@@ -512,34 +528,6 @@ const InteractiveTutorial: React.FC<InteractiveTutorialProps> = ({
       )
     },
 
-    // Missed Sessions & Redistribution
-    {
-      id: 'missed-sessions-explanation',
-      title: 'Handling Missed Sessions',
-      description: 'Life happens! Here\'s how TimePilot helps you recover when you miss study sessions.',
-      position: 'center',
-      action: 'observe',
-      requiresAction: false,
-      customContent: (
-        <div className="space-y-3 text-sm">
-          <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
-            <p className="font-semibold text-red-800 dark:text-red-200 mb-2">🔄 When Sessions Are Missed:</p>
-            <ul className="text-red-700 dark:text-red-300 space-y-1 text-xs">
-              <li>• TimePilot automatically detects missed sessions</li>
-              <li>• Shows redistribution options in the suggestions panel</li>
-              <li>• Offers both Enhanced and Legacy redistribution modes</li>
-              <li>• Reschedules missed work around your existing commitments</li>
-            </ul>
-          </div>
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg">
-            <p className="font-semibold text-blue-800 dark:text-blue-200 mb-1">💡 <strong>Pro Tip:</strong></p>
-            <p className="text-blue-700 dark:text-blue-300 text-xs">
-              Use Enhanced mode first - it's smarter about finding optimal time slots. Fall back to Legacy mode if needed.
-            </p>
-          </div>
-        </div>
-      )
-    },
 
     // Timer and Session Management
     {
