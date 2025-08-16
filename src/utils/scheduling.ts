@@ -1201,8 +1201,42 @@ export const generateNewStudyPlan = (
         }
 
         if (!scheduledOneSitting) {
-          // If we couldn't schedule as one sitting, track all hours as unscheduled
-          unscheduledHours += totalHours;
+          // Smart fallback: try to find alternative solutions
+          const fallbackResult = handleOneSittingFallback(
+            task,
+            totalHours,
+            daysForTask,
+            dailyRemainingHours,
+            settings
+          );
+
+          if (fallbackResult.scheduled) {
+            // Successfully scheduled with fallback approach
+            for (const { date, hours } of fallbackResult.scheduledSessions) {
+              let dayPlan = studyPlans.find(p => p.date === date)!;
+              const roundedHours = Math.round(hours * 60) / 60;
+
+              dayPlan.plannedTasks.push({
+                taskId: task.id,
+                scheduledTime: date,
+                startTime: '',
+                endTime: '',
+                allocatedHours: roundedHours,
+                sessionNumber: fallbackResult.scheduledSessions.indexOf({ date, hours }) + 1,
+                isFlexible: true,
+                status: 'scheduled'
+              });
+
+              dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedHours) * 60) / 60;
+              dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedHours) * 60) / 60;
+            }
+            totalHours = Math.round((totalHours - fallbackResult.totalScheduled) * 60) / 60;
+          }
+
+          // Track any remaining unscheduled hours
+          if (totalHours > 0) {
+            unscheduledHours += totalHours;
+          }
         }
       } else {
         // Regular task scheduling (can be split)
@@ -3324,6 +3358,449 @@ export const preserveManualSchedules = (
  * This function ensures that manually rescheduled sessions are treated as
  * fixed constraints when generating new schedules
  */
+/**
+ * Handles fallback scenarios when one-sitting tasks can't be scheduled as intended
+ */
+const handleOneSittingFallback = (
+  task: Task,
+  totalHours: number,
+  daysForTask: string[],
+  dailyRemainingHours: { [date: string]: number },
+  settings: UserSettings
+): {
+  scheduled: boolean;
+  scheduledSessions: Array<{ date: string; hours: number }>;
+  totalScheduled: number;
+} => {
+  const result: Array<{ date: string; hours: number }> = [];
+  let remainingHours = totalHours;
+  const minSessionLength = (settings.minSessionLength || 15) / 60;
+
+  // Strategy 1: Try to split into 2 large sessions (maintain large blocks)
+  if (remainingHours > 2 && daysForTask.length >= 2) {
+    const halfHours = remainingHours / 2;
+    let scheduledSessions = 0;
+
+    for (let i = daysForTask.length - 1; i >= 0 && scheduledSessions < 2; i--) {
+      const date = daysForTask[i];
+      const availableHours = dailyRemainingHours[date];
+
+      if (availableHours >= halfHours) {
+        result.push({ date, hours: halfHours });
+        remainingHours -= halfHours;
+        scheduledSessions++;
+      }
+    }
+
+    if (scheduledSessions === 2) {
+      return {
+        scheduled: true,
+        scheduledSessions: result,
+        totalScheduled: totalHours - remainingHours
+      };
+    }
+  }
+
+  // Strategy 2: Progressive scheduling (largest possible sessions first)
+  result.length = 0; // Clear previous attempts
+  remainingHours = totalHours;
+
+  // Sort days by available capacity (descending) and proximity to deadline
+  const sortedDays = [...daysForTask].sort((a, b) => {
+    const aCapacity = dailyRemainingHours[a];
+    const bCapacity = dailyRemainingHours[b];
+
+    if (Math.abs(aCapacity - bCapacity) > 0.5) {
+      return bCapacity - aCapacity; // More capacity first
+    }
+
+    // If capacity is similar, prefer closer to deadline
+    return b.localeCompare(a);
+  });
+
+  for (const date of sortedDays) {
+    if (remainingHours <= 0) break;
+
+    const availableHours = dailyRemainingHours[date];
+    if (availableHours >= minSessionLength) {
+      const hoursToSchedule = Math.min(remainingHours, availableHours);
+
+      if (hoursToSchedule >= minSessionLength) {
+        result.push({ date, hours: hoursToSchedule });
+        remainingHours -= hoursToSchedule;
+      }
+    }
+  }
+
+  return {
+    scheduled: result.length > 0,
+    scheduledSessions: result,
+    totalScheduled: totalHours - remainingHours
+  };
+};
+
+/**
+ * Rebalances non-one-sitting tasks around large one-sitting tasks to create consistent daily workloads
+ */
+const rebalanceAroundOneSittingTasks = (
+  studyPlans: StudyPlan[],
+  tasks: Task[],
+  settings: UserSettings,
+  fixedCommitments: FixedCommitment[]
+): StudyPlan[] => {
+  // Step 1: Identify days with large one-sitting tasks (>60% of daily capacity)
+  const capacityThreshold = settings.dailyAvailableHours * 0.6;
+  const daysWithLargeOneSittingTasks = new Set<string>();
+  const oneSittingTasksByDay = new Map<string, StudySession[]>();
+
+  for (const plan of studyPlans) {
+    const oneSittingSessions = plan.plannedTasks.filter(session => {
+      const task = tasks.find(t => t.id === session.taskId);
+      return task?.isOneTimeTask && session.allocatedHours >= capacityThreshold;
+    });
+
+    if (oneSittingSessions.length > 0) {
+      daysWithLargeOneSittingTasks.add(plan.date);
+      oneSittingTasksByDay.set(plan.date, oneSittingSessions);
+    }
+  }
+
+  // If no large one-sitting tasks, return original plans
+  if (daysWithLargeOneSittingTasks.size === 0) {
+    return studyPlans;
+  }
+
+  // Step 2: Extract non-one-sitting sessions from overloaded days
+  const sessionsToRebalance: Array<{
+    session: StudySession;
+    task: Task;
+    originalDate: string;
+  }> = [];
+
+  const rebalancedPlans = studyPlans.map(plan => {
+    if (!daysWithLargeOneSittingTasks.has(plan.date)) {
+      return plan;
+    }
+
+    // Keep one-sitting tasks and manual schedules, extract others for rebalancing
+    const sessionsToKeep = plan.plannedTasks.filter(session => {
+      const task = tasks.find(t => t.id === session.taskId);
+
+      // Keep one-sitting tasks
+      if (task?.isOneTimeTask) {
+        return true;
+      }
+
+      // Keep manually scheduled sessions
+      if (session.manuallyScheduled) {
+        return true;
+      }
+
+      // Keep completed/skipped sessions
+      if (session.done || session.status === 'completed' || session.status === 'skipped') {
+        return true;
+      }
+
+      // Extract regular sessions for rebalancing
+      if (task) {
+        sessionsToRebalance.push({
+          session: { ...session },
+          task,
+          originalDate: plan.date
+        });
+      }
+
+      return false;
+    });
+
+    // Recalculate total hours for the day
+    const totalHours = sessionsToKeep.reduce((sum, session) => sum + session.allocatedHours, 0);
+
+    return {
+      ...plan,
+      plannedTasks: sessionsToKeep,
+      totalStudyHours: Math.round(totalHours * 60) / 60
+    };
+  });
+
+  // Step 3: Calculate daily capacity across all days
+  const dailyCapacity = new Map<string, number>();
+  for (const plan of rebalancedPlans) {
+    const remainingCapacity = settings.dailyAvailableHours - plan.totalStudyHours;
+    dailyCapacity.set(plan.date, Math.max(0, remainingCapacity));
+  }
+
+  // Step 4: Redistribute extracted sessions using intelligent balancing
+  return redistributeSessionsForBalance(
+    rebalancedPlans,
+    sessionsToRebalance,
+    dailyCapacity,
+    tasks,
+    settings,
+    fixedCommitments
+  );
+};
+
+/**
+ * Applies final workload smoothing to minimize daily variation in study hours
+ */
+const applyWorkloadSmoothing = (
+  studyPlans: StudyPlan[],
+  tasks: Task[],
+  settings: UserSettings,
+  fixedCommitments: FixedCommitment[]
+): StudyPlan[] => {
+  // Calculate current workload distribution
+  const dailyWorkloads = new Map<string, number>();
+  const movableSessions = new Map<string, StudySession[]>();
+
+  for (const plan of studyPlans) {
+    dailyWorkloads.set(plan.date, plan.totalStudyHours);
+
+    // Identify sessions that can be moved (non-one-sitting, non-manual, non-completed)
+    const movable = plan.plannedTasks.filter(session => {
+      const task = tasks.find(t => t.id === session.taskId);
+      return task &&
+        !task.isOneTimeTask &&
+        !session.manuallyScheduled &&
+        !session.done &&
+        session.status !== 'completed' &&
+        session.status !== 'skipped';
+    });
+
+    movableSessions.set(plan.date, movable);
+  }
+
+  // Calculate workload statistics
+  const workloads = Array.from(dailyWorkloads.values());
+  const avgWorkload = workloads.reduce((a, b) => a + b, 0) / workloads.length;
+  const maxWorkload = Math.max(...workloads);
+  const minWorkload = Math.min(...workloads);
+  const workloadVariation = maxWorkload - minWorkload;
+
+  // If variation is reasonable, no smoothing needed
+  if (workloadVariation <= 2) {
+    return studyPlans;
+  }
+
+  // Identify overloaded and underloaded days
+  const overloadThreshold = avgWorkload + (workloadVariation * 0.3);
+  const underloadThreshold = avgWorkload - (workloadVariation * 0.3);
+
+  const overloadedDays = Array.from(dailyWorkloads.entries())
+    .filter(([, workload]) => workload > overloadThreshold)
+    .sort(([, a], [, b]) => b - a); // Most overloaded first
+
+  const underloadedDays = Array.from(dailyWorkloads.entries())
+    .filter(([, workload]) => workload < underloadThreshold)
+    .sort(([, a], [, b]) => a - b); // Least loaded first
+
+  // Move sessions from overloaded to underloaded days
+  const result = [...studyPlans];
+  const minSessionLength = (settings.minSessionLength || 15) / 60;
+
+  for (const [overloadedDate, overloadedWorkload] of overloadedDays) {
+    const sessionsToMove = movableSessions.get(overloadedDate) || [];
+    if (sessionsToMove.length === 0) continue;
+
+    // Sort sessions by size (smallest first for easier redistribution)
+    sessionsToMove.sort((a, b) => a.allocatedHours - b.allocatedHours);
+
+    for (const session of sessionsToMove) {
+      const task = tasks.find(t => t.id === session.taskId);
+      if (!task) continue;
+
+      // Find a suitable underloaded day for this session
+      const suitableDay = findSuitableUnderloadedDay(
+        session,
+        task,
+        underloadedDays,
+        dailyWorkloads,
+        settings,
+        avgWorkload
+      );
+
+      if (suitableDay) {
+        // Move the session
+        moveSessionBetweenPlans(result, session, overloadedDate, suitableDay);
+
+        // Update workload tracking
+        dailyWorkloads.set(overloadedDate, dailyWorkloads.get(overloadedDate)! - session.allocatedHours);
+        dailyWorkloads.set(suitableDay, dailyWorkloads.get(suitableDay)! + session.allocatedHours);
+
+        // Check if this day is no longer significantly overloaded
+        if (dailyWorkloads.get(overloadedDate)! <= avgWorkload + 1) {
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
+};
+
+/**
+ * Finds a suitable underloaded day for moving a session
+ */
+const findSuitableUnderloadedDay = (
+  session: StudySession,
+  task: Task,
+  underloadedDays: [string, number][],
+  dailyWorkloads: Map<string, number>,
+  settings: UserSettings,
+  avgWorkload: number
+): string | null => {
+  for (const [underloadedDate, currentWorkload] of underloadedDays) {
+    // Check if this day is within the task's valid date range
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const startDate = task.startDate ? new Date(task.startDate) : today;
+    const startDateStr = startDate > today ? task.startDate! : todayStr;
+
+    if (underloadedDate < startDateStr) continue;
+
+    if (task.deadline && task.deadlineType !== 'none') {
+      const deadline = new Date(task.deadline);
+      if (settings.bufferDays > 0) {
+        deadline.setDate(deadline.getDate() - settings.bufferDays);
+      }
+      const deadlineStr = deadline.toISOString().split('T')[0];
+      if (underloadedDate > deadlineStr) continue;
+    }
+
+    // Check if adding this session would create a reasonable workload
+    const newWorkload = currentWorkload + session.allocatedHours;
+    if (newWorkload <= avgWorkload + 1 && newWorkload <= settings.dailyAvailableHours) {
+      return underloadedDate;
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Moves a session from one day to another in the study plans
+ */
+const moveSessionBetweenPlans = (
+  studyPlans: StudyPlan[],
+  session: StudySession,
+  fromDate: string,
+  toDate: string
+): void => {
+  const fromPlan = studyPlans.find(p => p.date === fromDate);
+  const toPlan = studyPlans.find(p => p.date === toDate);
+
+  if (!fromPlan || !toPlan) return;
+
+  // Remove from source plan
+  const sessionIndex = fromPlan.plannedTasks.findIndex(s =>
+    s.taskId === session.taskId &&
+    s.sessionNumber === session.sessionNumber &&
+    s.allocatedHours === session.allocatedHours
+  );
+
+  if (sessionIndex !== -1) {
+    fromPlan.plannedTasks.splice(sessionIndex, 1);
+    fromPlan.totalStudyHours = Math.round((fromPlan.totalStudyHours - session.allocatedHours) * 60) / 60;
+
+    // Add to destination plan
+    toPlan.plannedTasks.push({
+      ...session,
+      scheduledTime: toDate,
+      startTime: '',
+      endTime: '',
+      isFlexible: true,
+      status: 'scheduled'
+    });
+    toPlan.totalStudyHours = Math.round((toPlan.totalStudyHours + session.allocatedHours) * 60) / 60;
+  }
+};
+
+/**
+ * Redistributes sessions to create balanced daily workloads
+ */
+const redistributeSessionsForBalance = (
+  studyPlans: StudyPlan[],
+  sessionsToRebalance: Array<{ session: StudySession; task: Task; originalDate: string }>,
+  dailyCapacity: Map<string, number>,
+  tasks: Task[],
+  settings: UserSettings,
+  fixedCommitments: FixedCommitment[]
+): StudyPlan[] => {
+  if (sessionsToRebalance.length === 0) {
+    return studyPlans;
+  }
+
+  // Sort sessions by priority (importance + deadline urgency)
+  sessionsToRebalance.sort((a, b) => {
+    const aDaysUntilDeadline = a.task.deadline ?
+      (new Date(a.task.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) : 9999;
+    const bDaysUntilDeadline = b.task.deadline ?
+      (new Date(b.task.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) : 9999;
+
+    const aPriority = a.task.importance ? 1 : 2;
+    const bPriority = b.task.importance ? 1 : 2;
+
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return aDaysUntilDeadline - bDaysUntilDeadline;
+  });
+
+  const minSessionLength = (settings.minSessionLength || 15) / 60;
+  const result = [...studyPlans];
+
+  // Redistribute each session to the day with most available capacity (within deadline constraints)
+  for (const { session, task } of sessionsToRebalance) {
+    // Find valid days for this task
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const startDate = task.startDate ? new Date(task.startDate) : today;
+    const startDateStr = startDate > today ? task.startDate! : todayStr;
+
+    let validDays = Array.from(dailyCapacity.keys()).filter(date => date >= startDateStr);
+
+    if (task.deadline && task.deadlineType !== 'none') {
+      const deadline = new Date(task.deadline);
+      if (settings.bufferDays > 0) {
+        deadline.setDate(deadline.getDate() - settings.bufferDays);
+      }
+      const deadlineStr = deadline.toISOString().split('T')[0];
+      validDays = validDays.filter(date => date <= deadlineStr);
+    }
+
+    // Find the day with most available capacity that can fit this session
+    let bestDay: string | null = null;
+    let bestCapacity = 0;
+
+    for (const date of validDays) {
+      const capacity = dailyCapacity.get(date) || 0;
+      if (capacity >= session.allocatedHours && capacity >= minSessionLength && capacity > bestCapacity) {
+        bestDay = date;
+        bestCapacity = capacity;
+      }
+    }
+
+    // Schedule the session on the best day
+    if (bestDay) {
+      const planIndex = result.findIndex(p => p.date === bestDay);
+      if (planIndex !== -1) {
+        result[planIndex].plannedTasks.push({
+          ...session,
+          scheduledTime: bestDay,
+          startTime: '',
+          endTime: '',
+          isFlexible: true,
+          status: 'scheduled'
+        });
+
+        result[planIndex].totalStudyHours = Math.round((result[planIndex].totalStudyHours + session.allocatedHours) * 60) / 60;
+        dailyCapacity.set(bestDay, Math.round((bestCapacity - session.allocatedHours) * 60) / 60);
+      }
+    }
+  }
+
+  return result;
+};
+
 export const generateNewStudyPlanWithPreservation = (
   tasks: Task[],
   settings: UserSettings,
@@ -3332,12 +3809,18 @@ export const generateNewStudyPlanWithPreservation = (
 ): { plans: StudyPlan[]; suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> } => {
   // First, generate the new study plan
   const result = generateNewStudyPlan(tasks, settings, fixedCommitments, existingStudyPlans);
-  
-  // Then apply manual schedule preservation
+
+  // Apply manual schedule preservation
   const preservedPlans = preserveManualSchedules(result.plans, existingStudyPlans);
-  
+
+  // Apply intelligent workload balancing around one-sitting tasks
+  const balancedPlans = rebalanceAroundOneSittingTasks(preservedPlans, tasks, settings, fixedCommitments);
+
+  // Apply final workload smoothing to minimize daily variation
+  const smoothedPlans = applyWorkloadSmoothing(balancedPlans, tasks, settings, fixedCommitments);
+
   return {
-    plans: preservedPlans,
+    plans: smoothedPlans,
     suggestions: result.suggestions
   };
 };
