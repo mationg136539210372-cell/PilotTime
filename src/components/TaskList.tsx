@@ -174,7 +174,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
 
     if (!editFormData.impact) errors.push('Please select task importance');
     if (editFormData.deadline && editFormData.deadline < today) errors.push('Deadline cannot be in the past');
-    if (editFormData.startDate && editFormData.startDate < today && !editFormData.isOneTimeTask) errors.push('Start date cannot be in the past');
+    // Start date validation removed for editing tasks - tasks are already created
 
     if (editFormData.category === 'Custom...' && (!editFormData.customCategory?.trim() || editFormData.customCategory.trim().length > 50)) {
       errors.push('Custom category must be between 1-50 characters');
@@ -190,8 +190,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
   
   // Check if deadline is in the past
   const isDeadlinePast = editFormData.deadline ? editFormData.deadline < today : false;
-  // Check if start date is in the past
-  const isStartDateNotPast = editFormData.startDate ? editFormData.startDate >= today : true;
+  // Start date validation removed for editing tasks
 
   // Check for deadline conflict with frequency preference
   const deadlineConflict = useMemo(() => {
@@ -291,6 +290,20 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
 
+    // Check if task was created with session-based estimation
+    const wasSessionBased = task.preferredSessionDuration && task.preferredSessionDuration > 0;
+    let sessionHours = '';
+    let sessionMinutes = '30';
+    let estimationMode: 'total' | 'session' = 'total';
+
+    if (wasSessionBased) {
+      // Restore session-based estimation with original session duration
+      estimationMode = 'session';
+      const sessionTotalMinutes = Math.round(task.preferredSessionDuration * 60);
+      sessionHours = Math.floor(sessionTotalMinutes / 60).toString();
+      sessionMinutes = (sessionTotalMinutes % 60).toString();
+    }
+
     setEditFormData({
       title: task.title,
       description: task.description,
@@ -311,9 +324,9 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
       maxSessionLength: task.maxSessionLength || 2,
       isOneTimeTask: task.isOneTimeTask || false,
       startDate: task.startDate || today,
-      estimationMode: 'total',
-      sessionDurationHours: '',
-      sessionDurationMinutes: '30',
+      estimationMode: estimationMode,
+      sessionDurationHours: sessionHours,
+      sessionDurationMinutes: sessionMinutes,
     });
     setShowAdvancedOptions(false);
   };
@@ -528,11 +541,9 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                               min={today}
                               value={editFormData.startDate || ''}
                               onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value || today })}
-                              className={`w-full px-3 py-2 border rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white ${!isStartDateNotPast && editFormData.startDate ? 'border-red-500 focus:ring-red-500' : ''}`}
+                              className="w-full px-3 py-2 border rounded-lg text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
                             />
-                            {!isStartDateNotPast && editFormData.startDate && (
-                              <div className="text-red-600 text-xs mt-1">Start date cannot be in the past.</div>
-                            )}
+                            {/* Start date validation warning removed for editing tasks */}
                           </div>
                         )}
                       </div>
