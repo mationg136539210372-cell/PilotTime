@@ -79,5 +79,6 @@ export default defineConfig({
   ],
   optimizeDeps: {
     exclude: ['lucide-react'],
+    include: ['react', 'react-dom'],
   },
 });
