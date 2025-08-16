@@ -10,13 +10,11 @@ interface StudyPlanViewProps {
   onSelectTask: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
   onGenerateStudyPlan: () => void;
   onUndoSessionDone: (planDate: string, taskId: string, sessionNumber: number) => void;
+  onSkipSession: (planDate: string, taskId: string, sessionNumber: number) => void; // NEW PROP for skipping sessions
   settings: UserSettings; // Added settings prop
   onAddFixedCommitment?: (commitment: FixedCommitment) => void; // NEW PROP
-  onSkipMissedSession: (planDate: string, sessionNumber: number, taskId: string) => void;
-  onRedistributeMissedSessions?: () => void; // NEW PROP for redistribution
   onRefreshStudyPlan?: (preserveManualReschedules: boolean) => void; // NEW PROP for refresh with options
   onUpdateTask?: (taskId: string, updates: Partial<Task>) => void; // NEW PROP for task completion
-  onMarkMissedSessionDone?: (planDate: string, sessionNumber: number, taskId: string) => void; // NEW PROP for marking missed sessions as done
 }
 
 // Force warnings UI to be hidden for all users on first load unless they have a preference
@@ -26,7 +24,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, settings, onAddFixedCommitment, onSkipMissedSession, onRedistributeMissedSessions, onRefreshStudyPlan, onUpdateTask, onMarkMissedSessionDone }) => {
+const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, onSkipSession, settings, onAddFixedCommitment, onRefreshStudyPlan, onUpdateTask }) => {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [] = useState<{ taskTitle: string; unscheduledMinutes: number } | null>(null);
   const [showRegenerateConfirmation, setShowRegenerateConfirmation] = useState(false);
@@ -55,16 +53,6 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
     localStorage.setItem('timepilot-showWarnings', newVal ? 'true' : 'false');
   };
 
-  // Persist showMissedSessions in localStorage
-  const [showMissedSessions, setShowMissedSessionsRaw] = useState(() => {
-    const saved = localStorage.getItem('timepilot-showMissedSessions');
-    return saved === null ? true : saved === 'true'; // Default to showing missed sessions
-  });
-  const setShowMissedSessions = (val: boolean | ((prev: boolean) => boolean)) => {
-    const newVal = typeof val === 'function' ? val(showMissedSessions) : val;
-    setShowMissedSessionsRaw(newVal);
-    localStorage.setItem('timepilot-showMissedSessions', newVal ? 'true' : 'false');
-  };
 
   // Hide the warning notification on mount (e.g., when switching tabs)
   useEffect(() => {
@@ -194,96 +182,6 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
 
 
 
-  // --- Missed Sessions Section ---
-  // Gather all missed sessions from past studyPlans (excluding today's overdue sessions)
-  const allMissedSessions: Array<{planDate: string, session: StudySession, task: Task}> = [];
-
-  // Only include past plans (not today's plan)
-  const plansToCheck = studyPlans.filter(plan => plan.date < today);
-
-  plansToCheck.forEach(plan => {
-    plan.plannedTasks.forEach(session => {
-      const sessionStatus = checkSessionStatus(session, plan.date);
-      // Only consider sessions as missed if they were originally scheduled for that date
-      // and not redistributed there
-      const isRedistributedToPast = session.originalTime && session.originalDate && plan.date < today;
-
-      // Skip sessions that have been successfully redistributed
-      const isRedistributed = session.status === 'redistributed' ||
-                             session.schedulingMetadata?.state === 'redistributed' ||
-                             (session.schedulingMetadata?.rescheduleHistory &&
-                              session.schedulingMetadata.rescheduleHistory.some(h => h.success && h.reason === 'redistribution'));
-
-      // Skip sessions that are already marked as completed or done
-      const isCompleted = session.done || session.status === 'completed' || session.status === 'skipped';
-
-      if (sessionStatus === 'missed' && !isRedistributedToPast && !isRedistributed && !isCompleted) {
-        const task = getTaskById(session.taskId);
-        if (task) {
-          console.log(`Found missed session: ${task.title} on ${plan.date}, status: ${sessionStatus}, sessionNumber: ${session.sessionNumber}`);
-          allMissedSessions.push({ planDate: plan.date, session, task });
-        }
-      }
-    });
-  });
-
-  // Categorize missed sessions by overdue status
-  const missedSessions = allMissedSessions.filter(({task}) => !isTaskDeadlinePast(task.deadline));
-  const overdueMissedSessions = allMissedSessions.filter(({task}) => isTaskDeadlinePast(task.deadline));
-  const hasOverdueSessions = overdueMissedSessions.length > 0;
-  const canRedistribute = missedSessions.length > 0;
-
-  // Debug logging
-  console.log('Today:', today);
-  console.log('All study plans:', studyPlans.map(p => ({ date: p.date, tasks: p.plannedTasks.length })));
-  console.log('Plans to check (past + today):', plansToCheck.map(p => p.date));
-  console.log('Plans to check count:', plansToCheck.length);
-  console.log('Missed sessions found:', missedSessions.length);
-  
-  // Check each plan's date comparison
-  studyPlans.forEach((plan, index) => {
-    const isPastOrToday = plan.date <= today;
-    console.log(`Plan ${index}: date="${plan.date}", isPastOrToday=${isPastOrToday}, comparison: "${plan.date}" <= "${today}" = ${plan.date <= today}`);
-    if (index === 0) {
-      console.log('First plan date format check:', {
-        date: plan.date,
-        dateType: typeof plan.date,
-        dateLength: plan.date.length,
-        dateParts: plan.date.split('-')
-      });
-    }
-  });
-  
-  missedSessions.forEach(ms => {
-    console.log('Missed session:', ms.task.title, 'on', ms.planDate, 'status:', checkSessionStatus(ms.session, ms.planDate));
-  });
-
-  // Handler to skip a missed session (full skip only)
-  const handleSkipMissedSession = (planDate: string, sessionNumber: number, taskId: string) => {
-    // Full skip using original method - treat as completed, no regeneration
-    onSkipMissedSession(planDate, sessionNumber, taskId);
-    setNotificationMessage('Session skipped! It will not be redistributed in future plans.');
-  };
-
-  // Redistribute handler - triggers study plan regeneration
-  const handleRedistribution = async () => {
-    if (redistributionInProgress) return;
-
-    setRedistributionInProgress(true);
-
-    try {
-      // Trigger study plan regeneration instead of redistribution
-      onGenerateStudyPlan();
-
-      // Simple feedback for fresh start approach
-      setNotificationMessage('Fresh study plan created! All missed sessions remain here for manual handling.');
-    } catch (error) {
-      console.error('Study plan regeneration failed:', error);
-      setNotificationMessage('Failed to regenerate study plan. Please try again.');
-    } finally {
-      setRedistributionInProgress(false);
-    }
-  };
 
 
   const todayDateObj = new Date();
@@ -291,6 +189,11 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
   const isTodayWorkDay = (settings.workDays || [1,2,3,4,5,6]).includes(todayDayOfWeek);
 
   const activeTasks = tasks.filter(task => task.status === 'pending' && task.estimatedHours > 0);
+
+  // Dummy variables for missed sessions (feature removed - forward focus approach)
+  const missedSessions: any[] = [];
+  const overdueMissedSessions: any[] = [];
+  const showMissedSessions = false;
 
   // Handler for marking overdue tasks as completed
   const handleMarkTaskAsCompleted = (taskId: string) => {
@@ -300,17 +203,6 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
     }
   };
 
-  // Handler for marking individual missed sessions as done
-  const handleMarkMissedSessionDone = (planDate: string, sessionNumber: number, taskId: string) => {
-    if (onMarkMissedSessionDone) {
-      onMarkMissedSessionDone(planDate, sessionNumber, taskId);
-      const task = getTaskById(taskId);
-      setNotificationMessage(`Session for "${task?.title || 'Unknown Task'}" marked as completed`);
-    } else {
-      setNotificationMessage('Session marking functionality not available');
-    }
-    setTimeout(() => setNotificationMessage(null), 3000);
-  };
 
   // Function to check if there are manual reschedules
   const checkForManualReschedules = () => {
@@ -852,8 +744,8 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                 {/* Undo button for completed sessions */}
                 {(isDone || isCompleted) && (
                   <button
-                    onClick={e => { 
-                      e.stopPropagation(); 
+                    onClick={e => {
+                      e.stopPropagation();
                       if (todaysPlan) {
                         onUndoSessionDone(todaysPlan.date, session.taskId, session.sessionNumber || 0);
                       }
@@ -864,20 +756,21 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     Undo
                   </button>
                 )}
-                {/* Skip button for all sessions */}
-                {!isDone && !isCompleted && (
-                  <div className="flex space-x-2 ml-4">
-                    <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        onSkipMissedSession(todaysPlan.date, session.sessionNumber || 0, session.taskId);
-                      }}
-                      className="px-3 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800"
-                      title="Skip this session"
-                    >
-                      Skip
-                    </button>
-                  </div>
+
+                {/* Skip button for active sessions */}
+                {!isDone && !isCompleted && sessionStatus !== 'missed' && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (todaysPlan) {
+                        onSkipSession(todaysPlan.date, session.taskId, session.sessionNumber || 0);
+                      }
+                    }}
+                    className="ml-4 px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors duration-200 dark:bg-yellow-900 dark:text-yellow-300 dark:hover:bg-yellow-800"
+                    title="Skip this session"
+                  >
+                    Skip
+                  </button>
                 )}
               </div>
             );
@@ -1032,8 +925,8 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             </button>
           </div>
 
-          {/* Missed Sessions Section - Integrated */}
-          {(missedSessions.length > 0 || overdueMissedSessions.length > 0) && (
+          {/* Missed Sessions feature removed - forward focus approach: past sessions are ignored */}
+          {false && (
             <div className="border-t pt-4 mt-4 dark:border-gray-700">
               <div className="flex items-center justify-between mb-4">
                 <button
