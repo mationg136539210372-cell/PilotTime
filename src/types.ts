@@ -156,6 +156,7 @@ export interface FixedCommitment {
     startDate: string; // YYYY-MM-DD format
     endDate: string; // YYYY-MM-DD format
   };
+  countsTowardDailyHours?: boolean; // Whether this commitment counts toward daily available hours
   // New fields for individual session management
   deletedOccurrences?: string[]; // Array of date strings (YYYY-MM-DD)
   modifiedOccurrences?: {
