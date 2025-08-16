@@ -25,6 +25,60 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Helper function to calculate committed hours for a specific date
+const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
+  const targetDate = new Date(date);
+  const dayOfWeek = targetDate.getDay();
+
+  let totalCommittedHours = 0;
+
+  commitments.forEach(commitment => {
+    // Only count commitments that count toward daily hours
+    if (!commitment.countsTowardDailyHours) return;
+
+    // Skip all-day events (they don't have specific duration)
+    if (commitment.isAllDay || !commitment.startTime || !commitment.endTime) return;
+
+    let shouldInclude = false;
+
+    if (commitment.recurring) {
+      // For recurring commitments, check if this day of week is included
+      if (commitment.daysOfWeek.includes(dayOfWeek)) {
+        // Check if the date falls within the date range (if specified)
+        if (commitment.dateRange) {
+          const startDate = new Date(commitment.dateRange.startDate);
+          const endDate = new Date(commitment.dateRange.endDate);
+          if (targetDate >= startDate && targetDate <= endDate) {
+            shouldInclude = true;
+          }
+        } else {
+          // No date range specified, so it's active
+          shouldInclude = true;
+        }
+      }
+    } else {
+      // For one-time commitments, check if this date is in the specific dates
+      if (commitment.specificDates?.includes(date)) {
+        shouldInclude = true;
+      }
+    }
+
+    if (shouldInclude) {
+      // Calculate duration in hours
+      const [startHour, startMin] = commitment.startTime.split(':').map(Number);
+      const [endHour, endMin] = commitment.endTime.split(':').map(Number);
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+      const durationMinutes = endMinutes - startMinutes;
+      const durationHours = durationMinutes / 60;
+
+      totalCommittedHours += durationHours;
+    }
+  });
+
+  return totalCommittedHours;
+};
+
 const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, onSkipSession, settings, onAddFixedCommitment, onRefreshStudyPlan, onReshuffleStudyPlan, onUpdateTask }) => {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [] = useState<{ taskTitle: string; unscheduledMinutes: number } | null>(null);
@@ -489,6 +543,49 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
 
 
       
+      {/* Daily Capacity Overview */}
+      {studyPlans.length > 0 && todaysPlan && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="bg-blue-100 dark:bg-blue-900/30 rounded-full p-2">
+                <Clock className="text-blue-600 dark:text-blue-400" size={20} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800 dark:text-white">Today's Capacity</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">Your planned work breakdown</p>
+              </div>
+            </div>
+            <div className="text-right">
+              {(() => {
+                const taskHours = todaysPlan.plannedTasks.filter(session => {
+                  const sessionStatus = checkSessionStatus(session, todaysPlan.date);
+                  return sessionStatus !== 'missed' && session.status !== 'skipped';
+                }).reduce((sum, session) => sum + session.allocatedHours, 0);
+                const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
+                const totalPlannedHours = taskHours + committedHours;
+                const remainingHours = Math.max(0, settings.dailyAvailableHours - totalPlannedHours);
+
+                return (
+                  <div className="space-y-1">
+                    <div className="text-lg font-bold text-gray-800 dark:text-white">
+                      {formatTime(totalPlannedHours)} / {formatTime(settings.dailyAvailableHours)}
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+                      <div>📝 Tasks: {formatTime(taskHours)}</div>
+                      {committedHours > 0 && <div>📊 Commitments: {formatTime(committedHours)}</div>}
+                      <div className={remainingHours > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                        {remainingHours > 0 ? `⚡ Available: ${formatTime(remainingHours)}` : "⚠️ Overloaded"}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Today's Study Plan */}
       {!isTodayWorkDay ? (
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6 dark:bg-gray-900 dark:shadow-gray-900">
@@ -529,10 +626,25 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             </h2>
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-500 dark:text-gray-300">
-                {formatTime(todaysPlan.plannedTasks.filter(session => {
-                  const sessionStatus = checkSessionStatus(session, todaysPlan.date);
-                  return sessionStatus !== 'missed' && session.status !== 'skipped';
-                }).reduce((sum, session) => sum + session.allocatedHours, 0))} of work planned
+                {(() => {
+                  const taskHours = todaysPlan.plannedTasks.filter(session => {
+                    const sessionStatus = checkSessionStatus(session, todaysPlan.date);
+                    return sessionStatus !== 'missed' && session.status !== 'skipped';
+                  }).reduce((sum, session) => sum + session.allocatedHours, 0);
+                  const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
+                  const totalPlannedHours = taskHours + committedHours;
+
+                  return (
+                    <div className="space-y-1">
+                      <div>{formatTime(totalPlannedHours)} total work planned</div>
+                      {committedHours > 0 && (
+                        <div className="text-xs text-blue-600 dark:text-blue-400">
+                          ({formatTime(taskHours)} tasks + {formatTime(committedHours)} commitments)
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               {todaysPlan.isOverloaded && (
                 <div className="flex items-center space-x-2">
@@ -540,10 +652,15 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     Busy day!
                   </span>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    ({formatTime(todaysPlan.plannedTasks.filter(session => {
-                      const sessionStatus = checkSessionStatus(session, todaysPlan.date);
-                      return sessionStatus !== 'missed' && session.status !== 'skipped';
-                    }).reduce((sum, session) => sum + session.allocatedHours, 0))} / {formatTime(settings.dailyAvailableHours)} study hours)
+                    ({(() => {
+                      const taskHours = todaysPlan.plannedTasks.filter(session => {
+                        const sessionStatus = checkSessionStatus(session, todaysPlan.date);
+                        return sessionStatus !== 'missed' && session.status !== 'skipped';
+                      }).reduce((sum, session) => sum + session.allocatedHours, 0);
+                      const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
+                      const totalHours = taskHours + committedHours;
+                      return `${formatTime(totalHours)} / ${formatTime(settings.dailyAvailableHours)} total hours`;
+                    })()})
                   </span>
                   <span className="text-xs text-blue-500 dark:text-blue-400" title="Buffer time between sessions is not counted in study hours">
                     + buffer time
