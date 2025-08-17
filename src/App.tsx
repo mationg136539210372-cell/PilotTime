@@ -976,8 +976,6 @@ function App() {
 
                 if (needsScheduleRegeneration) {
                     try {
-                        // Import and use the smart commitment scheduling utility
-                        const { generateSmartCommitmentSchedule } = require('./utils/smart-commitment-scheduling');
                         const newSessions = generateSmartCommitmentSchedule(
                             {
                                 title: updatedCommitment.title,
