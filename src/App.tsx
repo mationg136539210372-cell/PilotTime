@@ -2588,6 +2588,7 @@ function App() {
                             ) : editingSmartCommitment ? (
                                 <SmartCommitmentEdit
                                     commitment={editingSmartCommitment}
+                                    settings={settings}
                                     onUpdateCommitment={handleUpdateSmartCommitment}
                                     onCancel={() => setEditingSmartCommitment(null)}
                                 />
