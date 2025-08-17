@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Edit, Trash2, X } from 'lucide-react';
-import { FixedCommitment } from '../types';
+import { Search, Filter, Edit, Trash2, X, Brain, Settings } from 'lucide-react';
+import { FixedCommitment, SmartCommitment, Commitment } from '../types';
 
 interface CommitmentsListProps {
-  commitments: FixedCommitment[];
+  commitments: (FixedCommitment | SmartCommitment)[];
   onEditCommitment: (commitment: FixedCommitment) => void;
   onDeleteCommitment: (commitmentId: string) => void;
 }
@@ -213,10 +213,22 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-3 mb-3">
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white truncate">
-                      {commitment.title}
-                    </h3>
+                    <div className="flex items-center space-x-2">
+                      {commitment.type === 'smart' ? (
+                        <Brain className="text-purple-500" size={18} title="Smart Commitment" />
+                      ) : (
+                        <Settings className="text-gray-500" size={18} title="Fixed Commitment" />
+                      )}
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white truncate">
+                        {commitment.title}
+                      </h3>
+                    </div>
                     <div className="flex items-center space-x-2 flex-shrink-0">
+                      {commitment.type === 'smart' && (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">
+                          🧠 Smart
+                        </span>
+                      )}
                       <span
                         className={`px-2 sm:px-3 py-1 text-xs font-medium rounded-full ${getCategoryColor(
                           commitment.category
@@ -235,31 +247,66 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                     </div>
                   </div>
                   <div className="space-y-2">
-                    {commitment.isAllDay ? (
-                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                        <span className="font-medium">⏰</span>
-                        <span>All Day</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                        <span className="font-medium">⏰</span>
-                        <span>
-                          {commitment.startTime} - {commitment.endTime}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                      <span className="font-medium">📅</span>
-                      <span className="truncate">
-                        {commitment.recurring
-                          ? commitment.daysOfWeek
+                    {commitment.type === 'smart' ? (
+                      // Smart commitment display
+                      <>
+                        <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                          <span className="font-medium">⏰</span>
+                          <span>{(commitment as SmartCommitment).totalHoursPerWeek}h per week</span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                          <span className="font-medium">📅</span>
+                          <span className="truncate">
+                            {(commitment as SmartCommitment).preferredDays
                               .map((day) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day])
-                              .join(', ')
-                          : commitment.specificDates
-                              ?.map((date) => new Date(date).toLocaleDateString())
                               .join(', ')}
-                      </span>
-                    </div>
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                          <span className="font-medium">🎯</span>
+                          <span>
+                            {(commitment as SmartCommitment).preferredTimeRanges
+                              .map(range => `${range.start}-${range.end}`)
+                              .join(', ')}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                          <span className="font-medium">📊</span>
+                          <span>
+                            {(commitment as SmartCommitment).sessionDurationRange.min}min - {(commitment as SmartCommitment).sessionDurationRange.max}min sessions
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      // Fixed commitment display (existing logic)
+                      <>
+                        {(commitment as FixedCommitment).isAllDay ? (
+                          <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                            <span className="font-medium">⏰</span>
+                            <span>All Day</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                            <span className="font-medium">⏰</span>
+                            <span>
+                              {(commitment as FixedCommitment).startTime} - {(commitment as FixedCommitment).endTime}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                          <span className="font-medium">📅</span>
+                          <span className="truncate">
+                            {(commitment as FixedCommitment).recurring
+                              ? (commitment as FixedCommitment).daysOfWeek
+                                  .map((day) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day])
+                                  .join(', ')
+                              : (commitment as FixedCommitment).specificDates
+                                  ?.map((date) => new Date(date).toLocaleDateString())
+                                  .join(', ')}
+                          </span>
+                        </div>
+                      </>
+                    )}
                     {commitment.location && (
                       <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                         <span className="font-medium">📍</span>
@@ -284,20 +331,29 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
-                  <button
-                    onClick={() => onEditCommitment(commitment)}
-                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700"
-                    title="Edit commitment"
-                  >
-                    <Edit size={20} />
-                  </button>
-                  <button
-                    onClick={() => onDeleteCommitment(commitment.id)}
-                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900"
-                    title="Delete commitment"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                  {commitment.type !== 'smart' && (
+                    <>
+                      <button
+                        onClick={() => onEditCommitment(commitment as FixedCommitment)}
+                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-700"
+                        title="Edit commitment"
+                      >
+                        <Edit size={20} />
+                      </button>
+                      <button
+                        onClick={() => onDeleteCommitment(commitment.id)}
+                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900"
+                        title="Delete commitment"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </>
+                  )}
+                  {commitment.type === 'smart' && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                      Smart commitments auto-optimize
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
