@@ -185,142 +185,56 @@ export const doesCommitmentApplyToDate = (commitment: FixedCommitment, date: str
 };
 
 /**
- * Check if a task's frequency preference conflicts with its deadline
- * @param task Task to check
- * @param settings User settings including buffer days and work days
- * @returns Object indicating if there's a conflict and why
+ * Calculate smart session distribution based on deadline pressure
+ * @param task Task to analyze
+ * @param settings User settings
+ * @returns Distribution strategy and session information
  */
-export const checkFrequencyDeadlineConflict = (
-  task: Pick<Task, 'deadline' | 'estimatedHours' | 'targetFrequency' | 'deadlineType' | 'minWorkBlock' | 'startDate'>,
-  settings: UserSettings,
-  fixedCommitments: FixedCommitment[] = [],
-  dailyRemainingHours: Record<string, number> = {}
-): { hasConflict: boolean; reason?: string; recommendedFrequency?: string } => {
-  // No conflict for tasks without deadlines
+export const calculateSessionDistribution = (
+  task: Pick<Task, 'deadline' | 'estimatedHours' | 'sessionDuration' | 'deadlineType' | 'startDate'>,
+  settings: UserSettings
+): {
+  suggestedFrequency: 'urgent' | 'moderate' | 'relaxed';
+  description: string;
+  estimatedSessions: number;
+  daysAvailable?: number;
+} => {
+  const sessionDuration = task.sessionDuration || 2;
+  const estimatedSessions = Math.ceil(task.estimatedHours / sessionDuration);
+
   if (!task.deadline || task.deadlineType === 'none') {
-    return { hasConflict: false };
-  }
-
-  // No conflict for flexible deadlines (soft deadlines can be adjusted)
-  if (task.deadlineType === 'soft') {
-    return { hasConflict: false };
-  }
-
-  const deadline = new Date(task.deadline);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  // Respect startDate if provided
-  const start = task.startDate ? new Date(task.startDate) : today;
-  start.setHours(0, 0, 0, 0);
-  const begin = start > today ? start : today;
-  
-  // Calculate available days until deadline (respecting buffer)
-  const bufferDate = new Date(deadline);
-  bufferDate.setDate(bufferDate.getDate() - settings.bufferDays);
-  
-  const timeDiff = bufferDate.getTime() - begin.getTime();
-  const totalDaysUntilDeadline = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
-  
-  // Count work days between begin and bufferDate (inclusive)
-  let workDaysCount = 0;
-  const currentDate = new Date(begin);
-  
-  while (currentDate <= bufferDate) {
-    const dayOfWeek = currentDate.getDay();
-    if (settings.workDays.includes(dayOfWeek)) {
-      workDaysCount++;
-    }
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-
-  // Calculate minimum sessions needed based on task requirements and real availability
-  const minSessionHours = (task.minWorkBlock || 30) / 60;
-
-  // Get real available days with actual capacity considering commitments
-  const availableDaysWithCapacity: Array<{ date: string; availableHours: number }> = [];
-  const iterDate = new Date(begin);
-
-  while (iterDate <= bufferDate) {
-    const dayOfWeek = iterDate.getDay();
-    if (settings.workDays.includes(dayOfWeek)) {
-      const dateStr = iterDate.toISOString().split('T')[0];
-      let availableOnDay = dailyRemainingHours[dateStr] || settings.dailyAvailableHours;
-
-      // Account for commitments on this day
-      const committedHours = calculateCommittedHoursForDate(dateStr, fixedCommitments);
-      availableOnDay = Math.max(0, availableOnDay - committedHours);
-
-      if (availableOnDay >= minSessionHours) {
-        availableDaysWithCapacity.push({ date: dateStr, availableHours: availableOnDay });
-      }
-    }
-    iterDate.setDate(iterDate.getDate() + 1);
-  }
-
-  const minSessionsNeeded = Math.ceil(task.estimatedHours / Math.max(minSessionHours, settings.maxSessionHours || 4));
-  
-  // Determine required frequency based on task preference
-  let requiredDaysBetweenSessions = 1;
-  switch (task.targetFrequency) {
-    case 'weekly':
-      requiredDaysBetweenSessions = 7;
-      break;
-    case '3x-week':
-      requiredDaysBetweenSessions = 2; // Every 2-3 days
-      break;
-    case 'flexible':
-      requiredDaysBetweenSessions = 3; // Every 3-4 days
-      break;
-    case 'daily':
-    default:
-      requiredDaysBetweenSessions = 1;
-      break;
-  }
-
-  // Calculate how many sessions we can fit with the preferred frequency using real availability
-  let sessionsWithFrequency = 0;
-  let totalCapacityWithFrequency = 0;
-
-  // Simulate the frequency preference on available days
-  for (let i = 0; i < availableDaysWithCapacity.length; i += requiredDaysBetweenSessions) {
-    sessionsWithFrequency++;
-    totalCapacityWithFrequency += availableDaysWithCapacity[i].availableHours;
-  }
-
-  // Check if frequency allows sufficient sessions and capacity before deadline
-  const hasInsufficientSessions = sessionsWithFrequency < minSessionsNeeded;
-  const hasInsufficientCapacity = totalCapacityWithFrequency < task.estimatedHours;
-
-  if (hasInsufficientSessions || hasInsufficientCapacity) {
-    let recommendedFrequency = 'daily';
-    
-    // Try to find a less restrictive frequency that works
-    const frequencies = [
-      { name: '3x-week', days: 2 },
-      { name: 'daily', days: 1 }
-    ];
-    
-    for (const freq of frequencies) {
-      const sessionsWithThisFreq = Math.floor(workDaysCount / freq.days) + 1;
-      if (sessionsWithThisFreq >= minSessionsNeeded) {
-        recommendedFrequency = freq.name;
-        break;
-      }
-    }
-    
-    const conflictReason = hasInsufficientSessions
-      ? `Your ${task.targetFrequency} frequency only allows ${sessionsWithFrequency} sessions, but you need at least ${minSessionsNeeded} sessions`
-      : `Your ${task.targetFrequency} frequency only provides ${totalCapacityWithFrequency.toFixed(1)}h capacity, but you need ${task.estimatedHours}h`;
-
     return {
-      hasConflict: true,
-      reason: `Given your commitments and available time, ${conflictReason} to complete this task before the deadline.`,
-      recommendedFrequency
+      suggestedFrequency: 'relaxed',
+      description: 'Sessions will be distributed based on available time slots',
+      estimatedSessions
     };
   }
 
-  return { hasConflict: false };
+  const startDate = new Date(task.startDate || new Date().toISOString().split('T')[0]);
+  const deadlineDate = new Date(task.deadline);
+  const timeDiff = deadlineDate.getTime() - startDate.getTime();
+  const daysUntilDeadline = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+  let suggestedFrequency: 'urgent' | 'moderate' | 'relaxed';
+  let description: string;
+
+  if (daysUntilDeadline < 7) {
+    suggestedFrequency = 'urgent';
+    description = 'Daily sessions recommended due to urgent deadline';
+  } else if (daysUntilDeadline < 14) {
+    suggestedFrequency = 'moderate';
+    description = 'Every other day sessions recommended';
+  } else {
+    suggestedFrequency = 'relaxed';
+    description = '2-3 sessions per week recommended';
+  }
+
+  return {
+    suggestedFrequency,
+    description,
+    estimatedSessions,
+    daysAvailable: daysUntilDeadline
+  };
 };
 
 export const checkSessionStatus = (session: StudySession, planDate: string): 'scheduled' | 'in_progress' | 'completed' => {
