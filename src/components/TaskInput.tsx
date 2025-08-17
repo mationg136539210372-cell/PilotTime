@@ -214,7 +214,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   }, [formData.taskType, showEstimationHelper]);
 
   // Get config for selected type
-  const estConfig = EST_HELPER_CONFIG[TASK_TYPE_MAP[formData.taskType] || 'Writing'];
+  const estConfig = EST_HELPER_CONFIG[TASK_TYPE_MAP[formData.taskType]] || EST_HELPER_CONFIG['Writing'];
 
   // Calculate adjusted estimate
   let estAdjusted = Number(estBase) || 1;
@@ -662,7 +662,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                   value={formData.estimatedHours}
                   onChange={e => {
                     const value = e.target.value;
-                    if (value === '' || /^\d*$/.test(value)) {
+                    if (value === '' || (/^\d*$/.test(value) && parseInt(value) >= 0)) {
                       setFormData(f => ({ ...f, estimatedHours: value }));
                     }
                   }}
@@ -682,7 +682,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                     const value = e.target.value;
                     if (value === '' || /^\d*$/.test(value)) {
                       const numValue = parseInt(value) || 0;
-                      if (numValue <= 59) {
+                      if (numValue >= 0 && numValue <= 59) {
                         setFormData(f => ({ ...f, estimatedMinutes: value }));
                       }
                     }
@@ -930,7 +930,6 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                 taskType: '',
                 deadlineType: 'hard',
                 schedulingPreference: 'consistent',
-                targetFrequency: 'weekly',
                 maxSessionLength: 2,
                 isOneTimeTask: false,
                 startDate: today,

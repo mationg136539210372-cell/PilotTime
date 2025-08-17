@@ -268,7 +268,6 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
         deadline: editFormData.deadlineType === 'none' ? '' : (editFormData.deadline || ''),
         deadlineType: editFormData.deadline ? editFormData.deadlineType : 'none',
         importance: editFormData.impact === 'high',
-        priority: editFormData.impact === 'high', // Add priority field
         // Ensure all advanced fields are properly updated
         preferredTimeSlots: editFormData.preferredTimeSlots,
         maxSessionLength: editFormData.maxSessionLength,
@@ -488,7 +487,12 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                             type="number"
                             min="0"
                             value={editFormData.estimatedHours || ''}
-                            onChange={(e) => setEditFormData({ ...editFormData, estimatedHours: parseInt(e.target.value) || 0 })}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value) || 0;
+                              if (value >= 0) {
+                                setEditFormData({ ...editFormData, estimatedHours: value });
+                              }
+                            }}
                             className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
                             placeholder="0"
                           />
@@ -501,7 +505,12 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                             min="0"
                             max="59"
                             value={editFormData.estimatedMinutes || ''}
-                            onChange={(e) => setEditFormData({ ...editFormData, estimatedMinutes: parseInt(e.target.value) || 0 })}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value) || 0;
+                              if (value >= 0 && value <= 59) {
+                                setEditFormData({ ...editFormData, estimatedMinutes: value });
+                              }
+                            }}
                             className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
                             placeholder="0"
                           />
@@ -566,7 +575,12 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                                 </label>
                                 <select
                                   value={editFormData.maxSessionLength || 2}
-                                  onChange={(e) => setEditFormData({ ...editFormData, maxSessionLength: parseInt(e.target.value) })}
+                                  onChange={(e) => {
+                                    const value = parseFloat(e.target.value);
+                                    if (value > 0) {
+                                      setEditFormData({ ...editFormData, maxSessionLength: value });
+                                    }
+                                  }}
                                   className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
                                 >
                                   <option value={1}>1 hour</option>
