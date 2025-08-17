@@ -1014,9 +1014,65 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               </div>
             );
           })}
-          
+
+          {/* Display commitments that count toward daily hours */}
+          {(() => {
+            const todaysCommitments = getCommitmentsForDate(todaysPlan.date, fixedCommitments, smartCommitments);
+            return todaysCommitments.map((commitment) => (
+              <div
+                key={`commitment-${commitment.id}`}
+                className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 mb-3 cursor-pointer hover:shadow-md transition-all duration-200"
+                onClick={() => {
+                  if (onSelectCommitment) {
+                    onSelectCommitment(
+                      commitment.type === 'fixed'
+                        ? fixedCommitments.find(c => c.id === commitment.id)!
+                        : smartCommitments.find(c => c.id.startsWith(commitment.id.split('-')[0]))!,
+                      commitment.duration
+                    );
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-lg">
+                        {commitment.type === 'smart' ? (
+                          <Brain className="text-blue-600 dark:text-blue-400" size={16} />
+                        ) : (
+                          <Settings className="text-blue-600 dark:text-blue-400" size={16} />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-blue-800 dark:text-blue-200">{commitment.title}</h3>
+                        <div className="flex items-center space-x-4 text-sm text-blue-600 dark:text-blue-400">
+                          <span className="flex items-center space-x-1">
+                            <Clock size={14} />
+                            <span>{commitment.startTime} - {commitment.endTime}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <BookOpen size={14} />
+                            <span>{commitment.duration.toFixed(1)}h</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                      {commitment.category}
+                    </span>
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                      📊 Productive Time
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ));
+          })()}
+
           {/* Show "No Sessions Planned" message when all sessions are filtered out */}
-          {todaysPlan.plannedTasks.filter(session => session.status !== 'skipped').length === 0 && (
+          {todaysPlan.plannedTasks.filter(session => session.status !== 'skipped').length === 0 && getCommitmentsForDate(todaysPlan.date, fixedCommitments, smartCommitments).length === 0 && (
             <div className="text-center py-8">
               <div className="text-4xl mb-4">📚</div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2 dark:text-white">No Sessions Planned</h3>
