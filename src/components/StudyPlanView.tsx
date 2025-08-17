@@ -25,6 +25,127 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Helper function to get commitments that count toward daily hours for a specific date
+const getCommitmentsForDate = (date: string, fixedCommitments: FixedCommitment[], smartCommitments: SmartCommitment[] = []): Array<{
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  category: string;
+  type: 'fixed' | 'smart';
+  isAllDay?: boolean;
+}> => {
+  const targetDate = new Date(date);
+  const dayOfWeek = targetDate.getDay();
+  const commitmentSessions: Array<{
+    id: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+    duration: number;
+    category: string;
+    type: 'fixed' | 'smart';
+    isAllDay?: boolean;
+  }> = [];
+
+  // Process fixed commitments
+  fixedCommitments.forEach(commitment => {
+    // Only include commitments that count toward daily hours
+    if (!commitment.countsTowardDailyHours) return;
+
+    let shouldInclude = false;
+
+    if (commitment.recurring) {
+      // For recurring commitments, check if this day of week is included
+      if (commitment.daysOfWeek.includes(dayOfWeek)) {
+        // Check if the date falls within the date range (if specified)
+        if (commitment.dateRange) {
+          const startDate = new Date(commitment.dateRange.startDate);
+          const endDate = new Date(commitment.dateRange.endDate);
+          if (targetDate >= startDate && targetDate <= endDate) {
+            shouldInclude = true;
+          }
+        } else {
+          // No date range specified, so it's active
+          shouldInclude = true;
+        }
+      }
+    } else if (commitment.specificDates) {
+      // For one-time commitments, check if the date matches
+      shouldInclude = commitment.specificDates.includes(date);
+    }
+
+    // Check if this occurrence has been deleted
+    if (shouldInclude && commitment.deletedOccurrences?.includes(date)) {
+      shouldInclude = false;
+    }
+
+    if (shouldInclude) {
+      // Check for manual override for this specific date
+      const override = commitment.modifiedOccurrences?.[date];
+      const actualStartTime = override?.startTime || commitment.startTime || '00:00';
+      const actualEndTime = override?.endTime || commitment.endTime || '23:59';
+      const actualTitle = override?.title || commitment.title;
+      const actualIsAllDay = override?.isAllDay ?? commitment.isAllDay;
+
+      if (!actualIsAllDay && actualStartTime && actualEndTime) {
+        const startMinutes = timeToMinutes(actualStartTime);
+        const endMinutes = timeToMinutes(actualEndTime);
+        const duration = (endMinutes - startMinutes) / 60; // Convert to hours
+
+        commitmentSessions.push({
+          id: commitment.id,
+          title: actualTitle,
+          startTime: actualStartTime,
+          endTime: actualEndTime,
+          duration,
+          category: commitment.category,
+          type: 'fixed',
+          isAllDay: actualIsAllDay
+        });
+      }
+    }
+  });
+
+  // Process smart commitments
+  smartCommitments.forEach(commitment => {
+    // Only include commitments that count toward daily hours
+    if (!commitment.countsTowardDailyHours) return;
+
+    // Find sessions for this date
+    const sessionsForDate = commitment.suggestedSessions.filter(session => session.date === date);
+
+    sessionsForDate.forEach((session, index) => {
+      // Check if this session has been manually overridden
+      const override = commitment.manualOverrides?.[date];
+
+      if (!override?.isDeleted) {
+        const startTime = override?.startTime || session.startTime;
+        const endTime = override?.endTime || session.endTime;
+
+        commitmentSessions.push({
+          id: `${commitment.id}-${index}`,
+          title: commitment.title,
+          startTime,
+          endTime,
+          duration: session.duration,
+          category: commitment.category,
+          type: 'smart'
+        });
+      }
+    });
+  });
+
+  return commitmentSessions;
+};
+
+// Helper function to convert time string to minutes
+const timeToMinutes = (timeStr: string): number => {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
 // Helper function to calculate committed hours for a specific date
 const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
   const targetDate = new Date(date);
