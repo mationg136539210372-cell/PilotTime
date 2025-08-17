@@ -97,7 +97,10 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
   const addTimeRange = () => {
     setFormData(prev => ({
       ...prev,
-      preferredTimeRanges: [...prev.preferredTimeRanges, { start: '09:00', end: '17:00' }]
+      preferredTimeRanges: [...prev.preferredTimeRanges, {
+        start: formatHour(settings.studyWindowStartHour),
+        end: formatHour(settings.studyWindowEndHour)
+      }]
     }));
   };
 
