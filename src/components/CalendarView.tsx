@@ -551,10 +551,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       // Otherwise, do nothing (not clickable)
     } else if (event.resource.type === 'commitment') {
       const commitment = event.resource.data as FixedCommitment;
-      
+
       // Check if this is a manual rescheduled session
       if (commitment.title.includes('(Manual Resched)')) {
         setSelectedManualSession(commitment);
+      } else if (commitment.countsTowardDailyHours && onSelectCommitment) {
+        // Handle clicks on commitments that count toward daily hours
+        const duration = moment(event.end).diff(moment(event.start), 'hours', true);
+        onSelectCommitment(commitment, duration);
+      }
+    } else if (event.resource.type === 'smart-commitment') {
+      const commitment = event.resource.data as SmartCommitment;
+
+      if (commitment.countsTowardDailyHours && onSelectCommitment) {
+        // Handle clicks on smart commitments that count toward daily hours
+        const duration = moment(event.end).diff(moment(event.start), 'hours', true);
+        onSelectCommitment(commitment, duration);
       }
     }
   };
