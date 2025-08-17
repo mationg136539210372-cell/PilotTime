@@ -19,7 +19,7 @@ export interface Task {
   totalTimeNeeded?: number; // Total time needed for the task (alternative to estimatedHours)
   preferredTimeSlots?: ('morning' | 'afternoon' | 'evening')[]; // Preferred time slots
   minWorkBlock?: number; // Minimum meaningful work session in minutes (only for deadline tasks)
-  maxSessionLength?: number; // Maximum session length in hours (only for no-deadline tasks)
+  maxSessionLength?: number; // Maximum session length in hours (for no-deadline tasks or as general preference)
   isOneTimeTask?: boolean; // Task should be completed in one sitting, not divided into sessions
   startDate?: string; // New: earliest date the task can be scheduled (YYYY-MM-DD)
 }
