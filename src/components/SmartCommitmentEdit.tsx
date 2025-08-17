@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
 import { Edit, Clock, MapPin, User, X, AlertTriangle, Calendar, Brain } from 'lucide-react';
-import { SmartCommitment } from '../types';
+import { SmartCommitment, UserSettings } from '../types';
+
+// Utility function to convert hour number to HH:MM format
+const formatHour = (hour: number): string => {
+  return hour.toString().padStart(2, '0') + ':00';
+};
 
 interface SmartCommitmentEditProps {
   commitment: SmartCommitment;
+  settings: UserSettings;
   onUpdateCommitment: (commitmentId: string, updates: Partial<SmartCommitment>) => void;
   onCancel: () => void;
 }
