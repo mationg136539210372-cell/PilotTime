@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, BookOpen, TrendingUp, AlertTriangle, CheckCircle, Lightbulb, X, CheckCircle2, Clock3 } from 'lucide-react';
-import { StudyPlan, Task, StudySession, FixedCommitment, UserSettings } from '../types'; // Added FixedCommitment to imports
+import { Calendar, Clock, BookOpen, TrendingUp, AlertTriangle, CheckCircle, Lightbulb, X, CheckCircle2, Clock3, Brain, Settings } from 'lucide-react';
+import { StudyPlan, Task, StudySession, FixedCommitment, SmartCommitment, UserSettings } from '../types';
 import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionStatus, moveIndividualSession, isTaskDeadlinePast } from '../utils/scheduling';
 
 interface StudyPlanViewProps {
   studyPlans: StudyPlan[];
   tasks: Task[];
-  fixedCommitments: FixedCommitment[]; // Added fixedCommitments prop
+  fixedCommitments: FixedCommitment[];
+  smartCommitments: SmartCommitment[];
   onSelectTask: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
+  onSelectCommitment?: (commitment: FixedCommitment | SmartCommitment, duration: number) => void;
   onGenerateStudyPlan: () => void;
   onUndoSessionDone: (planDate: string, taskId: string, sessionNumber: number) => void;
   onSkipSession: (planDate: string, taskId: string, sessionNumber: number) => void; // NEW PROP for skipping sessions
@@ -25,14 +27,135 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Helper function to get commitments that count toward daily hours for a specific date
+const getCommitmentsForDate = (date: string, fixedCommitments: FixedCommitment[], smartCommitments: SmartCommitment[] = []): Array<{
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
+  category: string;
+  type: 'fixed' | 'smart';
+  isAllDay?: boolean;
+}> => {
+  const targetDate = new Date(date);
+  const dayOfWeek = targetDate.getDay();
+  const commitmentSessions: Array<{
+    id: string;
+    title: string;
+    startTime: string;
+    endTime: string;
+    duration: number;
+    category: string;
+    type: 'fixed' | 'smart';
+    isAllDay?: boolean;
+  }> = [];
+
+  // Process fixed commitments
+  fixedCommitments.forEach(commitment => {
+    // Only include commitments that count toward daily hours
+    if (!commitment.countsTowardDailyHours) return;
+
+    let shouldInclude = false;
+
+    if (commitment.recurring) {
+      // For recurring commitments, check if this day of week is included
+      if (commitment.daysOfWeek.includes(dayOfWeek)) {
+        // Check if the date falls within the date range (if specified)
+        if (commitment.dateRange) {
+          const startDate = new Date(commitment.dateRange.startDate);
+          const endDate = new Date(commitment.dateRange.endDate);
+          if (targetDate >= startDate && targetDate <= endDate) {
+            shouldInclude = true;
+          }
+        } else {
+          // No date range specified, so it's active
+          shouldInclude = true;
+        }
+      }
+    } else if (commitment.specificDates) {
+      // For one-time commitments, check if the date matches
+      shouldInclude = commitment.specificDates.includes(date);
+    }
+
+    // Check if this occurrence has been deleted
+    if (shouldInclude && commitment.deletedOccurrences?.includes(date)) {
+      shouldInclude = false;
+    }
+
+    if (shouldInclude) {
+      // Check for manual override for this specific date
+      const override = commitment.modifiedOccurrences?.[date];
+      const actualStartTime = override?.startTime || commitment.startTime || '00:00';
+      const actualEndTime = override?.endTime || commitment.endTime || '23:59';
+      const actualTitle = override?.title || commitment.title;
+      const actualIsAllDay = override?.isAllDay ?? commitment.isAllDay;
+
+      if (!actualIsAllDay && actualStartTime && actualEndTime) {
+        const startMinutes = timeToMinutes(actualStartTime);
+        const endMinutes = timeToMinutes(actualEndTime);
+        const duration = (endMinutes - startMinutes) / 60; // Convert to hours
+
+        commitmentSessions.push({
+          id: commitment.id,
+          title: actualTitle,
+          startTime: actualStartTime,
+          endTime: actualEndTime,
+          duration,
+          category: commitment.category,
+          type: 'fixed',
+          isAllDay: actualIsAllDay
+        });
+      }
+    }
+  });
+
+  // Process smart commitments
+  smartCommitments.forEach(commitment => {
+    // Only include commitments that count toward daily hours
+    if (!commitment.countsTowardDailyHours) return;
+
+    // Find sessions for this date
+    const sessionsForDate = commitment.suggestedSessions.filter(session => session.date === date);
+
+    sessionsForDate.forEach((session, index) => {
+      // Check if this session has been manually overridden
+      const override = commitment.manualOverrides?.[date];
+
+      if (!override?.isDeleted) {
+        const startTime = override?.startTime || session.startTime;
+        const endTime = override?.endTime || session.endTime;
+
+        commitmentSessions.push({
+          id: `${commitment.id}-${index}`,
+          title: commitment.title,
+          startTime,
+          endTime,
+          duration: session.duration,
+          category: commitment.category,
+          type: 'smart'
+        });
+      }
+    });
+  });
+
+  return commitmentSessions;
+};
+
+// Helper function to convert time string to minutes
+const timeToMinutes = (timeStr: string): number => {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
 // Helper function to calculate committed hours for a specific date
-const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
+const calculateCommittedHoursForDate = (date: string, fixedCommitments: FixedCommitment[], smartCommitments: SmartCommitment[] = []): number => {
   const targetDate = new Date(date);
   const dayOfWeek = targetDate.getDay();
 
   let totalCommittedHours = 0;
 
-  commitments.forEach(commitment => {
+  fixedCommitments.forEach(commitment => {
     // Only count commitments that count toward daily hours
     if (!commitment.countsTowardDailyHours) return;
 
@@ -76,10 +199,28 @@ const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitme
     }
   });
 
+  // Process smart commitments
+  smartCommitments.forEach(commitment => {
+    // Only count commitments that count toward daily hours
+    if (!commitment.countsTowardDailyHours) return;
+
+    // Find sessions for this date
+    const sessionsForDate = commitment.suggestedSessions.filter(session => session.date === date);
+
+    sessionsForDate.forEach((session) => {
+      // Check if this session has been manually overridden
+      const override = commitment.manualOverrides?.[date];
+
+      if (!override?.isDeleted) {
+        totalCommittedHours += session.duration;
+      }
+    });
+  });
+
   return totalCommittedHours;
 };
 
-const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onGenerateStudyPlan, onUndoSessionDone, onSkipSession, settings, onAddFixedCommitment, onRefreshStudyPlan, onReshuffleStudyPlan, onUpdateTask }) => {
+const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, smartCommitments, onSelectTask, onSelectCommitment, onGenerateStudyPlan, onUndoSessionDone, onSkipSession, settings, onAddFixedCommitment, onRefreshStudyPlan, onReshuffleStudyPlan, onUpdateTask }) => {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [] = useState<{ taskTitle: string; unscheduledMinutes: number } | null>(null);
   const [showRegenerateConfirmation, setShowRegenerateConfirmation] = useState(false);
@@ -562,7 +703,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                   const sessionStatus = checkSessionStatus(session, todaysPlan.date);
                   return sessionStatus !== 'missed' && session.status !== 'skipped';
                 }).reduce((sum, session) => sum + session.allocatedHours, 0);
-                const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
+                const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments, smartCommitments);
                 const totalPlannedHours = taskHours + committedHours;
                 const remainingHours = Math.max(0, settings.dailyAvailableHours - totalPlannedHours);
 
@@ -631,7 +772,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                     const sessionStatus = checkSessionStatus(session, todaysPlan.date);
                     return sessionStatus !== 'missed' && session.status !== 'skipped';
                   }).reduce((sum, session) => sum + session.allocatedHours, 0);
-                  const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
+                  const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments, smartCommitments);
                   const totalPlannedHours = taskHours + committedHours;
 
                   return (
@@ -657,7 +798,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                         const sessionStatus = checkSessionStatus(session, todaysPlan.date);
                         return sessionStatus !== 'missed' && session.status !== 'skipped';
                       }).reduce((sum, session) => sum + session.allocatedHours, 0);
-                      const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
+                      const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments, smartCommitments);
                       const totalHours = taskHours + committedHours;
                       return `${formatTime(totalHours)} / ${formatTime(settings.dailyAvailableHours)} total hours`;
                     })()})
@@ -893,9 +1034,65 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
               </div>
             );
           })}
-          
-          {/* Show "No Sessions Planned" message when all sessions are filtered out */}
-          {todaysPlan.plannedTasks.filter(session => session.status !== 'skipped').length === 0 && (
+
+          {/* Display commitments that count toward daily hours */}
+          {(() => {
+            const todaysCommitments = getCommitmentsForDate(todaysPlan.date, fixedCommitments, smartCommitments);
+            return todaysCommitments.map((commitment) => (
+              <div
+                key={`commitment-${commitment.id}`}
+                className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 mb-3 cursor-pointer hover:shadow-md transition-all duration-200"
+                onClick={() => {
+                  if (onSelectCommitment) {
+                    onSelectCommitment(
+                      commitment.type === 'fixed'
+                        ? fixedCommitments.find(c => c.id === commitment.id)!
+                        : smartCommitments.find(c => c.id.startsWith(commitment.id.split('-')[0]))!,
+                      commitment.duration
+                    );
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-lg">
+                        {commitment.type === 'smart' ? (
+                          <Brain className="text-blue-600 dark:text-blue-400" size={16} />
+                        ) : (
+                          <Settings className="text-blue-600 dark:text-blue-400" size={16} />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-blue-800 dark:text-blue-200">{commitment.title}</h3>
+                        <div className="flex items-center space-x-4 text-sm text-blue-600 dark:text-blue-400">
+                          <span className="flex items-center space-x-1">
+                            <Clock size={14} />
+                            <span>{commitment.startTime} - {commitment.endTime}</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <BookOpen size={14} />
+                            <span>{commitment.duration.toFixed(1)}h</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                      {commitment.category}
+                    </span>
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                      📊 Productive Time
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ));
+          })()}
+
+          {/* Show "No Sessions Planned" message when all sessions and commitments are filtered out */}
+          {todaysPlan.plannedTasks.filter(session => session.status !== 'skipped').length === 0 && getCommitmentsForDate(todaysPlan.date, fixedCommitments, smartCommitments).length === 0 && (
             <div className="text-center py-8">
               <div className="text-4xl mb-4">📚</div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2 dark:text-white">No Sessions Planned</h3>

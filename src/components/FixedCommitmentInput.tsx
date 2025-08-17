@@ -4,6 +4,11 @@ import { FixedCommitment, SmartCommitment, TimeRange, UserSettings, StudyPlan } 
 import { checkCommitmentConflicts } from '../utils/scheduling';
 import { generateSmartCommitmentSchedule } from '../utils/smart-commitment-scheduling';
 
+// Utility function to convert hour number to HH:MM format
+const formatHour = (hour: number): string => {
+  return hour.toString().padStart(2, '0') + ':00';
+};
+
 interface FixedCommitmentInputProps {
   onAddCommitment: (commitment: Omit<FixedCommitment, 'id' | 'createdAt'>) => void;
   onAddSmartCommitment: (commitment: Omit<SmartCommitment, 'id' | 'createdAt'>) => void;
@@ -43,7 +48,10 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
   const [smartFormData, setSmartFormData] = useState({
     totalHoursPerWeek: 3,
     preferredDays: [] as number[],
-    preferredTimeRanges: [{ start: '14:00', end: '18:00' }] as TimeRange[],
+    preferredTimeRanges: [{
+      start: formatHour(settings.studyWindowStartHour),
+      end: formatHour(settings.studyWindowEndHour)
+    }] as TimeRange[],
     sessionDurationRange: { min: 60, max: 120 }, // in minutes
     allowTimeShifting: true,
     priorityLevel: 'standard' as 'important' | 'standard'
@@ -244,7 +252,10 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
     setSmartFormData({
       totalHoursPerWeek: 3,
       preferredDays: [],
-      preferredTimeRanges: [{ start: '14:00', end: '18:00' }],
+      preferredTimeRanges: [{
+        start: formatHour(settings.studyWindowStartHour),
+        end: formatHour(settings.studyWindowEndHour)
+      }],
       sessionDurationRange: { min: 60, max: 120 },
       allowTimeShifting: true,
       priorityLevel: 'standard'

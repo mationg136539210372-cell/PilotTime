@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, Edit, Trash2, X, Brain, Settings } from 'lucide-react';
 import { FixedCommitment, SmartCommitment, Commitment } from '../types';
 
 interface CommitmentsListProps {
   commitments: (FixedCommitment | SmartCommitment)[];
   onEditCommitment: (commitment: FixedCommitment) => void;
+  onEditSmartCommitment: (commitment: SmartCommitment) => void;
   onDeleteCommitment: (commitmentId: string) => void;
 }
 
@@ -52,11 +53,19 @@ const getCategoryColor = (category: string) => {
 const CommitmentsList: React.FC<CommitmentsListProps> = ({
   commitments,
   onEditCommitment,
+  onEditSmartCommitment,
   onDeleteCommitment,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    return localStorage.getItem('timepilot-commitments-filter-category') || 'All';
+  });
   const [showFilters, setShowFilters] = useState(false);
+
+  // Persist category filter selection
+  useEffect(() => {
+    localStorage.setItem('timepilot-commitments-filter-category', selectedCategory);
+  }, [selectedCategory]);
 
   // Filter and search commitments
   const filteredCommitments = useMemo(() => {
@@ -331,7 +340,24 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
-                  {commitment.type !== 'smart' && (
+                  {commitment.type === 'smart' ? (
+                    <>
+                      <button
+                        onClick={() => onEditSmartCommitment(commitment as SmartCommitment)}
+                        className="p-2 text-purple-500 hover:text-purple-700 hover:bg-purple-100 rounded-lg transition-colors dark:text-purple-400 dark:hover:text-purple-200 dark:hover:bg-purple-900"
+                        title="Edit smart commitment"
+                      >
+                        <Edit size={20} />
+                      </button>
+                      <button
+                        onClick={() => onDeleteCommitment(commitment.id)}
+                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-colors dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900"
+                        title="Delete smart commitment"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </>
+                  ) : (
                     <>
                       <button
                         onClick={() => onEditCommitment(commitment as FixedCommitment)}
@@ -348,11 +374,6 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                         <Trash2 size={20} />
                       </button>
                     </>
-                  )}
-                  {commitment.type === 'smart' && (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 italic">
-                      Smart commitments auto-optimize
-                    </div>
                   )}
                 </div>
               </div>

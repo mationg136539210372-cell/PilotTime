@@ -5,6 +5,7 @@ import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } fr
 import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { convertSmartCommitmentsToFixedFormat } from './utils/smart-commitment-integration';
+import { generateSmartCommitmentSchedule } from './utils/smart-commitment-scheduling';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
   ACHIEVEMENTS,
@@ -25,6 +26,7 @@ import Settings from './components/Settings';
 import CalendarView from './components/CalendarView';
 import FixedCommitmentInput from './components/FixedCommitmentInput';
 import FixedCommitmentEdit from './components/FixedCommitmentEdit';
+import SmartCommitmentEdit from './components/SmartCommitmentEdit';
 import CommitmentsList from './components/CommitmentsList';
 import GamificationPanel from './components/GamificationPanel';
 import AchievementNotification, { MotivationalToast } from './components/AchievementNotification';
@@ -76,6 +78,7 @@ function App() {
     // Add state to track last-timed session and ready-to-mark-done
     const [lastTimedSession, setLastTimedSession] = useState<{ planDate: string; sessionNumber: number } | null>(null);
     const [editingCommitment, setEditingCommitment] = useState<FixedCommitment | null>(null);
+    const [editingSmartCommitment, setEditingSmartCommitment] = useState<SmartCommitment | null>(null);
 
     // Global timer state that persists across tab switches
     const [globalTimer, setGlobalTimer] = useState<TimerState>({
@@ -956,6 +959,65 @@ function App() {
         }
     };
 
+    const handleUpdateSmartCommitment = (commitmentId: string, updates: Partial<SmartCommitment>) => {
+        setSmartCommitments(prev => prev.map(c => {
+            if (c.id === commitmentId) {
+                const updatedCommitment = { ...c, ...updates };
+
+                // Regenerate schedule if any scheduling-related properties were updated
+                const needsScheduleRegeneration =
+                    updates.totalHoursPerWeek !== undefined ||
+                    updates.preferredDays !== undefined ||
+                    updates.preferredTimeRanges !== undefined ||
+                    updates.sessionDurationRange !== undefined ||
+                    updates.allowTimeShifting !== undefined ||
+                    updates.priorityLevel !== undefined ||
+                    updates.dateRange !== undefined;
+
+                if (needsScheduleRegeneration) {
+                    try {
+                        const newSessions = generateSmartCommitmentSchedule(
+                            {
+                                title: updatedCommitment.title,
+                                category: updatedCommitment.category,
+                                location: updatedCommitment.location,
+                                description: updatedCommitment.description,
+                                totalHoursPerWeek: updatedCommitment.totalHoursPerWeek,
+                                preferredDays: updatedCommitment.preferredDays,
+                                preferredTimeRanges: updatedCommitment.preferredTimeRanges,
+                                sessionDurationRange: updatedCommitment.sessionDurationRange,
+                                allowTimeShifting: updatedCommitment.allowTimeShifting,
+                                priorityLevel: updatedCommitment.priorityLevel,
+                                dateRange: updatedCommitment.dateRange,
+                                countsTowardDailyHours: updatedCommitment.countsTowardDailyHours
+                            },
+                            settings,
+                            [...fixedCommitments, ...smartCommitments.filter(sc => sc.id !== commitmentId)],
+                            studyPlans
+                        );
+
+                        return {
+                            ...updatedCommitment,
+                            suggestedSessions: newSessions,
+                            isConfirmed: false,
+                            // Preserve existing manual overrides
+                            manualOverrides: c.manualOverrides
+                        };
+                    } catch (error) {
+                        console.warn('Failed to regenerate smart commitment schedule:', error);
+                        return { ...updatedCommitment, isConfirmed: false };
+                    }
+                } else {
+                    // If only non-scheduling properties were updated (like title, description)
+                    return { ...updatedCommitment, isConfirmed: false };
+                }
+            }
+            return c;
+        }));
+        setLastPlanStaleReason("commitment");
+        setIsPlanStale(true);
+    };
+
     const handleDeleteCommitment = async (commitmentId: string) => {
         // Check if it's a smart commitment first
         const smartCommitment = smartCommitments.find(c => c.id === commitmentId);
@@ -1353,6 +1415,36 @@ function App() {
     };
 
     // Update handleSelectTask to also store planDate and sessionNumber if available
+    const handleSelectCommitment = (commitment: FixedCommitment | SmartCommitment, duration: number) => {
+        // Only allow timer for commitments that count toward daily hours
+        if (!commitment.countsTowardDailyHours) return;
+
+        const durationSeconds = duration * 3600; // Convert hours to seconds
+        setGlobalTimer({
+            isRunning: false,
+            currentTime: durationSeconds,
+            totalTime: durationSeconds,
+            currentTaskId: commitment.id
+        });
+        setCurrentTask({
+            id: commitment.id,
+            title: commitment.title,
+            estimatedHours: duration,
+            status: 'pending' as const,
+            importance: false,
+            deadline: '',
+            createdAt: commitment.createdAt,
+            description: commitment.description || '',
+            category: commitment.category,
+        });
+        setCurrentSession({
+            allocatedHours: duration,
+            planDate: new Date().toISOString().split('T')[0],
+            sessionNumber: 1
+        });
+        setActiveTab('timer');
+    };
+
     const handleSelectTask = (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => {
         setCurrentTask(task);
         setCurrentSession(session || null);
@@ -2483,7 +2575,9 @@ function App() {
                             studyPlans={studyPlans}
                             tasks={tasks}
                             fixedCommitments={fixedCommitments}
+                            smartCommitments={smartCommitments}
                             onSelectTask={handleSelectTask}
+                            onSelectCommitment={handleSelectCommitment}
                             onGenerateStudyPlan={handleGenerateStudyPlan}
                             onUndoSessionDone={handleUndoSessionDone}
                             onSkipSession={handleSkipSession}
@@ -2503,6 +2597,7 @@ function App() {
                             tasks={tasks}
                             settings={settings}
                             onSelectTask={handleSelectTask}
+                            onSelectCommitment={handleSelectCommitment}
                             onStartManualSession={(commitment, durationSeconds) => {
                                 setGlobalTimer({
                                     isRunning: false,
@@ -2575,10 +2670,18 @@ function App() {
                                     onUpdateCommitment={handleUpdateFixedCommitment}
                                     onCancel={() => setEditingCommitment(null)}
                                 />
+                            ) : editingSmartCommitment ? (
+                                <SmartCommitmentEdit
+                                    commitment={editingSmartCommitment}
+                                    settings={settings}
+                                    onUpdateCommitment={handleUpdateSmartCommitment}
+                                    onCancel={() => setEditingSmartCommitment(null)}
+                                />
                             ) : (
                                 <CommitmentsList
                                     commitments={[...fixedCommitments, ...smartCommitments]}
                                     onEditCommitment={setEditingCommitment}
+                                    onEditSmartCommitment={setEditingSmartCommitment}
                                     onDeleteCommitment={handleDeleteCommitment}
                                 />
                             )}
