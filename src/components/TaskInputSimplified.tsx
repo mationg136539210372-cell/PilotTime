@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp, Clock, X } from 'lucide-react';
 import { Task, UserSettings, StudyPlan, FixedCommitment } from '../types';
-import { checkFrequencyDeadlineConflict, findNextAvailableTimeSlot, doesCommitmentApplyToDate, getEffectiveStudyWindow } from '../utils/scheduling';
+import { findNextAvailableTimeSlot, doesCommitmentApplyToDate, getEffectiveStudyWindow, calculateSessionDistribution } from '../utils/scheduling';
 import TimeEstimationModal from './TimeEstimationModal';
 
 interface TaskInputProps {
@@ -25,18 +25,17 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     taskType: '',
     deadlineType: 'hard' as 'hard' | 'soft' | 'none',
     schedulingPreference: 'consistent' as 'consistent' | 'opportunistic' | 'intensive',
-    targetFrequency: 'daily' as 'daily' | 'weekly' | '3x-week' | 'flexible',
-    maxSessionLength: 2, // Default 2 hours for no-deadline tasks
     isOneTimeTask: false,
     startDate: new Date().toISOString().split('T')[0],
-    // Session-based estimation fields
+    // Simplified estimation fields
+    totalTimeNeeded: '',
+    // Temporary: keep these to prevent runtime errors until UI is cleaned up
     estimationMode: 'total' as 'total' | 'session',
     sessionDurationHours: '',
     sessionDurationMinutes: '30',
   });
 
   const [showTimeEstimationModal, setShowTimeEstimationModal] = useState(false);
-  const [showTaskTimeline, setShowTaskTimeline] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const today = new Date().toISOString().split('T')[0];
@@ -79,8 +78,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   // Reset conflicting options when one-sitting task is toggled
   useEffect(() => {
     if (formData.isOneTimeTask) {
-      // One-sitting tasks don't need frequency preferences, don't use start dates, and must use total time estimation
-      setFormData(f => ({ ...f, targetFrequency: 'daily', estimationMode: 'total' }));
+      // One-sitting tasks don't need session division
     }
   }, [formData.isOneTimeTask]);
 
@@ -89,95 +87,49 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     return parseInt(hours || '0') + parseInt(minutes || '0') / 60;
   };
 
-  // Calculate total time from session-based estimation
+  // Temporary: minimal function to prevent runtime errors
   const calculateSessionBasedTotal = useMemo(() => {
-    if (formData.estimationMode !== 'session' || !formData.deadline || formData.deadlineType === 'none') {
-      return 0;
-    }
+    return 0; // Always return 0 since we're not using this anymore
+  }, []);
 
-    const sessionDuration = convertToDecimalHours(formData.sessionDurationHours, formData.sessionDurationMinutes);
-    if (sessionDuration <= 0) return 0;
-
-    const startDate = new Date(formData.startDate || new Date().toISOString().split('T')[0]);
-    const deadlineDate = new Date(formData.deadline);
-    const timeDiff = deadlineDate.getTime() - startDate.getTime();
-    const totalDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1; // +1 to include start day
-
-    let workDays = 0;
-    switch (formData.targetFrequency) {
-      case 'daily':
-        workDays = totalDays;
-        break;
-      case '3x-week':
-        workDays = Math.floor((totalDays / 7) * 3) + Math.min(3, totalDays % 7);
-        break;
-      case 'weekly':
-        workDays = Math.ceil(totalDays / 7);
-        break;
-      case 'flexible':
-        workDays = Math.ceil(totalDays * 0.7); // Assume 70% of days for flexible
-        break;
-      default:
-        workDays = totalDays;
-    }
-
-    return sessionDuration * workDays;
-  }, [formData.estimationMode, formData.sessionDurationHours, formData.sessionDurationMinutes, formData.deadline, formData.deadlineType, formData.startDate, formData.targetFrequency]);
-
-  // Get effective total time (either direct input or calculated from sessions)
+  // Get effective total time (use totalTimeNeeded if provided, otherwise estimatedHours+Minutes)
   const getEffectiveTotalTime = () => {
-    if (formData.estimationMode === 'session') {
-      return calculateSessionBasedTotal;
+    if (formData.totalTimeNeeded && parseFloat(formData.totalTimeNeeded) > 0) {
+      return parseFloat(formData.totalTimeNeeded);
     }
     return convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes);
   };
 
-  // Check time restrictions for frequency preferences
-  const frequencyRestrictions = useMemo(() => {
-    if (!formData.deadline || formData.deadlineType === 'none') {
-      return { disableWeekly: false, disable3xWeek: false };
-    }
-
-    const startDate = new Date(formData.startDate || new Date().toISOString().split('T')[0]);
-    const deadlineDate = new Date(formData.deadline);
-    const timeDiff = deadlineDate.getTime() - startDate.getTime();
-    const daysUntilDeadline = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-
-    return {
-      disableWeekly: daysUntilDeadline < 14, // Less than 2 weeks
-      disable3xWeek: daysUntilDeadline < 7   // Less than 1 week
-    };
-  }, [formData.deadline, formData.deadlineType, formData.startDate]);
-
-  // Auto-adjust frequency when restrictions change
-  useEffect(() => {
-    if (frequencyRestrictions.disableWeekly && formData.targetFrequency === 'weekly') {
-      setFormData(prev => ({ ...prev, targetFrequency: 'daily' }));
-    }
-    if (frequencyRestrictions.disable3xWeek && formData.targetFrequency === '3x-week') {
-      setFormData(prev => ({ ...prev, targetFrequency: 'daily' }));
-    }
-  }, [frequencyRestrictions.disableWeekly, frequencyRestrictions.disable3xWeek, formData.targetFrequency]);
-
-  // Check if deadline conflicts with frequency preference
-  const deadlineConflict = useMemo(() => {
+  // Session distribution calculation for display
+  const sessionDistribution = useMemo(() => {
     if (!formData.deadline || formData.deadlineType === 'none' || formData.isOneTimeTask) {
-      return { hasConflict: false };
+      return {
+        suggestedFrequency: 'relaxed' as const,
+        description: 'Sessions will be distributed based on available time slots',
+        estimatedSessions: 0
+      };
     }
 
     const effectiveTime = getEffectiveTotalTime();
     if (effectiveTime <= 0) {
-      return { hasConflict: false };
+      return {
+        suggestedFrequency: 'relaxed' as const,
+        description: 'Sessions will be distributed based on available time slots',
+        estimatedSessions: 0
+      };
     }
 
-    return checkFrequencyDeadlineConflict(
-      formData.targetFrequency,
-      effectiveTime,
-      formData.deadline,
-      formData.startDate || today,
-      userSettings.dailyAvailableHours
+    return calculateSessionDistribution(
+      {
+        deadline: formData.deadline,
+        estimatedHours: effectiveTime,
+        sessionDuration: formData.sessionDuration || 2,
+        deadlineType: formData.deadlineType,
+        startDate: formData.startDate
+      },
+      userSettings
     );
-  }, [formData.targetFrequency, formData.deadline, formData.deadlineType, formData.startDate, formData.isOneTimeTask, getEffectiveTotalTime(), userSettings.dailyAvailableHours, today]);
+  }, [formData.sessionDuration, formData.deadline, formData.deadlineType, formData.startDate, formData.isOneTimeTask, getEffectiveTotalTime(), userSettings, today]);
 
   // Show custom category input when "Custom..." is selected
   const showCustomCategory = formData.category === 'Custom...';
@@ -231,10 +183,10 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
 
   const isOneSittingNoTimeSlot = formData.isOneTimeTask && !oneSittingTimeSlotCheck.hasSlot;
 
-  const isFormValid = formData.title.trim() && 
-                     (totalTime > 0 || (formData.estimationMode === 'session' && calculateSessionBasedTotal > 0)) &&
-                     formData.impact && 
-                     isDeadlineValid && 
+  const isFormValid = formData.title.trim() &&
+                     (totalTime > 0 || (formData.totalTimeNeeded && parseFloat(formData.totalTimeNeeded) > 0)) &&
+                     formData.impact &&
+                     isDeadlineValid &&
                      isStartDateValid &&
                      (!formData.isOneTimeTask || (formData.deadline && !isOneSittingTooLong && !isOneSittingNoTimeSlot));
 
@@ -250,7 +202,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const getValidationErrors = () => {
     const errors: string[] = [];
     if (!formData.title.trim()) errors.push('Task title is required');
-    if (totalTime <= 0 && (formData.estimationMode !== 'session' || calculateSessionBasedTotal <= 0)) {
+    if (totalTime <= 0 && (!formData.totalTimeNeeded || parseFloat(formData.totalTimeNeeded) <= 0)) {
       errors.push('Time estimation is required');
     }
     if (!formData.impact) errors.push('Task importance is required');
@@ -289,9 +241,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       importance: formData.impact === 'high',
       deadlineType: formData.deadlineType,
       schedulingPreference: formData.schedulingPreference,
-      targetFrequency: formData.targetFrequency,
-      maxSessionLength: formData.deadlineType === 'none' ? formData.maxSessionLength : undefined,
-      preferredSessionDuration: formData.estimationMode === 'session' ? convertToDecimalHours(formData.sessionDurationHours, formData.sessionDurationMinutes) : undefined,
+      totalTimeNeeded: formData.totalTimeNeeded ? parseFloat(formData.totalTimeNeeded) : undefined,
       isOneTimeTask: formData.isOneTimeTask,
       startDate: formData.startDate || today,
     });
@@ -309,10 +259,10 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       taskType: '',
       deadlineType: 'hard',
       schedulingPreference: 'consistent',
-      targetFrequency: 'daily',
-      maxSessionLength: 2,
       isOneTimeTask: false,
       startDate: today,
+      totalTimeNeeded: '',
+      // Temporary: keep these until UI cleanup is complete
       estimationMode: 'total',
       sessionDurationHours: '',
       sessionDurationMinutes: '30',
@@ -567,48 +517,6 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
               )}
           </div>
 
-          {/* 6. Frequency */}
-          {!formData.isOneTimeTask && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                How often would you like to work on this?
-              </label>
-              <select
-                value={formData.targetFrequency}
-                onChange={e => setFormData(f => ({ ...f, targetFrequency: e.target.value as any }))}
-                className="w-full px-4 py-3 border border-white/30 dark:border-white/20 rounded-xl text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              >
-                <option value="daily">🗓️ Daily progress - Work a bit each day</option>
-                <option
-                  value="3x-week"
-                  disabled={frequencyRestrictions.disable3xWeek}
-                >
-                  📅 Few times per week - Every 2-3 days{frequencyRestrictions.disable3xWeek ? ' (Need 1+ week)' : ''}
-                </option>
-                <option
-                  value="weekly"
-                  disabled={frequencyRestrictions.disableWeekly}
-                >
-                  📆 Weekly sessions - Once per week{frequencyRestrictions.disableWeekly ? ' (Need 2+ weeks)' : ''}
-                </option>
-                <option value="flexible">⏰ When I have time - Flexible scheduling</option>
-              </select>
-
-              {deadlineConflict.hasConflict && (
-                <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
-                  <div className="font-medium">Frequency preference may not allow completion before deadline</div>
-                  {deadlineConflict.reason && (
-                    <div className="mt-1">{deadlineConflict.reason}</div>
-                  )}
-                  {deadlineConflict.recommendedFrequency && (
-                    <div className="mt-1">
-                      <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* 7. Time Estimation */}
           <div>
@@ -616,32 +524,6 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">
                 Time Estimation <span className="text-red-500">*</span>
               </label>
-              {!formData.isOneTimeTask && (
-                <div className="flex bg-white/50 dark:bg-black/30 rounded-lg p-1 border border-white/30 dark:border-white/20">
-                  <button
-                    type="button"
-                    onClick={() => setFormData(f => ({ ...f, estimationMode: 'total' }))}
-                    className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                      formData.estimationMode === 'total'
-                        ? 'bg-violet-600 text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-black/30'
-                    }`}
-                  >
-                    Total Time
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData(f => ({ ...f, estimationMode: 'session' }))}
-                    className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                      formData.estimationMode === 'session'
-                        ? 'bg-violet-600 text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-black/30'
-                    }`}
-                  >
-                    Session-Based
-                  </button>
-                </div>
-              )}
             </div>
 
             {formData.estimationMode === 'total' ? (
@@ -777,16 +659,6 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
                     </div>
                     <div className="text-sm text-gray-600 dark:text-gray-300">per session</div>
                   </div>
-                  {calculateSessionBasedTotal > 0 && (
-                    <div className="text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 rounded p-2">
-                      <div className="font-medium">Calculated total: {formatTimeDisplay(Math.floor(calculateSessionBasedTotal).toString(), Math.round((calculateSessionBasedTotal % 1) * 60).toString())}</div>
-                      <div className="text-xs mt-1">
-                        Based on {formData.targetFrequency === 'daily' ? 'daily' :
-                                formData.targetFrequency === '3x-week' ? '3x per week' :
-                                formData.targetFrequency === 'weekly' ? 'weekly' : 'flexible'} frequency until deadline
-                      </div>
-                    </div>
-                  )}
                 </div>
                 <div className="flex items-center gap-4 text-xs">
                   <button
@@ -872,55 +744,6 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
             </div>
           </div>
 
-          {/* Advanced Timeline Options - Only show for tasks without deadline */}
-          {!formData.deadline && (
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowTaskTimeline(!showTaskTimeline)}
-              className="flex items-center gap-2 text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 text-sm font-medium transition-colors"
-            >
-              {showTaskTimeline ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              Advanced Options
-            </button>
-
-            {showTaskTimeline && (
-              <div className="mt-2 p-3 bg-white/30 dark:bg-black/20 rounded-lg border border-white/20 dark:border-white/10">
-                {formData.isOneTimeTask && (
-                  <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                    <div className="text-sm text-blue-800 dark:text-blue-200">
-                      📅 <strong>One-sitting tasks are always scheduled on the deadline day</strong> regardless of importance level.
-                    </div>
-                  </div>
-                )}
-
-                {/* Maximum Session Length (only for no-deadline tasks) */}
-                {formData.deadlineType === 'none' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                      Maximum session length
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={formData.maxSessionLength}
-                        onChange={e => setFormData(f => ({ ...f, maxSessionLength: Math.max(0.5, Math.min(8, parseFloat(e.target.value) || 2)) }))}
-                        min="0.5"
-                        max="8"
-                        step="0.5"
-                        className="w-20 px-3 py-2 border border-white/30 dark:border-white/20 rounded-xl text-sm bg-white/70 dark:bg-black/20 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-200">hours</span>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Maximum length for each study session (0.5-8 hours)
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          )}
 
           {/* Validation Feedback */}
           {!isFormValid && showValidationErrors && (
