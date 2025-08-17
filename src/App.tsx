@@ -25,6 +25,7 @@ import Settings from './components/Settings';
 import CalendarView from './components/CalendarView';
 import FixedCommitmentInput from './components/FixedCommitmentInput';
 import FixedCommitmentEdit from './components/FixedCommitmentEdit';
+import SmartCommitmentEdit from './components/SmartCommitmentEdit';
 import CommitmentsList from './components/CommitmentsList';
 import GamificationPanel from './components/GamificationPanel';
 import AchievementNotification, { MotivationalToast } from './components/AchievementNotification';
@@ -76,6 +77,7 @@ function App() {
     // Add state to track last-timed session and ready-to-mark-done
     const [lastTimedSession, setLastTimedSession] = useState<{ planDate: string; sessionNumber: number } | null>(null);
     const [editingCommitment, setEditingCommitment] = useState<FixedCommitment | null>(null);
+    const [editingSmartCommitment, setEditingSmartCommitment] = useState<SmartCommitment | null>(null);
 
     // Global timer state that persists across tab switches
     const [globalTimer, setGlobalTimer] = useState<TimerState>({
@@ -954,6 +956,14 @@ function App() {
             setStudyPlans(newPlans);
             setLastPlanStaleReason("commitment");
         }
+    };
+
+    const handleUpdateSmartCommitment = (commitmentId: string, updates: Partial<SmartCommitment>) => {
+        setSmartCommitments(prev => prev.map(c =>
+            c.id === commitmentId ? { ...c, ...updates, isConfirmed: false } : c
+        ));
+        setLastPlanStaleReason("commitment");
+        setIsPlanStale(true);
     };
 
     const handleDeleteCommitment = async (commitmentId: string) => {
@@ -2577,10 +2587,11 @@ function App() {
                                 />
                             ) : (
                                 <CommitmentsList
-                                    commitments={[...fixedCommitments, ...smartCommitments]}
-                                    onEditCommitment={setEditingCommitment}
-                                    onDeleteCommitment={handleDeleteCommitment}
-                                />
+                        commitments={[...fixedCommitments, ...smartCommitments]}
+                        onEditCommitment={setEditingCommitment}
+                        onEditSmartCommitment={setEditingSmartCommitment}
+                        onDeleteCommitment={handleDeleteCommitment}
+                    />
                             )}
                         </div>
                     )}
