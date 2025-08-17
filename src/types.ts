@@ -14,12 +14,12 @@ export interface Task {
   // New properties for deadline flexibility
   deadlineType?: 'hard' | 'soft' | 'none'; // Type of deadline
   schedulingPreference?: 'consistent' | 'opportunistic' | 'intensive'; // How to schedule no-deadline tasks
-  targetFrequency?: 'daily' | 'weekly' | '3x-week' | 'flexible'; // Frequency preference for ALL tasks
-  respectFrequencyForDeadlines?: boolean; // User choice to override frequency for urgent tasks
+  // Session-based estimation properties
+  sessionDuration?: number; // Preferred session duration in hours
+  totalTimeNeeded?: number; // Total time needed for the task (alternative to estimatedHours)
   preferredTimeSlots?: ('morning' | 'afternoon' | 'evening')[]; // Preferred time slots
   minWorkBlock?: number; // Minimum meaningful work session in minutes (only for deadline tasks)
   maxSessionLength?: number; // Maximum session length in hours (only for no-deadline tasks)
-  preferredSessionDuration?: number; // Preferred session duration in hours (for session-based estimation)
   isOneTimeTask?: boolean; // Task should be completed in one sitting, not divided into sessions
   startDate?: string; // New: earliest date the task can be scheduled (YYYY-MM-DD)
 }
