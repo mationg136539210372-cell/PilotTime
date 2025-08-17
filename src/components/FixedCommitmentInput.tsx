@@ -48,7 +48,10 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
   const [smartFormData, setSmartFormData] = useState({
     totalHoursPerWeek: 3,
     preferredDays: [] as number[],
-    preferredTimeRanges: [{ start: '14:00', end: '18:00' }] as TimeRange[],
+    preferredTimeRanges: [{
+      start: formatHour(settings.studyWindowStartHour),
+      end: formatHour(settings.studyWindowEndHour)
+    }] as TimeRange[],
     sessionDurationRange: { min: 60, max: 120 }, // in minutes
     allowTimeShifting: true,
     priorityLevel: 'standard' as 'important' | 'standard'
