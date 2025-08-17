@@ -25,10 +25,9 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
     category: commitment.category,
     location: commitment.location || '',
     description: commitment.description || '',
-    totalHoursPerWeek: commitment.totalHoursPerWeek,
+    preferredSessionDuration: commitment.sessionDurationRange?.min || 60, // Convert from min duration to consistent duration
     preferredDays: commitment.preferredDays,
     preferredTimeRanges: commitment.preferredTimeRanges,
-    sessionDurationRange: commitment.sessionDurationRange,
     allowTimeShifting: commitment.allowTimeShifting,
     priorityLevel: commitment.priorityLevel,
     countsTowardDailyHours: commitment.countsTowardDailyHours || false,
@@ -51,34 +50,35 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.title && 
-        formData.totalHoursPerWeek > 0 && 
+    if (formData.title &&
+        formData.preferredSessionDuration > 0 &&
         formData.preferredDays.length > 0 &&
         formData.preferredTimeRanges.length > 0 &&
-        formData.sessionDurationRange.min > 0 &&
-        formData.sessionDurationRange.max >= formData.sessionDurationRange.min) {
+        formData.dateRange.startDate &&
+        formData.dateRange.endDate) {
       
+      // Calculate total hours per week based on session duration and frequency
+      const sessionsPerWeek = formData.preferredDays.length * formData.preferredTimeRanges.length;
+      const totalHoursPerWeek = (formData.preferredSessionDuration / 60) * sessionsPerWeek;
+
       // Prepare commitment data
       const commitmentData: Partial<SmartCommitment> = {
         title: formData.title,
         category: formData.category,
         location: formData.location,
         description: formData.description,
-        totalHoursPerWeek: formData.totalHoursPerWeek,
+        totalHoursPerWeek: totalHoursPerWeek,
         preferredDays: formData.preferredDays,
         preferredTimeRanges: formData.preferredTimeRanges,
-        sessionDurationRange: formData.sessionDurationRange,
+        sessionDurationRange: {
+          min: formData.preferredSessionDuration,
+          max: formData.preferredSessionDuration
+        }, // Set both min and max to the same value for consistency
         allowTimeShifting: formData.allowTimeShifting,
         priorityLevel: formData.priorityLevel,
-        countsTowardDailyHours: formData.countsTowardDailyHours
+        countsTowardDailyHours: formData.countsTowardDailyHours,
+        dateRange: formData.dateRange
       };
-
-      // Only include dateRange if it has valid values
-      if (formData.dateRange.startDate && formData.dateRange.endDate) {
-        commitmentData.dateRange = formData.dateRange;
-      } else {
-        commitmentData.dateRange = undefined;
-      }
       
       onUpdateCommitment(commitment.id, commitmentData);
       onCancel();
@@ -180,19 +180,24 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-              Hours Per Week
+              Preferred Session Duration (minutes)
             </label>
-            <input
-              type="number"
-              min="0.5"
-              max="40"
-              step="0.5"
-              required
-              value={formData.totalHoursPerWeek}
-              onChange={(e) => setFormData({ ...formData, totalHoursPerWeek: parseFloat(e.target.value) || 0 })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-              placeholder="e.g., 10"
-            />
+            <select
+              value={formData.preferredSessionDuration}
+              onChange={(e) => setFormData({ ...formData, preferredSessionDuration: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+              <option value={45}>45 minutes</option>
+              <option value={60}>1 hour</option>
+              <option value={90}>1.5 hours</option>
+              <option value={120}>2 hours</option>
+              <option value={180}>3 hours</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
+              All sessions will be this exact duration for consistency
+            </p>
           </div>
 
           <div>
@@ -279,55 +284,9 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-              Min Session Duration (minutes)
-            </label>
-            <input
-              type="number"
-              min="15"
-              max="180"
-              step="15"
-              required
-              value={formData.sessionDurationRange.min}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                sessionDurationRange: { 
-                  ...formData.sessionDurationRange, 
-                  min: parseInt(e.target.value) || 15 
-                }
-              })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-              Max Session Duration (minutes)
-            </label>
-            <input
-              type="number"
-              min="15"
-              max="240"
-              step="15"
-              required
-              value={formData.sessionDurationRange.max}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                sessionDurationRange: { 
-                  ...formData.sessionDurationRange, 
-                  max: parseInt(e.target.value) || 60 
-                }
-              })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
-        </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
-            Date Range (Optional)
+            Date Range <span className="text-red-500">*</span>
           </label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -338,6 +297,7 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
                 <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <input
                   type="date"
+                  required
                   value={formData.dateRange.startDate}
                   onChange={(e) => setFormData({
                     ...formData,
@@ -358,7 +318,9 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
                 <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <input
                   type="date"
+                  required
                   value={formData.dateRange.endDate}
+                  min={formData.dateRange.startDate} // Ensure end date is after start date
                   onChange={(e) => setFormData({
                     ...formData,
                     dateRange: {
@@ -372,9 +334,10 @@ const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
-            If no date range is specified, the commitment will be ongoing.
+            Smart commitment will be active during this date range.
           </p>
         </div>
+
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
