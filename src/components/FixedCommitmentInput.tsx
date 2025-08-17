@@ -4,6 +4,11 @@ import { FixedCommitment, SmartCommitment, TimeRange, UserSettings, StudyPlan } 
 import { checkCommitmentConflicts } from '../utils/scheduling';
 import { generateSmartCommitmentSchedule } from '../utils/smart-commitment-scheduling';
 
+// Utility function to convert hour number to HH:MM format
+const formatHour = (hour: number): string => {
+  return hour.toString().padStart(2, '0') + ':00';
+};
+
 interface FixedCommitmentInputProps {
   onAddCommitment: (commitment: Omit<FixedCommitment, 'id' | 'createdAt'>) => void;
   onAddSmartCommitment: (commitment: Omit<SmartCommitment, 'id' | 'createdAt'>) => void;
