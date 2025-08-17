@@ -104,6 +104,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   tasks,
   settings,
   onSelectTask,
+  onSelectCommitment,
   onStartManualSession,
   onDeleteFixedCommitment,
   onUpdateStudyPlans,
