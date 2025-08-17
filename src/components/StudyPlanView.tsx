@@ -149,7 +149,7 @@ const timeToMinutes = (timeStr: string): number => {
 };
 
 // Helper function to calculate committed hours for a specific date
-const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
+const calculateCommittedHoursForDate = (date: string, fixedCommitments: FixedCommitment[], smartCommitments: SmartCommitment[] = []): number => {
   const targetDate = new Date(date);
   const dayOfWeek = targetDate.getDay();
 
