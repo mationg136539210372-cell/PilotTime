@@ -70,7 +70,9 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
 
   // Validation functions
   const convertToDecimalHours = (hours: string, minutes: string): number => {
-    return parseInt(hours || '0') + parseInt(minutes || '0') / 60;
+    const h = Math.max(0, parseInt(hours) || 0);
+    const m = Math.max(0, Math.min(59, parseInt(minutes) || 0));
+    return h + (m / 60);
   };
 
 
@@ -198,7 +200,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
   const getValidationErrors = () => {
     const errors: string[] = [];
     if (!formData.title.trim()) errors.push('Task title is required');
-    if (totalTime <= 0 && (!formData.totalTimeNeeded || parseFloat(formData.totalTimeNeeded) <= 0)) {
+    if (totalTime <= 0 && (!formData.totalTimeNeeded || isNaN(parseFloat(formData.totalTimeNeeded)) || parseFloat(formData.totalTimeNeeded) <= 0)) {
       errors.push('Time estimation is required');
     }
     if (!formData.impact) errors.push('Task importance is required');
@@ -233,7 +235,6 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
       category,
       impact: formData.impact,
       status: 'pending',
-      priority: formData.impact === 'high',
       importance: formData.impact === 'high',
       deadlineType: formData.deadlineType,
       schedulingPreference: formData.schedulingPreference,
@@ -279,7 +280,7 @@ const TaskInputSimplified: React.FC<TaskInputProps> = ({ onAddTask, onCancel, us
     const deadline = new Date(formData.deadline);
     const now = new Date();
     const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return daysUntilDeadline <= 3 && formData.importance === false;
+    return daysUntilDeadline <= 3 && formData.impact === 'low';
   }, [formData.deadline, formData.importance]);
 
   return (
