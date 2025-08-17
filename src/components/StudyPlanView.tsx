@@ -703,7 +703,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                   const sessionStatus = checkSessionStatus(session, todaysPlan.date);
                   return sessionStatus !== 'missed' && session.status !== 'skipped';
                 }).reduce((sum, session) => sum + session.allocatedHours, 0);
-                const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
+                const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments, smartCommitments);
                 const totalPlannedHours = taskHours + committedHours;
                 const remainingHours = Math.max(0, settings.dailyAvailableHours - totalPlannedHours);
 
