@@ -53,11 +53,19 @@ const getCategoryColor = (category: string) => {
 const CommitmentsList: React.FC<CommitmentsListProps> = ({
   commitments,
   onEditCommitment,
+  onEditSmartCommitment,
   onDeleteCommitment,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState(() => {
+    return localStorage.getItem('timepilot-commitments-filter-category') || 'All';
+  });
   const [showFilters, setShowFilters] = useState(false);
+
+  // Persist category filter selection
+  useEffect(() => {
+    localStorage.setItem('timepilot-commitments-filter-category', selectedCategory);
+  }, [selectedCategory]);
 
   // Filter and search commitments
   const filteredCommitments = useMemo(() => {
@@ -322,7 +330,7 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                     )}
                     {commitment.dateRange?.startDate && commitment.dateRange?.endDate && (
                       <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                        <span className="font-medium">����</span>
+                        <span className="font-medium">📊</span>
                         <span className="truncate">
                           {new Date(commitment.dateRange.startDate).toLocaleDateString()} -{' '}
                           {new Date(commitment.dateRange.endDate).toLocaleDateString()}
