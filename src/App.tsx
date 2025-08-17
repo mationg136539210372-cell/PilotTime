@@ -1363,6 +1363,36 @@ function App() {
     };
 
     // Update handleSelectTask to also store planDate and sessionNumber if available
+    const handleSelectCommitment = (commitment: FixedCommitment | SmartCommitment, duration: number) => {
+        // Only allow timer for commitments that count toward daily hours
+        if (!commitment.countsTowardDailyHours) return;
+
+        const durationSeconds = duration * 3600; // Convert hours to seconds
+        setGlobalTimer({
+            isRunning: false,
+            currentTime: durationSeconds,
+            totalTime: durationSeconds,
+            currentTaskId: commitment.id
+        });
+        setCurrentTask({
+            id: commitment.id,
+            title: commitment.title,
+            estimatedHours: duration,
+            status: 'pending' as const,
+            importance: false,
+            deadline: '',
+            createdAt: commitment.createdAt,
+            description: commitment.description || '',
+            category: commitment.category,
+        });
+        setCurrentSession({
+            allocatedHours: duration,
+            planDate: new Date().toISOString().split('T')[0],
+            sessionNumber: 1
+        });
+        setActiveTab('timer');
+    };
+
     const handleSelectTask = (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => {
         setCurrentTask(task);
         setCurrentSession(session || null);
