@@ -46,13 +46,12 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
 
   // Smart commitment specific state
   const [smartFormData, setSmartFormData] = useState({
-    totalHoursPerWeek: 3,
+    preferredSessionDuration: 60, // consistent session duration in minutes
     preferredDays: [] as number[],
     preferredTimeRanges: [{
       start: formatHour(settings.studyWindowStartHour),
       end: formatHour(settings.studyWindowEndHour)
     }] as TimeRange[],
-    sessionDurationRange: { min: 60, max: 120 }, // in minutes
     allowTimeShifting: true,
     priorityLevel: 'standard' as 'important' | 'standard'
   });
@@ -76,19 +75,19 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
 
   // Smart commitment validation
   const isSmartTitleValid = formData.title.trim().length > 0;
-  const isSmartHoursValid = smartFormData.totalHoursPerWeek > 0 && smartFormData.totalHoursPerWeek <= 40;
   const isSmartDaysValid = smartFormData.preferredDays.length > 0;
   const isSmartTimeRangesValid = smartFormData.preferredTimeRanges.length > 0 &&
     smartFormData.preferredTimeRanges.every(range => range.start < range.end);
-  const isSmartDurationValid = smartFormData.sessionDurationRange.min > 0 &&
-    smartFormData.sessionDurationRange.min <= smartFormData.sessionDurationRange.max;
+  const isSmartDurationValid = smartFormData.preferredSessionDuration > 0;
+  const isSmartDateRangeValid = formData.dateRange.startDate && formData.dateRange.endDate &&
+    formData.dateRange.startDate <= formData.dateRange.endDate;
 
   const isFixedFormValid = isTitleValid && isTitleLengthValid && isDaysValid &&
                           isDatesValid && isTimeRangeValid && isLocationValid && isDateRangeValid &&
                           (formData.isAllDay || (isStartTimeValid && isEndTimeValid));
 
-  const isSmartFormValid = isSmartTitleValid && isSmartHoursValid && isSmartDaysValid &&
-                          isSmartTimeRangesValid && isSmartDurationValid;
+  const isSmartFormValid = isSmartTitleValid && isSmartDaysValid &&
+                          isSmartTimeRangesValid && isSmartDurationValid && isSmartDateRangeValid;
 
   const isFormValid = commitmentType === 'smart' ? isSmartFormValid : isFixedFormValid;
 
@@ -107,21 +106,25 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
   const handleGeneratePreview = () => {
     if (!isSmartFormValid) return;
 
+    // Calculate total hours per week based on session duration and frequency
+    const sessionsPerWeek = smartFormData.preferredDays.length * smartFormData.preferredTimeRanges.length;
+    const totalHoursPerWeek = (smartFormData.preferredSessionDuration / 60) * sessionsPerWeek;
+
     const smartCommitmentData = {
       title: formData.title,
       type: 'smart' as const,
       category: formData.category,
       location: formData.location,
       description: formData.description,
-      totalHoursPerWeek: smartFormData.totalHoursPerWeek,
+      totalHoursPerWeek: totalHoursPerWeek,
       preferredDays: smartFormData.preferredDays,
       preferredTimeRanges: smartFormData.preferredTimeRanges,
-      sessionDurationRange: smartFormData.sessionDurationRange,
+      sessionDurationRange: { min: smartFormData.preferredSessionDuration, max: smartFormData.preferredSessionDuration },
       allowTimeShifting: smartFormData.allowTimeShifting,
       priorityLevel: smartFormData.priorityLevel,
       suggestedSessions: [],
       isConfirmed: false,
-      dateRange: formData.dateRange.startDate && formData.dateRange.endDate ? formData.dateRange : undefined,
+      dateRange: formData.dateRange,
       countsTowardDailyHours: formData.countsTowardDailyHours
     };
 
@@ -142,26 +145,34 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
 
       // If no preview was generated, generate sessions now
       if (finalSessions.length === 0) {
+        // Calculate total hours per week based on session duration and frequency
+        const sessionsPerWeek = smartFormData.preferredDays.length * smartFormData.preferredTimeRanges.length;
+        const totalHoursPerWeek = (smartFormData.preferredSessionDuration / 60) * sessionsPerWeek;
+
         const smartCommitmentData = {
           title: formData.title,
           type: 'smart' as const,
           category: formData.category,
           location: formData.location,
           description: formData.description,
-          totalHoursPerWeek: smartFormData.totalHoursPerWeek,
+          totalHoursPerWeek: totalHoursPerWeek,
           preferredDays: smartFormData.preferredDays,
           preferredTimeRanges: smartFormData.preferredTimeRanges,
-          sessionDurationRange: smartFormData.sessionDurationRange,
+          sessionDurationRange: { min: smartFormData.preferredSessionDuration, max: smartFormData.preferredSessionDuration },
           allowTimeShifting: smartFormData.allowTimeShifting,
           priorityLevel: smartFormData.priorityLevel,
           suggestedSessions: [],
           isConfirmed: false,
-          dateRange: formData.dateRange.startDate && formData.dateRange.endDate ? formData.dateRange : undefined,
+          dateRange: formData.dateRange,
           countsTowardDailyHours: formData.countsTowardDailyHours
         };
 
         finalSessions = generateSmartCommitmentSchedule(smartCommitmentData, settings, existingCommitments, existingPlans);
       }
+
+      // Calculate total hours per week based on session duration and frequency
+      const sessionsPerWeek = smartFormData.preferredDays.length * smartFormData.preferredTimeRanges.length;
+      const totalHoursPerWeek = (smartFormData.preferredSessionDuration / 60) * sessionsPerWeek;
 
       const smartCommitmentData = {
         title: formData.title,
@@ -169,15 +180,15 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
         category: formData.category,
         location: formData.location,
         description: formData.description,
-        totalHoursPerWeek: smartFormData.totalHoursPerWeek,
+        totalHoursPerWeek: totalHoursPerWeek,
         preferredDays: smartFormData.preferredDays,
         preferredTimeRanges: smartFormData.preferredTimeRanges,
-        sessionDurationRange: smartFormData.sessionDurationRange,
+        sessionDurationRange: { min: smartFormData.preferredSessionDuration, max: smartFormData.preferredSessionDuration },
         allowTimeShifting: smartFormData.allowTimeShifting,
         priorityLevel: smartFormData.priorityLevel,
         suggestedSessions: finalSessions,
         isConfirmed: true,
-        dateRange: formData.dateRange.startDate && formData.dateRange.endDate ? formData.dateRange : undefined,
+        dateRange: formData.dateRange,
         countsTowardDailyHours: formData.countsTowardDailyHours
       };
 
@@ -250,13 +261,12 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
       }
     });
     setSmartFormData({
-      totalHoursPerWeek: 3,
+      preferredSessionDuration: 60,
       preferredDays: [],
       preferredTimeRanges: [{
         start: formatHour(settings.studyWindowStartHour),
         end: formatHour(settings.studyWindowEndHour)
       }],
-      sessionDurationRange: { min: 60, max: 120 },
       allowTimeShifting: true,
       priorityLevel: 'standard'
     });
@@ -422,21 +432,24 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-                  Total Hours per Week
+                  Preferred Session Duration (minutes)
                 </label>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  📅 How many hours total you want to spend on this activity each week
+                  📅 How long each study session should be (all sessions will be this exact duration)
                 </p>
-                <input
-                  type="number"
-                  min="0.5"
-                  max="40"
-                  step="0.5"
-                  value={smartFormData.totalHoursPerWeek}
-                  onChange={(e) => setSmartFormData({ ...smartFormData, totalHoursPerWeek: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  placeholder="3"
-                />
+                <select
+                  value={smartFormData.preferredSessionDuration}
+                  onChange={(e) => setSmartFormData({ ...smartFormData, preferredSessionDuration: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                >
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                  <option value={45}>45 minutes</option>
+                  <option value={60}>1 hour</option>
+                  <option value={90}>1.5 hours</option>
+                  <option value={120}>2 hours</option>
+                  <option value={180}>3 hours</option>
+                </select>
               </div>
 
               <div>
@@ -524,47 +537,58 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-                  Min Session Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  min="15"
-                  max="480"
-                  step="15"
-                  value={smartFormData.sessionDurationRange.min}
-                  onChange={(e) => setSmartFormData({
-                    ...smartFormData,
-                    sessionDurationRange: {
-                      ...smartFormData.sessionDurationRange,
-                      min: parseInt(e.target.value) || 15
-                    }
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-                  Max Session Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  min="15"
-                  max="480"
-                  step="15"
-                  value={smartFormData.sessionDurationRange.max}
-                  onChange={(e) => setSmartFormData({
-                    ...smartFormData,
-                    sessionDurationRange: {
-                      ...smartFormData.sessionDurationRange,
-                      max: parseInt(e.target.value) || 120
-                    }
-                  })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
+                Date Range <span className="text-red-500">*</span>
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                📅 When this smart commitment should be active
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">
+                    Start Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                    <input
+                      type="date"
+                      required
+                      min={new Date().toISOString().split('T')[0]}
+                      value={formData.dateRange.startDate}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        dateRange: {
+                          ...formData.dateRange,
+                          startDate: e.target.value
+                        }
+                      })}
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1 dark:text-gray-400">
+                    End Date
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                    <input
+                      type="date"
+                      required
+                      min={formData.dateRange.startDate || new Date().toISOString().split('T')[0]}
+                      value={formData.dateRange.endDate}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        dateRange: {
+                          ...formData.dateRange,
+                          endDate: e.target.value
+                        }
+                      })}
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
