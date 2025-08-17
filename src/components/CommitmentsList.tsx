@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, Edit, Trash2, X, Brain, Settings } from 'lucide-react';
 import { FixedCommitment, SmartCommitment, Commitment } from '../types';
 
 interface CommitmentsListProps {
   commitments: (FixedCommitment | SmartCommitment)[];
   onEditCommitment: (commitment: FixedCommitment) => void;
+  onEditSmartCommitment: (commitment: SmartCommitment) => void;
   onDeleteCommitment: (commitmentId: string) => void;
 }
 
@@ -321,7 +322,7 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                     )}
                     {commitment.dateRange?.startDate && commitment.dateRange?.endDate && (
                       <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                        <span className="font-medium">📊</span>
+                        <span className="font-medium">����</span>
                         <span className="truncate">
                           {new Date(commitment.dateRange.startDate).toLocaleDateString()} -{' '}
                           {new Date(commitment.dateRange.endDate).toLocaleDateString()}
