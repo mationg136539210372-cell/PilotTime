@@ -155,7 +155,7 @@ const calculateCommittedHoursForDate = (date: string, fixedCommitments: FixedCom
 
   let totalCommittedHours = 0;
 
-  commitments.forEach(commitment => {
+  fixedCommitments.forEach(commitment => {
     // Only count commitments that count toward daily hours
     if (!commitment.countsTowardDailyHours) return;
 
