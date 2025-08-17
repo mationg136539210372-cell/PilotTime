@@ -6,8 +6,8 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
-import { StudyPlan, FixedCommitment, Task, StudySession, UserSettings } from '../types';
-import { BookOpen, Clock, Settings, X, Calendar as CalendarIcon } from 'lucide-react';
+import { StudyPlan, FixedCommitment, SmartCommitment, Task, StudySession, UserSettings } from '../types';
+import { BookOpen, Clock, Settings, X, Calendar as CalendarIcon, Brain } from 'lucide-react';
 import { checkSessionStatus, doesCommitmentApplyToDate } from '../utils/scheduling';
 import { getLocalDateString } from '../utils/scheduling';
 import MobileCalendarView from './MobileCalendarView';
@@ -18,6 +18,7 @@ const DragAndDropCalendar = withDragAndDrop(Calendar);
 interface CalendarViewProps {
   studyPlans: StudyPlan[];
   fixedCommitments: FixedCommitment[];
+  smartCommitments?: SmartCommitment[];
   tasks: Task[];
   settings?: UserSettings;
   onSelectTask?: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
@@ -33,10 +34,12 @@ interface CalendarEvent {
   end: Date;
   allDay?: boolean;
   resource: {
-    type: 'study' | 'commitment';
-    data: StudySession | FixedCommitment;
+    type: 'study' | 'commitment' | 'smart-commitment';
+    data: StudySession | FixedCommitment | SmartCommitment;
     taskId?: string;
     planDate?: string; // For study sessions, which plan date they belong to
+    commitmentType?: 'fixed' | 'smart';
+    isPattern?: boolean; // For smart commitments, indicates this is part of a recurring pattern
   };
 }
 
@@ -96,6 +99,7 @@ function splitEventIfCrossesMidnight(start: Date, end: Date) {
 const CalendarView: React.FC<CalendarViewProps> = ({
   studyPlans,
   fixedCommitments,
+  smartCommitments = [],
   tasks,
   settings,
   onSelectTask,
@@ -421,8 +425,48 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       }
     });
 
+    // Convert smart commitments to calendar events
+    smartCommitments.forEach(commitment => {
+      commitment.suggestedSessions.forEach((session, sessionIndex) => {
+        // Check if this session has been manually deleted
+        if (commitment.manualOverrides?.[session.date]?.isDeleted) {
+          return;
+        }
+
+        // Apply manual overrides if they exist
+        const override = commitment.manualOverrides?.[session.date];
+        const startTime = override?.startTime || session.startTime;
+        const endTime = override?.endTime || session.endTime;
+
+        const startDateTime = new Date(session.date);
+        const [startHour, startMinute] = startTime.split(':').map(Number);
+        startDateTime.setHours(startHour, startMinute, 0, 0);
+
+        const endDateTime = new Date(session.date);
+        const [endHour, endMinute] = endTime.split(':').map(Number);
+        endDateTime.setHours(endHour, endMinute, 0, 0);
+
+        // Split if crosses midnight
+        splitEventIfCrossesMidnight(startDateTime, endDateTime).forEach(({ start, end }, idx) => {
+          const uniqueId = `smart-commitment-${commitment.id}-${session.date}-${sessionIndex}-${startTime.replace(':', '')}-${idx}`;
+          calendarEvents.push({
+            id: uniqueId,
+            title: commitment.title,
+            start,
+            end,
+            resource: {
+              type: 'smart-commitment',
+              data: commitment,
+              commitmentType: 'smart',
+              isPattern: true
+            }
+          });
+        });
+      });
+    });
+
     return calendarEvents;
-  }, [studyPlans, fixedCommitments, tasks]);
+  }, [studyPlans, fixedCommitments, smartCommitments, tasks]);
 
   // Get all unique task categories
   const taskCategories = Array.from(new Set(tasks.map(t => t.category).filter((v): v is string => !!v)));
@@ -828,7 +872,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       } else {
         backgroundColor = colorSettings.uncategorizedTaskColor;
       }
-      
+
       // Special case for buffer category
       if (commitment.category === 'Buffer') {
         // Make buffer commitments invisible but still block time
@@ -836,6 +880,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         opacity = 0;
         display = 'none';
       }
+    } else if (event.resource.type === 'smart-commitment') {
+      const commitment = event.resource.data as SmartCommitment;
+      // Use category-based colors for smart commitments
+      if (commitment.category && categoryColorMap[commitment.category]) {
+        backgroundColor = categoryColorMap[commitment.category];
+      } else {
+        backgroundColor = colorSettings.uncategorizedTaskColor;
+      }
+
+      // Add dotted border pattern to indicate smart commitment
+      backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.3) 2px, rgba(255,255,255,0.3) 4px)';
+      backgroundSize = '8px 8px';
     }
     // Add visual indicators for task importance
     let borderStyle = 'none';
