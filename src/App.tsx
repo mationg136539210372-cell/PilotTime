@@ -5,6 +5,7 @@ import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } fr
 import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { convertSmartCommitmentsToFixedFormat } from './utils/smart-commitment-integration';
+import { generateSmartCommitmentSchedule } from './utils/smart-commitment-scheduling';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
   ACHIEVEMENTS,
