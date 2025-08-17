@@ -282,7 +282,7 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                         <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                           <span className="font-medium">📊</span>
                           <span>
-                            {(commitment as SmartCommitment).sessionDurationRange.min}min - {(commitment as SmartCommitment).sessionDurationRange.max}min sessions
+                            {(commitment as SmartCommitment).sessionDurationRange.min}min sessions (consistent)
                           </span>
                         </div>
                       </>
