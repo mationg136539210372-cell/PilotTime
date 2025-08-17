@@ -22,6 +22,7 @@ interface CalendarViewProps {
   tasks: Task[];
   settings?: UserSettings;
   onSelectTask?: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
+  onSelectCommitment?: (commitment: FixedCommitment | SmartCommitment, duration: number) => void;
   onStartManualSession?: (commitment: FixedCommitment, durationSeconds: number) => void;
   onDeleteFixedCommitment?: (commitmentId: string) => void;
   onUpdateStudyPlans?: (updatedPlans: StudyPlan[]) => void;
