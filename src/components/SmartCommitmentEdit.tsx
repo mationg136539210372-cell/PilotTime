@@ -14,10 +14,11 @@ interface SmartCommitmentEditProps {
   onCancel: () => void;
 }
 
-const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({ 
-  commitment, 
-  onUpdateCommitment, 
-  onCancel 
+const SmartCommitmentEdit: React.FC<SmartCommitmentEditProps> = ({
+  commitment,
+  settings,
+  onUpdateCommitment,
+  onCancel
 }) => {
   const [formData, setFormData] = useState({
     title: commitment.title,
