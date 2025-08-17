@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Info, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Task, UserSettings, StudyPlan, FixedCommitment } from '../types';
-import { checkFrequencyDeadlineConflict, findNextAvailableTimeSlot, doesCommitmentApplyToDate, getEffectiveStudyWindow } from '../utils/scheduling';
+import { findNextAvailableTimeSlot, doesCommitmentApplyToDate, getEffectiveStudyWindow } from '../utils/scheduling';
 import TimeEstimationModal from './TimeEstimationModal';
 
 interface TaskInputProps {
@@ -114,8 +114,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
     // New fields for deadline flexibility
     deadlineType: 'hard' as 'hard' | 'soft' | 'none',
     schedulingPreference: 'consistent' as 'consistent' | 'opportunistic' | 'intensive',
-    targetFrequency: 'daily' as 'daily' | 'weekly' | '3x-week' | 'flexible', // Default to daily for all tasks
-    maxSessionLength: 2, // Default 2 hours for no-deadline tasks
+    totalTimeNeeded: '', // Total time needed (alternative input method)
     isOneTimeTask: false, // New field for one-time tasks
     startDate: new Date().toISOString().split('T')[0], // New: start date defaults to today
   });
@@ -149,50 +148,41 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   // Reset conflicting options when one-sitting task is toggled
   useEffect(() => {
     if (formData.isOneTimeTask) {
-      // One-sitting tasks don't need frequency preferences
-      setFormData(f => ({ ...f, targetFrequency: 'daily' }));
+      // One-sitting tasks use the total time as session duration
+      const totalHours = parseFloat(formData.estimatedHours || '0') + parseFloat(formData.estimatedMinutes || '0') / 60;
+      setFormData(f => ({ ...f, sessionDuration: totalHours || 2 }));
     }
-  }, [formData.isOneTimeTask]);
+  }, [formData.isOneTimeTask, formData.estimatedHours, formData.estimatedMinutes]);
 
-  // Check time restrictions for frequency preferences
-  const frequencyRestrictions = useMemo(() => {
-    if (!formData.deadline || formData.deadlineType === 'none') {
-      return { disableWeekly: false, disable3xWeek: false };
-    }
-
-    const startDate = new Date(formData.startDate || new Date().toISOString().split('T')[0]);
-    const deadlineDate = new Date(formData.deadline);
-    const timeDiff = deadlineDate.getTime() - startDate.getTime();
-    const daysUntilDeadline = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+  // Calculate estimated sessions based on total time and session duration
+  const sessionCalculation = useMemo(() => {
+    const totalHours = parseFloat(formData.totalTimeNeeded || formData.estimatedHours || '0') + parseFloat(formData.estimatedMinutes || '0') / 60;
+    const sessionDuration = formData.sessionDuration || 2;
+    const estimatedSessions = Math.ceil(totalHours / sessionDuration);
 
     return {
-      disableWeekly: daysUntilDeadline < 14, // Less than 2 weeks
-      disable3xWeek: daysUntilDeadline < 7   // Less than 1 week
+      totalHours,
+      sessionDuration,
+      estimatedSessions
     };
-  }, [formData.deadline, formData.deadlineType, formData.startDate]);
+  }, [formData.totalTimeNeeded, formData.estimatedHours, formData.estimatedMinutes, formData.sessionDuration]);
 
   // Check if form is valid for submission
   const isFormInvalid = useMemo(() => {
-    // Invalid if weekly is selected but should be disabled
-    if (formData.targetFrequency === 'weekly' && frequencyRestrictions.disableWeekly) {
-      return true;
-    }
-    // Invalid if 3x-week is selected but should be disabled
-    if (formData.targetFrequency === '3x-week' && frequencyRestrictions.disable3xWeek) {
-      return true;
-    }
-    return false;
-  }, [formData.targetFrequency, frequencyRestrictions]);
+    // Basic validation - ensure we have either estimated hours or total time needed
+    const hasTimeInput = (parseFloat(formData.estimatedHours || '0') > 0) || (parseFloat(formData.totalTimeNeeded || '0') > 0);
+    return !hasTimeInput;
+  }, [formData.estimatedHours, formData.totalTimeNeeded]);
 
-  // Auto-adjust frequency when restrictions change
+  // Auto-sync estimated hours when total time needed changes
   useEffect(() => {
-    if (frequencyRestrictions.disableWeekly && formData.targetFrequency === 'weekly') {
-      setFormData(f => ({ ...f, targetFrequency: 'daily' }));
+    if (formData.totalTimeNeeded && parseFloat(formData.totalTimeNeeded) > 0) {
+      const totalHours = parseFloat(formData.totalTimeNeeded);
+      const hours = Math.floor(totalHours);
+      const minutes = Math.round((totalHours - hours) * 60);
+      setFormData(f => ({ ...f, estimatedHours: hours.toString(), estimatedMinutes: minutes.toString() }));
     }
-    if (frequencyRestrictions.disable3xWeek && formData.targetFrequency === '3x-week') {
-      setFormData(f => ({ ...f, targetFrequency: 'daily' }));
-    }
-  }, [frequencyRestrictions.disableWeekly, frequencyRestrictions.disable3xWeek, formData.targetFrequency]);
+  }, [formData.totalTimeNeeded]);
 
   // Check time slot availability for one-sitting tasks on deadline day
   const oneSittingTimeSlotCheck = useMemo(() => {
@@ -296,22 +286,42 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   // Handle category custom
   const showCustomCategory = formData.category === 'Custom...';
 
-  // Check for deadline conflict with frequency preference
-  const deadlineConflict = useMemo(() => {
+  // Calculate smart session distribution based on deadline pressure
+  const sessionDistribution = useMemo(() => {
     if (!formData.deadline || formData.deadlineType === 'none') {
-      return { hasConflict: false };
+      return {
+        suggestedFrequency: 'relaxed',
+        description: 'Sessions will be distributed based on available time slots',
+        sessions: sessionCalculation.estimatedSessions
+      };
     }
 
-    const taskForCheck = {
-      deadline: formData.deadline,
-      estimatedHours: convertToDecimalHours(formData.estimatedHours, formData.estimatedMinutes),
-      targetFrequency: formData.targetFrequency,
-      deadlineType: formData.deadlineType,
-      startDate: formData.startDate,
-    };
+    const startDate = new Date(formData.startDate || new Date().toISOString().split('T')[0]);
+    const deadlineDate = new Date(formData.deadline);
+    const timeDiff = deadlineDate.getTime() - startDate.getTime();
+    const daysUntilDeadline = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
-    return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
-  }, [formData.deadline, formData.estimatedHours, formData.estimatedMinutes, formData.targetFrequency, formData.deadlineType, formData.startDate, userSettings]);
+    let suggestedFrequency;
+    let description;
+
+    if (daysUntilDeadline < 7) {
+      suggestedFrequency = 'urgent';
+      description = 'Daily sessions recommended due to urgent deadline';
+    } else if (daysUntilDeadline < 14) {
+      suggestedFrequency = 'moderate';
+      description = 'Every other day sessions recommended';
+    } else {
+      suggestedFrequency = 'relaxed';
+      description = '2-3 sessions per week recommended';
+    }
+
+    return {
+      suggestedFrequency,
+      description,
+      sessions: sessionCalculation.estimatedSessions,
+      daysAvailable: daysUntilDeadline
+    };
+  }, [formData.deadline, formData.deadlineType, formData.startDate, sessionCalculation]);
 
   // Enhanced validation with better error messages
   const isTitleValid = formData.title.trim().length > 0;
@@ -422,8 +432,9 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
       // New fields for deadline flexibility
       deadlineType: formData.deadline ? formData.deadlineType : 'none',
       schedulingPreference: formData.schedulingPreference,
-      targetFrequency: formData.targetFrequency,
-      maxSessionLength: formData.deadlineType === 'none' ? formData.maxSessionLength : undefined,
+      // Session-based estimation properties
+      sessionDuration: formData.sessionDuration,
+      totalTimeNeeded: parseFloat(formData.totalTimeNeeded || '0') || undefined,
       isOneTimeTask: formData.isOneTimeTask,
       startDate: formData.startDate || today,
     });
@@ -439,7 +450,8 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
       taskType: '',
       deadlineType: 'hard',
       schedulingPreference: 'consistent',
-      targetFrequency: 'daily', // Reset to daily default
+      sessionDuration: 2, // Default 2 hours per session
+      totalTimeNeeded: '',
       maxSessionLength: 2,
       isOneTimeTask: false,
       startDate: today,
@@ -543,7 +555,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                   {isOneSittingNoTimeSlot && (
                     <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg">
                       <div className="flex items-start gap-2">
-                        <span className="text-red-500 text-sm">📅</span>
+                        <span className="text-red-500 text-sm">��</span>
                         <div className="text-xs text-red-700 dark:text-red-200">
                           <div className="font-medium mb-1">No Available Time Slot</div>
                           <div>{oneSittingTimeSlotCheck.message}</div>
@@ -551,7 +563,7 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                           <div className="ml-2">
                             • Choose a different deadline date<br/>
                             • Reduce the estimated time<br/>
-                            • Move or remove conflicting commitments<br/>
+                            �� Move or remove conflicting commitments<br/>
                             • Uncheck "one-sitting" to allow flexible scheduling
                           </div>
                         </div>
@@ -562,93 +574,66 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
               )}
             </div>
 
-            {/* Work Frequency Preference */}
+            {/* Session-Based Estimation */}
             {!formData.isOneTimeTask && (
               <div className="mt-4">
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                  How often would you like to work on this?
+                  Session Planning
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { value: 'daily', label: ' Daily progress', desc: 'Work a bit each day' },
-                    { value: '3x-week', label: ' Few times per week', desc: 'Every 2-3 days' },
-                    { value: 'weekly', label: ' Weekly sessions', desc: 'Once per week' },
-                    { value: 'flexible', label: ' When I have time', desc: 'Flexible scheduling' }
-                  ].map(option => {
-                    const isDisabled = (option.value === 'weekly' && frequencyRestrictions.disableWeekly) ||
-                                     (option.value === '3x-week' && frequencyRestrictions.disable3xWeek);
 
-                    return (
-                      <label key={option.value} className={`flex flex-col p-3 border rounded-xl transition-colors ${
-                        isDisabled
-                          ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-50'
-                          : formData.targetFrequency === option.value
-                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-600 cursor-pointer hover:bg-white dark:hover:bg-gray-700'
-                            : 'border-gray-200 dark:border-gray-600 cursor-pointer hover:bg-white dark:hover:bg-gray-700'
-                      }`}>
-                        <input
-                          type="radio"
-                          name="targetFrequency"
-                          value={option.value}
-                          checked={formData.targetFrequency === option.value}
-                          disabled={isDisabled}
-                          onChange={() => !isDisabled && setFormData(f => ({ ...f, targetFrequency: option.value as any }))}
-                          className="sr-only"
-                        />
-                        <div className={`text-sm font-medium ${isDisabled ? 'text-gray-500 dark:text-gray-500' : 'text-gray-800 dark:text-white'}`}>
-                          {option.label}
-                          {isDisabled && option.value === 'weekly' && ' (Need 2+ weeks)'}
-                          {isDisabled && option.value === '3x-week' && ' (Need 1+ week)'}
-                        </div>
-                        <div className={`text-xs ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-400'}`}>
-                          {isDisabled
-                            ? option.value === 'weekly'
-                              ? 'Deadline too close for weekly preference'
-                              : 'Deadline too close for this frequency'
-                            : option.desc
-                          }
-                        </div>
-                      </label>
-                    );
-                  })}
+                <div className="space-y-3">
+                  {/* Session Duration Input */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Preferred session duration
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={formData.sessionDuration}
+                        onChange={e => setFormData(f => ({ ...f, sessionDuration: parseFloat(e.target.value) || 2 }))}
+                        min="0.5"
+                        max="8"
+                        step="0.5"
+                        className="w-20 px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                      />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">hours per session</span>
+                    </div>
+                  </div>
+
+                  {/* Alternative Total Time Input */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      Total time needed (optional alternative to estimation above)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={formData.totalTimeNeeded}
+                        onChange={e => setFormData(f => ({ ...f, totalTimeNeeded: e.target.value }))}
+                        placeholder="e.g., 12"
+                        min="0"
+                        step="0.5"
+                        className="w-24 px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                      />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">total hours</span>
+                    </div>
+                  </div>
+
+                  {/* Session Calculation Display */}
+                  {sessionCalculation.totalHours > 0 && (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                      <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
+                        📅 Session Plan Preview
+                      </div>
+                      <div className="text-xs text-blue-700 dark:text-blue-300">
+                        <div>• {sessionCalculation.estimatedSessions} sessions of {sessionCalculation.sessionDuration}h each</div>
+                        <div>• Total: {sessionCalculation.totalHours}h</div>
+                        <div className="mt-1 font-medium">{sessionDistribution.description}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Frequency Restriction Warnings */}
-                {(frequencyRestrictions.disableWeekly || frequencyRestrictions.disable3xWeek) && (
-                  <div className="mt-2 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <span className="text-orange-500 text-sm">⚠️</span>
-                      <div className="text-xs text-orange-700 dark:text-orange-200">
-                        <div className="font-medium mb-1">Frequency Options Limited</div>
-                        {frequencyRestrictions.disableWeekly && (
-                          <div className="mb-1">• Weekly sessions need at least 2 weeks between start date and deadline</div>
-                        )}
-                        {frequencyRestrictions.disable3xWeek && (
-                          <div className="mb-1">• 2-3 days frequency needs at least 1 week between start date and deadline</div>
-                        )}
-                        <div className="text-orange-600 dark:text-orange-300 font-medium">Consider extending your deadline or using daily progress instead.</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Show warning if frequency conflicts with deadline */}
-                {deadlineConflict.hasConflict && (
-                  <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
-                    <div className="flex items-start gap-1">
-                      <span className="text-amber-600 dark:text-amber-400"></span>
-                      <div>
-                        <div className="font-medium">Frequency preference may not allow completion before deadline</div>
-                        <div className="mt-1">{deadlineConflict.reason}</div>
-                        {deadlineConflict.recommendedFrequency && (
-                          <div className="mt-1">
-                            <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -749,62 +734,53 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
                     </label>
                   </div>
 
-                  {/* Work frequency preference - now applies to ALL tasks */}
+                  {/* Session-based estimation for all tasks */}
                   <div className="space-y-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Work frequency preference</label>
-                      <select
-                        value={formData.targetFrequency}
-                        onChange={e => setFormData(f => ({ ...f, targetFrequency: e.target.value as any }))}
-                        className="w-full px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
-                      >
-                        <option value="daily">Daily progress (default)</option>
-                        <option value="3x-week">Few times per week</option>
-                        <option value="weekly">Weekly sessions</option>
-                        <option value="flexible">When I have time</option>
-                      </select>
-                      
-                      {/* Show warning if frequency conflicts with deadline */}
-                      {deadlineConflict.hasConflict && (
-                        <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
-                          <div className="flex items-start gap-1">
-                            <span className="text-amber-600 dark:text-amber-400"></span>
-                            <div>
-                              <div className="font-medium">Frequency preference may not allow completion before deadline</div>
-                              <div className="mt-1">{deadlineConflict.reason}</div>
-                              {deadlineConflict.recommendedFrequency && (
-                                <div className="mt-1">
-                                  <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Session duration</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={formData.sessionDuration}
+                          onChange={e => setFormData(f => ({ ...f, sessionDuration: parseFloat(e.target.value) || 2 }))}
+                          min="0.5"
+                          max="8"
+                          step="0.5"
+                          className="w-20 px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                        />
+                        <span className="text-xs text-gray-600 dark:text-gray-400">hours per session</span>
+                      </div>
                     </div>
 
-                    {/* Additional preferences for no-deadline tasks */}
-                    {formData.deadlineType === 'none' && (
-                      <>
-                        {/* Maximum session length for no-deadline tasks */}
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Maximum session length</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min={0.5}
-                              max={8}
-                              step={0.5}
-                              value={formData.maxSessionLength}
-                              onChange={e => setFormData(f => ({ ...f, maxSessionLength: Math.max(0.5, Math.min(8, parseFloat(e.target.value) || 2)) }))}
-                              className="w-24 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
-                            />
-                            <span className="text-xs text-gray-600 dark:text-gray-400">hours</span>
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Only applies to tasks without deadlines.</div>
+                    {/* Total time alternative input */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-200 mb-1">Total time needed (optional)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={formData.totalTimeNeeded}
+                          onChange={e => setFormData(f => ({ ...f, totalTimeNeeded: e.target.value }))}
+                          placeholder="e.g., 12"
+                          min="0"
+                          step="0.5"
+                          className="w-24 px-2 py-1 border rounded text-sm bg-white dark:bg-gray-800 dark:text-white"
+                        />
+                        <span className="text-xs text-gray-600 dark:text-gray-400">total hours</span>
+                      </div>
+                    </div>
+
+                    {/* Session calculation display */}
+                    {sessionCalculation.totalHours > 0 && (
+                      <div className="p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded text-xs">
+                        <div className="font-medium text-green-800 dark:text-green-200">
+                          📅 {sessionCalculation.estimatedSessions} sessions × {sessionCalculation.sessionDuration}h = {sessionCalculation.totalHours}h total
                         </div>
-                      </>
+                        <div className="text-green-700 dark:text-green-300 mt-1">
+                          {sessionDistribution.description}
+                        </div>
+                      </div>
                     )}
+
                   </div>
                 </div>
               )}
