@@ -1073,7 +1073,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             ));
           })()}
 
-          {/* Show "No Sessions Planned" message when all sessions are filtered out */}
+          {/* Show "No Sessions Planned" message when all sessions and commitments are filtered out */}
           {todaysPlan.plannedTasks.filter(session => session.status !== 'skipped').length === 0 && getCommitmentsForDate(todaysPlan.date, fixedCommitments, smartCommitments).length === 0 && (
             <div className="text-center py-8">
               <div className="text-4xl mb-4">📚</div>
