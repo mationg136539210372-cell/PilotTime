@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BookOpen, Edit, Trash2, CheckCircle2, X, Info, ChevronDown, ChevronUp, HelpCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Task, UserSettings } from '../types';
-import { formatTime, checkFrequencyDeadlineConflict } from '../utils/scheduling';
+import { formatTime, calculateSessionDistribution } from '../utils/scheduling';
 
 interface TaskListProps {
   tasks: Task[];
@@ -18,8 +18,7 @@ type EditFormData = Partial<Task> & {
   impact?: string;
   deadlineType?: 'hard' | 'soft' | 'none';
   schedulingPreference?: 'consistent' | 'opportunistic' | 'intensive';
-  targetFrequency?: 'daily' | 'weekly' | '3x-week' | 'flexible';
-  respectFrequencyForDeadlines?: boolean;
+  sessionDuration?: number; // Preferred session duration in hours
   preferredTimeSlots?: ('morning' | 'afternoon' | 'evening')[];
   minWorkBlock?: number;
   maxSessionLength?: number;
@@ -117,34 +116,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     return daysUntilDeadline <= 3 && editFormData.importance === false;
   }, [editFormData.deadline, editFormData.importance]);
 
-  // Check time restrictions for frequency preferences (similar to TaskInput)
-  const frequencyRestrictions = useMemo(() => {
-    if (!editFormData.deadline || editFormData.deadlineType === 'none') {
-      return { disableWeekly: false, disable3xWeek: false };
-    }
-
-    const startDate = new Date(editFormData.startDate || new Date().toISOString().split('T')[0]);
-    const deadlineDate = new Date(editFormData.deadline);
-    const timeDiff = deadlineDate.getTime() - startDate.getTime();
-    const daysUntilDeadline = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-
-    return {
-      disableWeekly: daysUntilDeadline < 14, // Less than 2 weeks
-      disable3xWeek: daysUntilDeadline < 7   // Less than 1 week
-    };
-  }, [editFormData.deadline, editFormData.deadlineType, editFormData.startDate]);
-
-  // Auto-adjust frequency when restrictions change (similar to TaskInput)
-  React.useEffect(() => {
-    if (editingTaskId) {
-      if (frequencyRestrictions.disableWeekly && editFormData.targetFrequency === 'weekly') {
-        setEditFormData(prev => ({ ...prev, targetFrequency: 'daily' }));
-      }
-      if (frequencyRestrictions.disable3xWeek && editFormData.targetFrequency === '3x-week') {
-        setEditFormData(prev => ({ ...prev, targetFrequency: 'daily' }));
-      }
-    }
-  }, [frequencyRestrictions.disableWeekly, frequencyRestrictions.disable3xWeek, editFormData.targetFrequency, editingTaskId]);
+  // No frequency restrictions needed - using session-based estimation
 
   // Reset conflicting options when one-sitting task is toggled
   React.useEffect(() => {
@@ -168,26 +140,20 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     const timeDiff = deadlineDate.getTime() - startDate.getTime();
     const totalDays = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)) + 1; // +1 to include start day
 
+    // Calculate sessions based on deadline pressure
     let workDays = 0;
-    switch (editFormData.targetFrequency) {
-      case 'daily':
-        workDays = totalDays;
-        break;
-      case '3x-week':
-        workDays = Math.floor((totalDays / 7) * 3) + Math.min(3, totalDays % 7);
-        break;
-      case 'weekly':
-        workDays = Math.ceil(totalDays / 7);
-        break;
-      case 'flexible':
-        workDays = Math.ceil(totalDays * 0.7); // Assume 70% of days for flexible
-        break;
-      default:
-        workDays = totalDays;
+    const daysUntilDeadline = Math.ceil((new Date(editFormData.deadline).getTime() - new Date(editFormData.startDate || new Date().toISOString().split('T')[0]).getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysUntilDeadline < 7) {
+      workDays = totalDays; // Daily for urgent deadlines
+    } else if (daysUntilDeadline < 14) {
+      workDays = Math.ceil(totalDays / 2); // Every other day
+    } else {
+      workDays = Math.ceil(totalDays / 3); // Every 2-3 days
     }
 
     return sessionDuration * workDays;
-  }, [editFormData.estimationMode, editFormData.sessionDurationHours, editFormData.sessionDurationMinutes, editFormData.deadline, editFormData.deadlineType, editFormData.startDate, editFormData.targetFrequency]);
+  }, [editFormData.estimationMode, editFormData.sessionDurationHours, editFormData.sessionDurationMinutes, editFormData.deadline, editFormData.deadlineType, editFormData.startDate]);
 
   // Get effective total time (either direct input or calculated from sessions)
   const getEffectiveTotalTime = () => {
@@ -237,14 +203,13 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
     const taskForCheck = {
       deadline: editFormData.deadline,
       estimatedHours: totalHours,
-      targetFrequency: editFormData.targetFrequency,
+      sessionDuration: editFormData.sessionDuration || 2,
       deadlineType: editFormData.deadlineType,
-      minWorkBlock: editFormData.minWorkBlock,
       startDate: editFormData.startDate
     };
 
-    return checkFrequencyDeadlineConflict(taskForCheck, userSettings);
-  }, [editFormData.deadline, editFormData.estimatedHours, editFormData.estimatedMinutes, editFormData.targetFrequency, editFormData.deadlineType, editFormData.minWorkBlock, editFormData.startDate, editFormData.estimationMode, editFormData.sessionDurationHours, editFormData.sessionDurationMinutes, calculateSessionBasedTotal, userSettings]);
+    return calculateSessionDistribution(taskForCheck, userSettings);
+  }, [editFormData.deadline, editFormData.estimatedHours, editFormData.estimatedMinutes, editFormData.sessionDuration, editFormData.deadlineType, editFormData.startDate, editFormData.estimationMode, editFormData.sessionDurationHours, editFormData.sessionDurationMinutes, calculateSessionBasedTotal, userSettings]);
 
   const getUrgencyColor = (deadline: string): string => {
     const now = new Date();
@@ -317,8 +282,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
       impact: task.impact || (task.importance ? 'high' : 'low'),
       deadlineType: task.deadlineType || (task.deadline ? 'hard' : 'none'),
       schedulingPreference: task.schedulingPreference || 'consistent',
-      targetFrequency: task.targetFrequency || 'daily', // Default to daily for all tasks
-      respectFrequencyForDeadlines: task.respectFrequencyForDeadlines !== false, // Default to true
+      sessionDuration: task.sessionDuration || 2, // Default to 2 hours per session
       preferredTimeSlots: task.preferredTimeSlots || [],
       minWorkBlock: task.minWorkBlock || 30,
       maxSessionLength: task.maxSessionLength || 2,
@@ -370,8 +334,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
         importance: editFormData.impact === 'high',
         priority: editFormData.impact === 'high', // Add priority field
         // Ensure all advanced fields are properly updated
-        targetFrequency: editFormData.targetFrequency,
-        respectFrequencyForDeadlines: editFormData.respectFrequencyForDeadlines,
+        sessionDuration: editFormData.sessionDuration,
         preferredTimeSlots: editFormData.preferredTimeSlots,
         minWorkBlock: editFormData.minWorkBlock,
         maxSessionLength: editFormData.maxSessionLength,
@@ -571,46 +534,32 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdateTask, onDeleteTask, 
                       )}
                     </div>
 
-                    {/* 6. Frequency */}
+                    {/* 6. Session Planning */}
                     {!editFormData.isOneTimeTask && (
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
-                          How often would you like to work on this?
+                          Session Duration
                         </label>
-                        <select
-                          value={editFormData.targetFrequency || 'daily'}
-                          onChange={(e) => setEditFormData({ ...editFormData, targetFrequency: e.target.value as any })}
-                          className="w-full px-3 py-2 border rounded-lg text-base bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="daily">🗓️ Daily progress - Work a bit each day</option>
-                          <option
-                            value="3x-week"
-                            disabled={frequencyRestrictions.disable3xWeek}
-                          >
-                            📅 Few times per week - Every 2-3 days{frequencyRestrictions.disable3xWeek ? ' (Need 1+ week)' : ''}
-                          </option>
-                          <option
-                            value="weekly"
-                            disabled={frequencyRestrictions.disableWeekly}
-                          >
-                            📆 Weekly sessions - Once per week{frequencyRestrictions.disableWeekly ? ' (Need 2+ weeks)' : ''}
-                          </option>
-                          <option value="flexible">⏰ When I have time - Flexible scheduling</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={editFormData.sessionDuration || 2}
+                            onChange={(e) => setEditFormData({ ...editFormData, sessionDuration: parseFloat(e.target.value) || 2 })}
+                            min="0.5"
+                            max="8"
+                            step="0.5"
+                            className="w-24 px-3 py-2 border rounded-lg text-sm bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                          <span className="text-sm text-gray-600 dark:text-gray-400">hours per session</span>
+                        </div>
 
-                        {deadlineConflict.hasConflict && (
-                          <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded text-xs text-amber-700 dark:text-amber-200">
-                            <div className="flex items-start gap-1">
-                              <span className="text-amber-600 dark:text-amber-400">⚠️</span>
-                              <div>
-                                <div className="font-medium">Frequency preference may not allow completion before deadline</div>
-                                <div className="mt-1">{deadlineConflict.reason}</div>
-                                {deadlineConflict.recommendedFrequency && (
-                                  <div className="mt-1">
-                                    <strong>Recommended:</strong> Switch to "{deadlineConflict.recommendedFrequency}" frequency, or daily scheduling will be used instead.
-                                  </div>
-                                )}
-                              </div>
+                        {editFormData.deadline && (
+                          <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded text-xs">
+                            <div className="font-medium text-blue-800 dark:text-blue-200">
+                              📅 Smart Distribution Preview
+                            </div>
+                            <div className="text-blue-700 dark:text-blue-300 mt-1">
+                              Sessions distributed automatically based on deadline pressure
                             </div>
                           </div>
                         )}
