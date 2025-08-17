@@ -6,8 +6,10 @@ import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionS
 interface StudyPlanViewProps {
   studyPlans: StudyPlan[];
   tasks: Task[];
-  fixedCommitments: FixedCommitment[]; // Added fixedCommitments prop
+  fixedCommitments: FixedCommitment[];
+  smartCommitments: SmartCommitment[];
   onSelectTask: (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => void;
+  onSelectCommitment?: (commitment: FixedCommitment | SmartCommitment, duration: number) => void;
   onGenerateStudyPlan: () => void;
   onUndoSessionDone: (planDate: string, taskId: string, sessionNumber: number) => void;
   onSkipSession: (planDate: string, taskId: string, sessionNumber: number) => void; // NEW PROP for skipping sessions
