@@ -2585,13 +2585,19 @@ function App() {
                                     onUpdateCommitment={handleUpdateFixedCommitment}
                                     onCancel={() => setEditingCommitment(null)}
                                 />
+                            ) : editingSmartCommitment ? (
+                                <SmartCommitmentEdit
+                                    commitment={editingSmartCommitment}
+                                    onUpdateCommitment={handleUpdateSmartCommitment}
+                                    onCancel={() => setEditingSmartCommitment(null)}
+                                />
                             ) : (
                                 <CommitmentsList
-                        commitments={[...fixedCommitments, ...smartCommitments]}
-                        onEditCommitment={setEditingCommitment}
-                        onEditSmartCommitment={setEditingSmartCommitment}
-                        onDeleteCommitment={handleDeleteCommitment}
-                    />
+                                    commitments={[...fixedCommitments, ...smartCommitments]}
+                                    onEditCommitment={setEditingCommitment}
+                                    onEditSmartCommitment={setEditingSmartCommitment}
+                                    onDeleteCommitment={handleDeleteCommitment}
+                                />
                             )}
                         </div>
                     )}
