@@ -139,9 +139,64 @@ export interface TimerState {
   currentTaskId: string | null;
 }
 
+export interface TimeRange {
+  start: string; // HH:MM format
+  end: string; // HH:MM format
+}
+
+export interface GeneratedSession {
+  date: string; // YYYY-MM-DD format
+  startTime: string; // HH:MM format
+  endTime: string; // HH:MM format
+  duration: number; // Duration in hours
+  dayOfWeek: number; // 0 = Sunday, 1 = Monday, etc.
+}
+
+export interface SmartCommitment {
+  id: string;
+  title: string;
+  type: 'smart';
+  category: string;
+  location?: string;
+  description?: string;
+  createdAt: string;
+
+  // Goal-based inputs
+  totalHoursPerWeek: number;
+  preferredDays: number[]; // Array of preferred days (0 = Sunday, 1 = Monday, etc.)
+  preferredTimeRanges: TimeRange[]; // Array of preferred time ranges
+  sessionDurationRange: { min: number; max: number }; // Session duration range in minutes
+
+  // Flexibility settings
+  allowTimeShifting: boolean; // Allow system to shift times when conflicts arise
+  priorityLevel: 'important' | 'standard'; // Priority for conflict resolution
+
+  // Generated schedule
+  suggestedSessions: GeneratedSession[];
+  isConfirmed: boolean; // Whether user has confirmed the suggested schedule
+
+  // Date range for the smart commitment
+  dateRange?: {
+    startDate: string; // YYYY-MM-DD format
+    endDate: string; // YYYY-MM-DD format
+  };
+
+  // Manual overrides tracking
+  manualOverrides?: {
+    [date: string]: {
+      startTime?: string;
+      endTime?: string;
+      isDeleted?: boolean;
+    };
+  };
+
+  countsTowardDailyHours?: boolean; // Whether this commitment counts toward daily available hours
+}
+
 export interface FixedCommitment {
   id: string;
   title: string;
+  type?: 'fixed'; // Add type to distinguish from smart commitments
   startTime?: string; // HH:MM format - optional for all-day events
   endTime?: string; // HH:MM format - optional for all-day events
   recurring: boolean; // true for recurring, false for one-time
@@ -170,16 +225,21 @@ export interface FixedCommitment {
   };
 }
 
+// Union type for all commitment types
+export type Commitment = FixedCommitment | SmartCommitment;
+
 export interface CalendarEvent {
   id: string;
   title: string;
   start: Date;
   end: Date;
   resource: {
-    type: 'study' | 'commitment';
-    data: StudySession | FixedCommitment;
+    type: 'study' | 'commitment' | 'smart-commitment';
+    data: StudySession | FixedCommitment | SmartCommitment;
     taskId?: string;
     planDate?: string; // For study sessions, which plan date they belong to
+    commitmentType?: 'fixed' | 'smart'; // Additional field to distinguish commitment types
+    isPattern?: boolean; // For smart commitments, indicates this is part of a recurring pattern
   };
 }
 
