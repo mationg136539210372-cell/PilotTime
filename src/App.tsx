@@ -2543,6 +2543,7 @@ function App() {
                             tasks={tasks}
                             settings={settings}
                             onSelectTask={handleSelectTask}
+                            onSelectCommitment={handleSelectCommitment}
                             onStartManualSession={(commitment, durationSeconds) => {
                                 setGlobalTimer({
                                     isRunning: false,
