@@ -290,12 +290,73 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleToggleOverrideActive = (date: string) => {
-    const updatedOverrides = dateSpecificStudyWindows.map(override => 
-      override.date === date 
+    const updatedOverrides = dateSpecificStudyWindows.map(override =>
+      override.date === date
         ? { ...override, isActive: !override.isActive }
         : override
     );
     setDateSpecificStudyWindows(updatedOverrides);
+  };
+
+  // Day-specific study window handlers
+  const handleAddDaySpecificOverride = () => {
+    const validation = validateDaySpecificOverride();
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
+    // Check if override for this day already exists
+    const existingIndex = daySpecificStudyWindows.findIndex(override => override.dayOfWeek === newDayOverrideDayOfWeek);
+
+    if (existingIndex !== -1) {
+      // Update existing override
+      const updatedOverrides = [...daySpecificStudyWindows];
+      updatedOverrides[existingIndex] = {
+        dayOfWeek: newDayOverrideDayOfWeek,
+        startHour: newDayOverrideStartHour,
+        endHour: newDayOverrideEndHour,
+        isActive: true
+      };
+      setDaySpecificStudyWindows(updatedOverrides);
+    } else {
+      // Add new override
+      const newOverride: DaySpecificStudyWindow = {
+        dayOfWeek: newDayOverrideDayOfWeek,
+        startHour: newDayOverrideStartHour,
+        endHour: newDayOverrideEndHour,
+        isActive: true
+      };
+      setDaySpecificStudyWindows([...daySpecificStudyWindows, newOverride]);
+    }
+
+    // Reset form
+    setNewDayOverrideDayOfWeek(1);
+    setNewDayOverrideStartHour(6);
+    setNewDayOverrideEndHour(23);
+    setEditingDayOverride(null);
+    setShowDaySpecificForm(false);
+  };
+
+  const handleEditDaySpecificOverride = (override: DaySpecificStudyWindow) => {
+    setEditingDayOverride(override);
+    setNewDayOverrideDayOfWeek(override.dayOfWeek);
+    setNewDayOverrideStartHour(override.startHour);
+    setNewDayOverrideEndHour(override.endHour);
+    setShowDaySpecificForm(true);
+  };
+
+  const handleDeleteDaySpecificOverride = (dayOfWeek: number) => {
+    setDaySpecificStudyWindows(daySpecificStudyWindows.filter(override => override.dayOfWeek !== dayOfWeek));
+  };
+
+  const handleToggleDayOverrideActive = (dayOfWeek: number) => {
+    const updatedOverrides = daySpecificStudyWindows.map(override =>
+      override.dayOfWeek === dayOfWeek
+        ? { ...override, isActive: !override.isActive }
+        : override
+    );
+    setDaySpecificStudyWindows(updatedOverrides);
   };
 
   const formatTimeDisplay = (hour: number): string => {
