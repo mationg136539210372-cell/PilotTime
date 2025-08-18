@@ -13,7 +13,7 @@ interface UseRobustTimerProps {
  * Robust timer hook that works even when the browser tab is inactive
  * Uses Page Visibility API and high-resolution timing to maintain accuracy
  */
-export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete }: UseRobustTimerProps) => {
+export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitle }: UseRobustTimerProps) => {
   const rafId = useRef<number>();
   const intervalId = useRef<number>();
   const wasRunning = useRef(false);
