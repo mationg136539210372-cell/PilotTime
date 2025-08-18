@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { TimerState } from '../types';
+import { showTimerCompletionNotification, playTimerAlert } from '../utils/timer-notifications';
 
 interface UseRobustTimerProps {
   timer: TimerState;
