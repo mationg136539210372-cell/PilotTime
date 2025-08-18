@@ -250,11 +250,32 @@ const CommitmentsList: React.FC<CommitmentsListProps> = ({
                             <span className="font-medium">⏰</span>
                             <span>All Day</span>
                           </div>
+                        ) : commitment.useDaySpecificTiming && commitment.daySpecificTimings && commitment.daySpecificTimings.length > 0 ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                              <span className="font-medium">⏰</span>
+                              <span className="font-medium">Day-specific timing:</span>
+                            </div>
+                            <div className="ml-6 space-y-1">
+                              {commitment.daySpecificTimings.map((timing, index) => {
+                                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][timing.dayOfWeek];
+                                return (
+                                  <div key={index} className="text-xs text-gray-500 dark:text-gray-400">
+                                    <span className="font-medium">{dayName}:</span>{' '}
+                                    {timing.isAllDay ? 'All Day' : `${timing.startTime} - ${timing.endTime}`}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         ) : (
                           <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                             <span className="font-medium">⏰</span>
                             <span>
-                              {commitment.startTime} - {commitment.endTime}
+                              {commitment.startTime && commitment.endTime
+                                ? `${commitment.startTime} - ${commitment.endTime}`
+                                : 'No time specified'
+                              }
                             </span>
                           </div>
                         )}
