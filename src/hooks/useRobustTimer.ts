@@ -6,6 +6,7 @@ interface UseRobustTimerProps {
   timer: TimerState;
   onTimerUpdate: (newTimer: TimerState) => void;
   onTimerComplete?: () => void;
+  taskTitle?: string; // For notifications
 }
 
 /**
