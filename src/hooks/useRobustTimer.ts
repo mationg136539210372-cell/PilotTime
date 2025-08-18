@@ -1,0 +1,247 @@
+import { useEffect, useRef, useCallback } from 'react';
+import { TimerState } from '../types';
+
+interface UseRobustTimerProps {
+  timer: TimerState;
+  onTimerUpdate: (newTimer: TimerState) => void;
+  onTimerComplete?: () => void;
+}
+
+/**
+ * Robust timer hook that works even when the browser tab is inactive
+ * Uses Page Visibility API and high-resolution timing to maintain accuracy
+ */
+export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete }: UseRobustTimerProps) => {
+  const rafId = useRef<number>();
+  const intervalId = useRef<number>();
+  const wasRunning = useRef(false);
+  const lastVisibilityChange = useRef<number>(performance.now());
+
+  // Calculate the actual current time based on elapsed time since start
+  const calculateActualTime = useCallback((timerState: TimerState): number => {
+    if (!timerState.isRunning || !timerState.startTime) {
+      return timerState.currentTime;
+    }
+
+    const now = performance.now();
+    const elapsedSinceStart = (now - timerState.startTime) / 1000; // Convert to seconds
+    const pausedTime = timerState.pausedTime || 0;
+    const actualElapsed = elapsedSinceStart - pausedTime;
+    const remainingTime = Math.max(0, timerState.totalTime - actualElapsed);
+
+    return remainingTime;
+  }, []);
+
+  // Update timer display using RAF for smooth updates when visible
+  const updateTimerDisplay = useCallback(() => {
+    if (!timer.isRunning) return;
+
+    const actualTime = calculateActualTime(timer);
+    const now = performance.now();
+
+    // Only update if there's a meaningful change (> 0.1 seconds)
+    if (Math.abs(actualTime - timer.currentTime) > 0.1) {
+      const newTimer: TimerState = {
+        ...timer,
+        currentTime: actualTime,
+        lastUpdateTime: now
+      };
+
+      onTimerUpdate(newTimer);
+
+      // Check if timer completed
+      if (actualTime <= 0 && onTimerComplete) {
+        onTimerComplete();
+        return;
+      }
+    }
+
+    // Continue animation loop if still running
+    if (timer.isRunning) {
+      rafId.current = requestAnimationFrame(updateTimerDisplay);
+    }
+  }, [timer, calculateActualTime, onTimerUpdate, onTimerComplete]);
+
+  // Handle visibility changes to maintain timer accuracy
+  const handleVisibilityChange = useCallback(() => {
+    const now = performance.now();
+    const wasHidden = document.hidden;
+
+    if (wasHidden) {
+      // Tab became hidden - record the time
+      lastVisibilityChange.current = now;
+      wasRunning.current = timer.isRunning;
+      
+      // Cancel RAF since it won't work reliably in background
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+      }
+
+      // Use interval fallback for background updates (less frequent but more reliable)
+      if (timer.isRunning) {
+        intervalId.current = window.setInterval(() => {
+          const actualTime = calculateActualTime(timer);
+          if (actualTime <= 0 && onTimerComplete) {
+            clearInterval(intervalId.current);
+            onTimerComplete();
+          }
+        }, 5000); // Check every 5 seconds in background
+      }
+    } else {
+      // Tab became visible again
+      if (intervalId.current) {
+        clearInterval(intervalId.current);
+      }
+
+      if (wasRunning.current && timer.isRunning) {
+        // Recalculate time based on actual elapsed time
+        const actualTime = calculateActualTime(timer);
+        
+        const newTimer: TimerState = {
+          ...timer,
+          currentTime: actualTime,
+          lastUpdateTime: now
+        };
+
+        onTimerUpdate(newTimer);
+
+        // Check if timer completed while hidden
+        if (actualTime <= 0) {
+          if (onTimerComplete) {
+            onTimerComplete();
+          }
+        } else {
+          // Resume RAF updates
+          rafId.current = requestAnimationFrame(updateTimerDisplay);
+        }
+      }
+    }
+  }, [timer, calculateActualTime, onTimerUpdate, onTimerComplete, updateTimerDisplay]);
+
+  // Start/stop timer effects
+  useEffect(() => {
+    if (timer.isRunning) {
+      // Start RAF updates if page is visible
+      if (!document.hidden) {
+        rafId.current = requestAnimationFrame(updateTimerDisplay);
+      }
+    } else {
+      // Stop all updates
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+      }
+      if (intervalId.current) {
+        clearInterval(intervalId.current);
+      }
+    }
+
+    return () => {
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+      }
+      if (intervalId.current) {
+        clearInterval(intervalId.current);
+      }
+    };
+  }, [timer.isRunning, updateTimerDisplay]);
+
+  // Set up visibility change listeners
+  useEffect(() => {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Also listen for focus/blur as backup
+    window.addEventListener('focus', handleVisibilityChange);
+    window.addEventListener('blur', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+      window.removeEventListener('blur', handleVisibilityChange);
+    };
+  }, [handleVisibilityChange]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+      }
+      if (intervalId.current) {
+        clearInterval(intervalId.current);
+      }
+    };
+  }, []);
+};
+
+/**
+ * Helper function to start a timer with proper timing data
+ */
+export const startTimer = (currentTimer: TimerState): TimerState => {
+  const now = performance.now();
+  return {
+    ...currentTimer,
+    isRunning: true,
+    startTime: now,
+    lastUpdateTime: now,
+    pausedTime: currentTimer.pausedTime || 0
+  };
+};
+
+/**
+ * Helper function to pause a timer and track paused time
+ */
+export const pauseTimer = (currentTimer: TimerState): TimerState => {
+  if (!currentTimer.isRunning || !currentTimer.startTime) {
+    return { ...currentTimer, isRunning: false };
+  }
+
+  const now = performance.now();
+  const elapsedSinceStart = (now - currentTimer.startTime) / 1000;
+  const currentPausedTime = currentTimer.pausedTime || 0;
+  const actualElapsed = elapsedSinceStart - currentPausedTime;
+  const remainingTime = Math.max(0, currentTimer.totalTime - actualElapsed);
+
+  return {
+    ...currentTimer,
+    isRunning: false,
+    currentTime: remainingTime,
+    lastUpdateTime: now
+  };
+};
+
+/**
+ * Helper function to resume a paused timer
+ */
+export const resumeTimer = (currentTimer: TimerState): TimerState => {
+  const now = performance.now();
+  
+  if (currentTimer.startTime && currentTimer.lastUpdateTime) {
+    // Calculate how long we were paused
+    const pausedDuration = (now - currentTimer.lastUpdateTime) / 1000;
+    const newPausedTime = (currentTimer.pausedTime || 0) + pausedDuration;
+    
+    return {
+      ...currentTimer,
+      isRunning: true,
+      pausedTime: newPausedTime,
+      lastUpdateTime: now
+    };
+  }
+
+  // If no previous timing data, treat as new start
+  return startTimer(currentTimer);
+};
+
+/**
+ * Helper function to reset timer to initial state
+ */
+export const resetTimer = (currentTimer: TimerState): TimerState => {
+  return {
+    ...currentTimer,
+    isRunning: false,
+    currentTime: currentTimer.totalTime,
+    startTime: undefined,
+    pausedTime: undefined,
+    lastUpdateTime: undefined
+  };
+};
