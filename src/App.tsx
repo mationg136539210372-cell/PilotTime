@@ -64,7 +64,8 @@ function App() {
         enableNotifications: true,
         userPrefersPressure: false,
         studyPlanMode: 'even',
-        dateSpecificStudyWindows: []
+        dateSpecificStudyWindows: [],
+        daySpecificStudyWindows: []
     });
     const [, setIsPlanStale] = useState(false);
     const [, setLastPlanStaleReason] = useState<"settings" | "commitment" | "task" | null>(null);
