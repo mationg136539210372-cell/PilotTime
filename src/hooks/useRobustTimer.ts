@@ -65,7 +65,8 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete }: UseRob
   // Handle visibility changes to maintain timer accuracy
   const handleVisibilityChange = useCallback(() => {
     const now = performance.now();
-    const wasHidden = document.hidden;
+    // Fallback for browsers that don't support Page Visibility API
+    const wasHidden = typeof document.hidden !== 'undefined' ? document.hidden : false;
 
     if (wasHidden) {
       // Tab became hidden - record the time
