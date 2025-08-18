@@ -139,6 +139,8 @@ export interface UserSettings {
   studyPlanMode?: 'eisenhower' | 'even' | 'balanced';
   // Date-specific study windows (optional)
   dateSpecificStudyWindows?: DateSpecificStudyWindow[]; // Override study windows for specific dates
+  // Day-specific study windows (optional)
+  daySpecificStudyWindows?: DaySpecificStudyWindow[]; // Override study windows for specific days of the week
 }
 
 export interface TimerState {
