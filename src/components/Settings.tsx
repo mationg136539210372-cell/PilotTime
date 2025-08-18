@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Clock, AlertTriangle, Calendar, Zap, Sun, Plus, Trash2, Edit3 } from 'lucide-react';
-import { UserSettings, StudyPlan, DateSpecificStudyWindow } from '../types';
+import { UserSettings, StudyPlan, DateSpecificStudyWindow, DaySpecificStudyWindow } from '../types';
 
 interface SettingsProps {
   settings: UserSettings;
