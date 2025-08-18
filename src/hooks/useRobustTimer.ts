@@ -92,6 +92,12 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
           const actualTime = calculateActualTime(timer);
           if (actualTime <= 0 && onTimerComplete) {
             clearInterval(intervalId.current);
+            // Show notification when completing in background
+            if (taskTitle) {
+              const timeSpent = timer.totalTime - actualTime;
+              showTimerCompletionNotification(taskTitle, timeSpent);
+              playTimerAlert();
+            }
             onTimerComplete();
           }
         }, 5000); // Check every 5 seconds in background
