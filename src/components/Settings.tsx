@@ -34,9 +34,12 @@ const Settings: React.FC<SettingsProps> = ({
   const [studyWindowEndHour, setStudyWindowEndHour] = useState(settings.studyWindowEndHour || 23);
   const [studyPlanMode, setStudyPlanMode] = useState(settings.studyPlanMode || 'even');
   const [dateSpecificStudyWindows, setDateSpecificStudyWindows] = useState<DateSpecificStudyWindow[]>(settings.dateSpecificStudyWindows || []);
-  
+  const [daySpecificStudyWindows, setDaySpecificStudyWindows] = useState<DaySpecificStudyWindow[]>(settings.daySpecificStudyWindows || []);
+
   // State for date-specific override form
   const [showDateSpecificForm, setShowDateSpecificForm] = useState(false);
+  // State for day-specific override form
+  const [showDaySpecificForm, setShowDaySpecificForm] = useState(false);
   const [editingOverride, setEditingOverride] = useState<DateSpecificStudyWindow | null>(null);
   const [newOverrideDate, setNewOverrideDate] = useState('');
   const [newOverrideStartHour, setNewOverrideStartHour] = useState(6);
