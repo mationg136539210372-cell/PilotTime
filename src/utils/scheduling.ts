@@ -1521,9 +1521,12 @@ export const generateNewStudyPlan = (
       }
     }
     
+    // Handle compromised sessions - detect and redistribute
+    handleCompromisedSessions(studyPlans, tasksEven, settings, dailyRemainingHours);
+
     // Combine sessions of the same task on the same day
     combineSessionsOnSameDay(studyPlans);
-    
+
     // Validate scheduling for conflicts after all redistribution and combining
     studyPlans.forEach(plan => {
       if (!validateSessionTimes(plan.plannedTasks, fixedCommitments, plan.date)) {
