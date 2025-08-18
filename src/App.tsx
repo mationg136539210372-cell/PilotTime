@@ -1367,7 +1367,10 @@ function App() {
                 isRunning: false,
                 currentTime: Math.floor(timeToUse * 3600),
                 totalTime: Math.floor(timeToUse * 3600),
-                currentTaskId: task.id
+                currentTaskId: task.id,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
             });
         } else if (session?.allocatedHours) {
             // If same task but different session, update timer to match session duration
@@ -1376,7 +1379,10 @@ function App() {
                 isRunning: false,
                 currentTime: Math.floor(timeToUse * 3600),
                 totalTime: Math.floor(timeToUse * 3600),
-                currentTaskId: task.id
+                currentTaskId: task.id,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
             });
         }
     };
