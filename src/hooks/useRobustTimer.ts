@@ -53,6 +53,12 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
 
       // Check if timer completed
       if (actualTime <= 0 && onTimerComplete) {
+        // Show notification and play alert if tab is hidden
+        if (document.hidden && taskTitle) {
+          const timeSpent = timer.totalTime - actualTime;
+          showTimerCompletionNotification(taskTitle, timeSpent);
+          playTimerAlert();
+        }
         onTimerComplete();
         return;
       }
