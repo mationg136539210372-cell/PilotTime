@@ -214,7 +214,8 @@ const Settings: React.FC<SettingsProps> = ({
       autoCompleteSessions: settings.autoCompleteSessions || false,
       enableNotifications: settings.enableNotifications !== false,
       studyPlanMode,
-      dateSpecificStudyWindows
+      dateSpecificStudyWindows,
+      daySpecificStudyWindows
     });
   };
 
