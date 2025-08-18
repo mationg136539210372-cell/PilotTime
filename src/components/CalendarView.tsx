@@ -324,22 +324,49 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             
             // Check for modified occurrence
             const modifiedSession = commitment.modifiedOccurrences?.[dateString];
-            
-            // Check if this is an all-day event (either from the commitment or a modified occurrence)
-            const isAllDay = modifiedSession?.isAllDay !== undefined ? modifiedSession.isAllDay : commitment.isAllDay;
-            
+
+            // Get day-specific timing if available
+            const dayOfWeek = currentDate.getDay();
+            const daySpecificTiming = commitment.useDaySpecificTiming
+              ? commitment.daySpecificTimings?.find(t => t.dayOfWeek === dayOfWeek)
+              : null;
+
+            // Determine if this is an all-day event (priority: modified > day-specific > general)
+            let isAllDay: boolean;
+            if (modifiedSession?.isAllDay !== undefined) {
+              isAllDay = modifiedSession.isAllDay;
+            } else if (daySpecificTiming?.isAllDay !== undefined) {
+              isAllDay = daySpecificTiming.isAllDay;
+            } else {
+              isAllDay = commitment.isAllDay || false;
+            }
+
             let startDateTime = new Date(currentDate);
             let endDateTime = new Date(currentDate);
-            
+
             if (isAllDay) {
               // For all-day events, set time to 00:00:00 for start and 23:59:59 for end
               startDateTime.setHours(0, 0, 0, 0);
               endDateTime.setHours(23, 59, 59, 999);
             } else {
-              // For time-specific events, use the specified times
-              const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime || '00:00').split(':').map(Number);
+              // For time-specific events, use the specified times (priority: modified > day-specific > general)
+              let startTime: string;
+              let endTime: string;
+
+              if (modifiedSession?.startTime && modifiedSession?.endTime) {
+                startTime = modifiedSession.startTime;
+                endTime = modifiedSession.endTime;
+              } else if (daySpecificTiming?.startTime && daySpecificTiming?.endTime) {
+                startTime = daySpecificTiming.startTime;
+                endTime = daySpecificTiming.endTime;
+              } else {
+                startTime = commitment.startTime || '00:00';
+                endTime = commitment.endTime || '23:59';
+              }
+
+              const [startHour, startMinute] = startTime.split(':').map(Number);
               startDateTime.setHours(startHour, startMinute, 0, 0);
-              const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime || '23:59').split(':').map(Number);
+              const [endHour, endMinute] = endTime.split(':').map(Number);
               endDateTime.setHours(endHour, endMinute, 0, 0);
             }
             
@@ -380,22 +407,49 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           
           // Check for modified occurrence
           const modifiedSession = commitment.modifiedOccurrences?.[dateString];
-          
-          // Check if this is an all-day event (either from the commitment or a modified occurrence)
-          const isAllDay = modifiedSession?.isAllDay !== undefined ? modifiedSession.isAllDay : commitment.isAllDay;
-          
+
+          // Get day-specific timing if available (for non-recurring commitments on specific days)
+          const dayOfWeek = currentDate.getDay();
+          const daySpecificTiming = commitment.useDaySpecificTiming
+            ? commitment.daySpecificTimings?.find(t => t.dayOfWeek === dayOfWeek)
+            : null;
+
+          // Determine if this is an all-day event (priority: modified > day-specific > general)
+          let isAllDay: boolean;
+          if (modifiedSession?.isAllDay !== undefined) {
+            isAllDay = modifiedSession.isAllDay;
+          } else if (daySpecificTiming?.isAllDay !== undefined) {
+            isAllDay = daySpecificTiming.isAllDay;
+          } else {
+            isAllDay = commitment.isAllDay || false;
+          }
+
           let startDateTime = new Date(currentDate);
           let endDateTime = new Date(currentDate);
-          
+
           if (isAllDay) {
             // For all-day events, set time to 00:00:00 for start and 23:59:59 for end
             startDateTime.setHours(0, 0, 0, 0);
             endDateTime.setHours(23, 59, 59, 999);
           } else {
-            // For time-specific events, use the specified times
-            const [startHour, startMinute] = (modifiedSession?.startTime || commitment.startTime || '00:00').split(':').map(Number);
+            // For time-specific events, use the specified times (priority: modified > day-specific > general)
+            let startTime: string;
+            let endTime: string;
+
+            if (modifiedSession?.startTime && modifiedSession?.endTime) {
+              startTime = modifiedSession.startTime;
+              endTime = modifiedSession.endTime;
+            } else if (daySpecificTiming?.startTime && daySpecificTiming?.endTime) {
+              startTime = daySpecificTiming.startTime;
+              endTime = daySpecificTiming.endTime;
+            } else {
+              startTime = commitment.startTime || '00:00';
+              endTime = commitment.endTime || '23:59';
+            }
+
+            const [startHour, startMinute] = startTime.split(':').map(Number);
             startDateTime.setHours(startHour, startMinute, 0, 0);
-            const [endHour, endMinute] = (modifiedSession?.endTime || commitment.endTime || '23:59').split(':').map(Number);
+            const [endHour, endMinute] = endTime.split(':').map(Number);
             endDateTime.setHours(endHour, endMinute, 0, 0);
           }
           
@@ -509,15 +563,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       // Otherwise, do nothing (not clickable)
     } else if (event.resource.type === 'commitment') {
       const commitment = event.resource.data as FixedCommitment;
+      const today = getLocalDateString();
+      const commitmentDate = moment(event.start).format('YYYY-MM-DD');
 
       // Check if this is a manual rescheduled session
       if (commitment.title.includes('(Manual Resched)')) {
         setSelectedManualSession(commitment);
-      } else if (commitment.countsTowardDailyHours && onSelectCommitment) {
-        // Handle clicks on commitments that count toward daily hours
+      } else if (commitment.countsTowardDailyHours && onSelectCommitment && commitmentDate === today) {
+        // Handle clicks on commitments that count toward daily hours - only for current day
         const duration = moment(event.end).diff(moment(event.start), 'hours', true);
         onSelectCommitment(commitment, duration);
       }
+      // Otherwise, do nothing (not clickable for non-current days)
     }
   };
 
@@ -658,19 +715,61 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       const targetDate = moment(start).format('YYYY-MM-DD');
       const newStartTime = moment(start).format('HH:mm');
       const newEndTime = moment(end).format('HH:mm');
+      const dayOfWeek = moment(start).day();
 
-      // For one-time commitments, update the specific date
-      if (!commitment.recurring && commitment.specificDates?.includes(targetDate)) {
+      // For recurring commitments with day-specific timing, update the specific day timing
+      if (commitment.recurring && commitment.useDaySpecificTiming) {
+        const updatedDaySpecificTimings = commitment.daySpecificTimings?.map(timing =>
+          timing.dayOfWeek === dayOfWeek
+            ? { ...timing, startTime: newStartTime, endTime: newEndTime, isAllDay: false }
+            : timing
+        ) || [];
+
+        // Also create a modified occurrence for this specific date to override the day-specific timing
+        const updatedModifiedOccurrences = {
+          ...commitment.modifiedOccurrences,
+          [targetDate]: {
+            startTime: newStartTime,
+            endTime: newEndTime,
+            title: commitment.title,
+            category: commitment.category,
+            isAllDay: false
+          }
+        };
+
         onUpdateCommitment(commitment.id, {
-          startTime: newStartTime,
-          endTime: newEndTime
+          daySpecificTimings: updatedDaySpecificTimings,
+          modifiedOccurrences: updatedModifiedOccurrences
         });
-        setDragFeedback(`✅ Commitment moved to ${newStartTime} - ${newEndTime}`);
+
+        setDragFeedback(`✅ Commitment moved to ${newStartTime} - ${newEndTime} (${moment(targetDate).format('MMM D')} & future ${moment(start).format('dddd')}s)`);
         setTimeout(() => setDragFeedback(''), 3000);
         return;
       }
 
-      // For recurring commitments, create a modified occurrence for this specific date
+      // For one-time commitments, create a modified occurrence instead of updating base times
+      if (!commitment.recurring && commitment.specificDates?.includes(targetDate)) {
+        const updatedModifiedOccurrences = {
+          ...commitment.modifiedOccurrences,
+          [targetDate]: {
+            startTime: newStartTime,
+            endTime: newEndTime,
+            title: commitment.title,
+            category: commitment.category,
+            isAllDay: false
+          }
+        };
+
+        onUpdateCommitment(commitment.id, {
+          modifiedOccurrences: updatedModifiedOccurrences
+        });
+
+        setDragFeedback(`✅ Commitment moved to ${newStartTime} - ${newEndTime} on ${moment(targetDate).format('MMM D')}`);
+        setTimeout(() => setDragFeedback(''), 3000);
+        return;
+      }
+
+      // For recurring commitments without day-specific timing, create a modified occurrence for this specific date
       if (commitment.recurring) {
         const updatedModifiedOccurrences = {
           ...commitment.modifiedOccurrences,
@@ -678,6 +777,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             startTime: newStartTime,
             endTime: newEndTime,
             title: commitment.title,
+            category: commitment.category,
             isAllDay: false
           }
         };
