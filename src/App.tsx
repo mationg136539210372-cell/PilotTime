@@ -81,7 +81,10 @@ function App() {
         isRunning: false,
         currentTime: 0,
         totalTime: 0,
-        currentTaskId: null
+        currentTaskId: null,
+        startTime: undefined,
+        pausedTime: undefined,
+        lastUpdateTime: undefined
     });
 
     const [showTaskInput, setShowTaskInput] = useState(false);
