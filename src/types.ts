@@ -22,6 +22,8 @@ export interface Task {
   maxSessionLength?: number; // Maximum session length in hours (for no-deadline tasks or as general preference)
   isOneTimeTask?: boolean; // Task should be completed in one sitting, not divided into sessions
   startDate?: string; // New: earliest date the task can be scheduled (YYYY-MM-DD)
+  targetFrequency?: 'daily' | '3x-week' | 'weekly' | 'flexible'; // Preferred scheduling frequency
+  respectFrequencyForDeadlines?: boolean; // Whether to respect frequency even for deadline tasks
 }
 
 export interface SessionSchedulingMetadata {
