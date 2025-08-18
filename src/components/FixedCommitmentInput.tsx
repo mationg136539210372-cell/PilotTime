@@ -14,76 +14,170 @@ const getDayName = (dayNum: number): string => {
   return days[dayNum];
 };
 
-// Helper function to get commitments for a specific day
+// Enhanced helper function to get commitments for a specific day with conflict detection
 const getCommitmentsForDay = (dayOfWeek: number, commitments: FixedCommitment[], targetDate?: string): FixedCommitment[] => {
   return commitments.filter(commitment => {
-    if (commitment.recurring) {
-      return commitment.daysOfWeek.includes(dayOfWeek);
-    } else if (targetDate && commitment.specificDates) {
-      const date = new Date(targetDate);
-      return commitment.specificDates.includes(targetDate) && date.getDay() === dayOfWeek;
+    // Use the proper utility function to check if commitment applies to date
+    if (targetDate) {
+      return doesCommitmentApplyToDate(commitment, targetDate);
     }
-    return false;
+
+    // Fallback for when no target date is provided
+    if (commitment.recurring) {
+      const dayMatches = commitment.daysOfWeek.includes(dayOfWeek);
+      if (!dayMatches) return false;
+
+      // Check date range if specified
+      if (commitment.dateRange?.startDate && commitment.dateRange?.endDate) {
+        const today = new Date().toISOString().split('T')[0];
+        return today >= commitment.dateRange.startDate && today <= commitment.dateRange.endDate;
+      }
+
+      return true;
+    } else {
+      // For one-time commitments without target date, we can't determine applicability
+      return false;
+    }
   });
 };
 
-// Helper function to find available time slots for a day
+// Enhanced helper function to find optimal available time slots for a day
 const findAvailableTimeSlots = (
   dayOfWeek: number,
   commitments: FixedCommitment[],
   studyPlans: StudyPlan[],
   settings: UserSettings,
-  duration: number = 1 // duration in hours
-): { start: string; end: string }[] => {
-  const dayCommitments = getCommitmentsForDay(dayOfWeek, commitments);
-  const busySlots: { start: string; end: string }[] = [];
+  targetDate?: string
+): { start: string; end: string; duration: number; isOptimal: boolean }[] => {
+  const dayCommitments = getCommitmentsForDay(dayOfWeek, commitments, targetDate);
+  const busySlots: { start: number; end: number; source: string }[] = [];
 
-  // Add commitment time slots
+  // Convert time string to minutes for precise calculations
+  const timeToMinutes = (timeStr: string): number => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return (hours || 0) * 60 + (minutes || 0);
+  };
+
+  const minutesToTime = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+  };
+
+  // Add commitment time slots with conflict detection
   dayCommitments.forEach(commitment => {
-    if (!commitment.isAllDay && commitment.startTime && commitment.endTime) {
+    if (commitment.isAllDay) {
+      // All-day commitments don't necessarily block time slots for most categories
+      // Only block if it's a high-priority category that requires full attention
+      const blockingCategories = ['Work', 'Academics'];
+      if (blockingCategories.includes(commitment.category)) {
+        busySlots.push({
+          start: 0,
+          end: 24 * 60 - 1,
+          source: `${commitment.title} (All Day)`
+        });
+      }
+    } else if (commitment.startTime && commitment.endTime) {
+      // Handle day-specific timing if applicable
+      let startTime = commitment.startTime;
+      let endTime = commitment.endTime;
+
+      if (commitment.useDaySpecificTiming && commitment.daySpecificTimings) {
+        const dayTiming = commitment.daySpecificTimings.find(t => t.dayOfWeek === dayOfWeek);
+        if (dayTiming && !dayTiming.isAllDay && dayTiming.startTime && dayTiming.endTime) {
+          startTime = dayTiming.startTime;
+          endTime = dayTiming.endTime;
+        }
+      }
+
       busySlots.push({
-        start: commitment.startTime,
-        end: commitment.endTime
+        start: timeToMinutes(startTime),
+        end: timeToMinutes(endTime),
+        source: commitment.title
       });
     }
   });
 
-  // Sort busy slots by start time
-  busySlots.sort((a, b) => a.start.localeCompare(b.start));
+  // Add study sessions from existing plans for the target date
+  if (targetDate) {
+    const planForDate = studyPlans.find(plan => plan.date === targetDate);
+    if (planForDate) {
+      planForDate.plannedTasks.forEach(session => {
+        if (session.startTime && session.endTime && !session.done && session.status !== 'skipped') {
+          busySlots.push({
+            start: timeToMinutes(session.startTime),
+            end: timeToMinutes(session.endTime),
+            source: `Study: ${session.taskId.substring(0, 20)}...`
+          });
+        }
+      });
+    }
+  }
 
-  // Find available slots
-  const availableSlots: { start: string; end: string }[] = [];
-  const workStart = settings.studyWindowStartHour || 6;
-  const workEnd = settings.studyWindowEndHour || 23;
+  // Sort busy slots by start time and merge overlapping slots
+  busySlots.sort((a, b) => a.start - b.start);
+
+  const mergedSlots: { start: number; end: number; source: string }[] = [];
+  for (const slot of busySlots) {
+    if (mergedSlots.length === 0 || mergedSlots[mergedSlots.length - 1].end < slot.start) {
+      mergedSlots.push(slot);
+    } else {
+      // Merge overlapping slots
+      const lastSlot = mergedSlots[mergedSlots.length - 1];
+      lastSlot.end = Math.max(lastSlot.end, slot.end);
+      lastSlot.source += ` + ${slot.source}`;
+    }
+  }
+
+  // Find available time gaps and calculate optimal durations
+  const availableSlots: { start: string; end: string; duration: number; isOptimal: boolean }[] = [];
+  const workStart = (settings.studyWindowStartHour || 6) * 60;
+  const workEnd = (settings.studyWindowEndHour || 23) * 60;
+  const minSessionMinutes = settings.minSessionLength || 30; // Default 30 minutes minimum
+  const maxSessionMinutes = (settings.maxSessionHours || 4) * 60; // Default 4 hours maximum
 
   let currentTime = workStart;
 
-  busySlots.forEach(busySlot => {
-    const busyStartHour = parseInt(busySlot.start.split(':')[0]);
-    const busyStartMinute = parseInt(busySlot.start.split(':')[1]);
-    const busyStart = busyStartHour + busyStartMinute / 60;
+  // Check gaps between busy slots
+  for (const busySlot of mergedSlots) {
+    const gapDuration = busySlot.start - currentTime;
 
-    if (currentTime + duration <= busyStart) {
+    if (gapDuration >= minSessionMinutes) {
+      const optimalDuration = Math.min(gapDuration, maxSessionMinutes);
+      const isOptimal = gapDuration >= 120; // 2+ hours is considered optimal
+
       availableSlots.push({
-        start: formatHour(Math.floor(currentTime)),
-        end: formatHour(Math.floor(currentTime + duration))
+        start: minutesToTime(currentTime),
+        end: minutesToTime(currentTime + optimalDuration),
+        duration: optimalDuration / 60, // Convert back to hours
+        isOptimal
       });
     }
 
-    const busyEndHour = parseInt(busySlot.end.split(':')[0]);
-    const busyEndMinute = parseInt(busySlot.end.split(':')[1]);
-    currentTime = Math.max(currentTime, busyEndHour + busyEndMinute / 60);
-  });
+    currentTime = Math.max(currentTime, busySlot.end);
+  }
 
-  // Check if there's time after last commitment
-  if (currentTime + duration <= workEnd) {
+  // Check if there's time after the last commitment
+  const finalGapDuration = workEnd - currentTime;
+  if (finalGapDuration >= minSessionMinutes) {
+    const optimalDuration = Math.min(finalGapDuration, maxSessionMinutes);
+    const isOptimal = finalGapDuration >= 120; // 2+ hours is considered optimal
+
     availableSlots.push({
-      start: formatHour(Math.floor(currentTime)),
-      end: formatHour(Math.floor(currentTime + duration))
+      start: minutesToTime(currentTime),
+      end: minutesToTime(currentTime + optimalDuration),
+      duration: optimalDuration / 60, // Convert back to hours
+      isOptimal
     });
   }
 
-  return availableSlots.slice(0, 3); // Return top 3 suggestions
+  // Sort by optimal slots first, then by duration (largest first)
+  availableSlots.sort((a, b) => {
+    if (a.isOptimal !== b.isOptimal) return a.isOptimal ? -1 : 1;
+    return b.duration - a.duration;
+  });
+
+  return availableSlots.slice(0, 4); // Return top 4 suggestions
 };
 
 interface FixedCommitmentInputProps {
@@ -138,7 +232,17 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
 
     selectedDays.forEach(dayOfWeek => {
       const dayCommitments = getCommitmentsForDay(dayOfWeek, existingCommitments);
-      const availableSlots = findAvailableTimeSlots(dayOfWeek, existingCommitments, existingPlans, settings);
+      const availableSlots = findAvailableTimeSlots(dayOfWeek, existingCommitments, existingPlans, settings,
+        // Calculate target date for this day of week (next occurrence)
+        (() => {
+          const today = new Date();
+          const todayDayOfWeek = today.getDay();
+          const daysUntilTarget = (dayOfWeek - todayDayOfWeek + 7) % 7;
+          const targetDate = new Date(today);
+          targetDate.setDate(today.getDate() + (daysUntilTarget === 0 ? 7 : daysUntilTarget));
+          return targetDate.toISOString().split('T')[0];
+        })()
+      );
 
       // Check for conflicts with current form data
       const conflicts: FixedCommitment[] = [];
