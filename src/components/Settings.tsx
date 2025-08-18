@@ -363,6 +363,11 @@ const Settings: React.FC<SettingsProps> = ({
     return hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
   };
 
+  const getDayName = (dayOfWeek: number): string => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[dayOfWeek];
+  };
+
   const validateDateSpecificOverride = (): { isValid: boolean; message: string } => {
     if (!newOverrideDate) {
       return { isValid: false, message: 'Please select a date.' };
