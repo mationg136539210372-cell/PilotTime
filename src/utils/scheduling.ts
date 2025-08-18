@@ -39,15 +39,46 @@ const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitme
     }
 
     if (shouldInclude) {
-      // Calculate duration in hours
-      const [startHour, startMin] = commitment.startTime.split(':').map(Number);
-      const [endHour, endMin] = commitment.endTime.split(':').map(Number);
-      const startMinutes = startHour * 60 + startMin;
-      const endMinutes = endHour * 60 + endMin;
-      const durationMinutes = endMinutes - startMinutes;
-      const durationHours = durationMinutes / 60;
+      // Check for modified occurrence for this specific date
+      const modifiedSession = commitment.modifiedOccurrences?.[date];
 
-      totalCommittedHours += durationHours;
+      // Skip if this date was deleted
+      if (commitment.deletedOccurrences?.includes(date)) {
+        return;
+      }
+
+      // Skip all-day events (they don't have specific duration)
+      if (modifiedSession?.isAllDay) {
+        return;
+      }
+
+      // Use modified times if available, otherwise use original times
+      let startTime = commitment.startTime;
+      let endTime = commitment.endTime;
+
+      if (modifiedSession?.startTime && modifiedSession?.endTime) {
+        startTime = modifiedSession.startTime;
+        endTime = modifiedSession.endTime;
+      } else if (commitment.useDaySpecificTiming) {
+        // Check day-specific timing
+        const daySpecificTiming = commitment.daySpecificTimings?.find(t => t.dayOfWeek === dayOfWeek);
+        if (daySpecificTiming && !daySpecificTiming.isAllDay) {
+          startTime = daySpecificTiming.startTime;
+          endTime = daySpecificTiming.endTime;
+        }
+      }
+
+      if (startTime && endTime) {
+        // Calculate duration in hours
+        const [startHour, startMin] = startTime.split(':').map(Number);
+        const [endHour, endMin] = endTime.split(':').map(Number);
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+        const durationMinutes = endMinutes - startMinutes;
+        const durationHours = durationMinutes / 60;
+
+        totalCommittedHours += durationHours;
+      }
     }
   });
 
@@ -426,20 +457,23 @@ export function findNextAvailableTimeSlot(
     // Apply modifications if they exist for the target date
     if (targetDate && c.modifiedOccurrences?.[targetDate]) {
       const modified = c.modifiedOccurrences[targetDate];
-      
+
       // Check if the modified occurrence is an all-day event
       if (modified.isAllDay) {
         busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
         return;
       }
-      
-      if (modified.startTime) {
-        const [msh, msm] = modified.startTime.split(":").map(Number);
-        busyIntervals.push({ start: msh * 60 + (msm || 0), end: eh * 60 + (em || 0) });
-      } else if (modified.endTime) {
-        const [meh, mem] = modified.endTime.split(":").map(Number);
-        busyIntervals.push({ start: sh * 60 + (sm || 0), end: meh * 60 + (mem || 0) });
+
+      // Use modified times if available, otherwise fall back to original times
+      const modifiedStartTime = modified.startTime || c.startTime;
+      const modifiedEndTime = modified.endTime || c.endTime;
+
+      if (modifiedStartTime && modifiedEndTime) {
+        const [msh, msm] = modifiedStartTime.split(":").map(Number);
+        const [meh, mem] = modifiedEndTime.split(":").map(Number);
+        busyIntervals.push({ start: msh * 60 + (msm || 0), end: meh * 60 + (mem || 0) });
       } else {
+        // Fallback to original times if modified times are incomplete
         busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
       }
     } else {
