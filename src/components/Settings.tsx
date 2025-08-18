@@ -388,6 +388,14 @@ const Settings: React.FC<SettingsProps> = ({
     setNewOverrideEndHour(23);
   };
 
+  const cancelDaySpecificForm = () => {
+    setShowDaySpecificForm(false);
+    setEditingDayOverride(null);
+    setNewDayOverrideDayOfWeek(1);
+    setNewDayOverrideStartHour(6);
+    setNewDayOverrideEndHour(23);
+  };
+
   return (
     <div className="backdrop-blur-md bg-white/80 dark:bg-black/40 rounded-3xl shadow-2xl shadow-purple-500/10 p-6 border border-white/20 dark:border-white/10">
       <h2 className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent mb-6 flex items-center space-x-3">
