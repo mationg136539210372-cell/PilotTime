@@ -139,6 +139,9 @@ export interface TimerState {
   currentTime: number;
   totalTime: number;
   currentTaskId: string | null;
+  startTime?: number; // High-resolution timestamp when timer started
+  pausedTime?: number; // Accumulated paused time in seconds
+  lastUpdateTime?: number; // Last time the timer was updated
 }
 
 export interface TimeRange {
