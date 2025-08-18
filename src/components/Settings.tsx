@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Clock, AlertTriangle, Calendar, Zap, Sun, Plus, Trash2, Edit3 } from 'lucide-react';
-import { UserSettings, StudyPlan, DateSpecificStudyWindow } from '../types';
+import { UserSettings, StudyPlan, DateSpecificStudyWindow, DaySpecificStudyWindow } from '../types';
 
 interface SettingsProps {
   settings: UserSettings;
@@ -34,13 +34,22 @@ const Settings: React.FC<SettingsProps> = ({
   const [studyWindowEndHour, setStudyWindowEndHour] = useState(settings.studyWindowEndHour || 23);
   const [studyPlanMode, setStudyPlanMode] = useState(settings.studyPlanMode || 'even');
   const [dateSpecificStudyWindows, setDateSpecificStudyWindows] = useState<DateSpecificStudyWindow[]>(settings.dateSpecificStudyWindows || []);
-  
+  const [daySpecificStudyWindows, setDaySpecificStudyWindows] = useState<DaySpecificStudyWindow[]>(settings.daySpecificStudyWindows || []);
+
   // State for date-specific override form
   const [showDateSpecificForm, setShowDateSpecificForm] = useState(false);
+  // State for day-specific override form
+  const [showDaySpecificForm, setShowDaySpecificForm] = useState(false);
   const [editingOverride, setEditingOverride] = useState<DateSpecificStudyWindow | null>(null);
   const [newOverrideDate, setNewOverrideDate] = useState('');
   const [newOverrideStartHour, setNewOverrideStartHour] = useState(6);
   const [newOverrideEndHour, setNewOverrideEndHour] = useState(23);
+
+  // State for day-specific override form
+  const [editingDayOverride, setEditingDayOverride] = useState<DaySpecificStudyWindow | null>(null);
+  const [newDayOverrideDayOfWeek, setNewDayOverrideDayOfWeek] = useState(1); // Default to Monday
+  const [newDayOverrideStartHour, setNewDayOverrideStartHour] = useState(6);
+  const [newDayOverrideEndHour, setNewDayOverrideEndHour] = useState(23);
 
   // Update local state when settings prop changes (e.g., on initial load or external update)
   useEffect(() => {
@@ -53,6 +62,7 @@ const Settings: React.FC<SettingsProps> = ({
     setStudyWindowEndHour(settings.studyWindowEndHour || 23);
     setStudyPlanMode(settings.studyPlanMode || 'even');
     setDateSpecificStudyWindows(settings.dateSpecificStudyWindows || []);
+    setDaySpecificStudyWindows(settings.daySpecificStudyWindows || []);
   }, [settings]);
 
   // Enhanced validation functions with better error prevention
@@ -204,7 +214,8 @@ const Settings: React.FC<SettingsProps> = ({
       autoCompleteSessions: settings.autoCompleteSessions || false,
       enableNotifications: settings.enableNotifications !== false,
       studyPlanMode,
-      dateSpecificStudyWindows
+      dateSpecificStudyWindows,
+      daySpecificStudyWindows
     });
   };
 
@@ -279,16 +290,82 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleToggleOverrideActive = (date: string) => {
-    const updatedOverrides = dateSpecificStudyWindows.map(override => 
-      override.date === date 
+    const updatedOverrides = dateSpecificStudyWindows.map(override =>
+      override.date === date
         ? { ...override, isActive: !override.isActive }
         : override
     );
     setDateSpecificStudyWindows(updatedOverrides);
   };
 
+  // Day-specific study window handlers
+  const handleAddDaySpecificOverride = () => {
+    const validation = validateDaySpecificOverride();
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
+    // Check if override for this day already exists
+    const existingIndex = daySpecificStudyWindows.findIndex(override => override.dayOfWeek === newDayOverrideDayOfWeek);
+
+    if (existingIndex !== -1) {
+      // Update existing override
+      const updatedOverrides = [...daySpecificStudyWindows];
+      updatedOverrides[existingIndex] = {
+        dayOfWeek: newDayOverrideDayOfWeek,
+        startHour: newDayOverrideStartHour,
+        endHour: newDayOverrideEndHour,
+        isActive: true
+      };
+      setDaySpecificStudyWindows(updatedOverrides);
+    } else {
+      // Add new override
+      const newOverride: DaySpecificStudyWindow = {
+        dayOfWeek: newDayOverrideDayOfWeek,
+        startHour: newDayOverrideStartHour,
+        endHour: newDayOverrideEndHour,
+        isActive: true
+      };
+      setDaySpecificStudyWindows([...daySpecificStudyWindows, newOverride]);
+    }
+
+    // Reset form
+    setNewDayOverrideDayOfWeek(1);
+    setNewDayOverrideStartHour(6);
+    setNewDayOverrideEndHour(23);
+    setEditingDayOverride(null);
+    setShowDaySpecificForm(false);
+  };
+
+  const handleEditDaySpecificOverride = (override: DaySpecificStudyWindow) => {
+    setEditingDayOverride(override);
+    setNewDayOverrideDayOfWeek(override.dayOfWeek);
+    setNewDayOverrideStartHour(override.startHour);
+    setNewDayOverrideEndHour(override.endHour);
+    setShowDaySpecificForm(true);
+  };
+
+  const handleDeleteDaySpecificOverride = (dayOfWeek: number) => {
+    setDaySpecificStudyWindows(daySpecificStudyWindows.filter(override => override.dayOfWeek !== dayOfWeek));
+  };
+
+  const handleToggleDayOverrideActive = (dayOfWeek: number) => {
+    const updatedOverrides = daySpecificStudyWindows.map(override =>
+      override.dayOfWeek === dayOfWeek
+        ? { ...override, isActive: !override.isActive }
+        : override
+    );
+    setDaySpecificStudyWindows(updatedOverrides);
+  };
+
   const formatTimeDisplay = (hour: number): string => {
     return hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
+  };
+
+  const getDayName = (dayOfWeek: number): string => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[dayOfWeek];
   };
 
   const validateDateSpecificOverride = (): { isValid: boolean; message: string } => {
@@ -301,12 +378,27 @@ const Settings: React.FC<SettingsProps> = ({
     return { isValid: true, message: '' };
   };
 
+  const validateDaySpecificOverride = (): { isValid: boolean; message: string } => {
+    if (newDayOverrideStartHour >= newDayOverrideEndHour) {
+      return { isValid: false, message: 'End time must be after start time.' };
+    }
+    return { isValid: true, message: '' };
+  };
+
   const cancelDateSpecificForm = () => {
     setShowDateSpecificForm(false);
     setEditingOverride(null);
     setNewOverrideDate('');
     setNewOverrideStartHour(6);
     setNewOverrideEndHour(23);
+  };
+
+  const cancelDaySpecificForm = () => {
+    setShowDaySpecificForm(false);
+    setEditingDayOverride(null);
+    setNewDayOverrideDayOfWeek(1);
+    setNewDayOverrideStartHour(6);
+    setNewDayOverrideEndHour(23);
   };
 
   return (
@@ -528,14 +620,24 @@ const Settings: React.FC<SettingsProps> = ({
               </div>
         </div>
 
-        {/* Toggle Button for Date-Specific Study Windows */}
+        {/* Toggle Buttons for Date-Specific and Day-Specific Study Windows */}
+        <div className="flex flex-wrap gap-2 mt-4 mb-2">
           <button
             type="button"
-            className="mt-4 mb-2 inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700"
+            className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700"
             onClick={() => setShowDateSpecificForm(!showDateSpecificForm)}
           >
             {showDateSpecificForm ? 'Hide' : 'Show'} Date-Specific Study Windows
           </button>
+
+          <button
+            type="button"
+            className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700"
+            onClick={() => setShowDaySpecificForm(!showDaySpecificForm)}
+          >
+            {showDaySpecificForm ? 'Hide' : 'Show'} Day-Specific Study Windows
+          </button>
+        </div>
 
           {showDateSpecificForm && (
             <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -654,6 +756,134 @@ const Settings: React.FC<SettingsProps> = ({
                 </ul>
               ) : (
                 <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">No date-specific overrides.</p>
+              )}
+            </div>
+          )}
+
+          {showDaySpecificForm && (
+            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex justify-between items-center">
+                <div>
+                  <strong className="text-gray-700 dark:text-gray-200">Day-Specific Study Windows</strong>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Override your default study window for specific days of the week.
+                    Set different hours for each day (e.g., shorter hours on weekends).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDaySpecificForm(!showDaySpecificForm)}
+                  className="flex items-center px-2 py-1 text-xs text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none"
+                >
+                  <Plus size={14} className="mr-1" />
+                  {showDaySpecificForm ? 'Cancel' : 'Add Override'}
+                </button>
+              </div>
+
+              {showDaySpecificForm && (
+                <div className="my-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-md">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label htmlFor="dayOfWeek" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                        Day of Week
+                      </label>
+                      <select
+                        id="dayOfWeek"
+                        value={newDayOverrideDayOfWeek}
+                        onChange={(e) => setNewDayOverrideDayOfWeek(Number(e.target.value))}
+                        className="mt-1 block w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:text-white"
+                      >
+                        <option value={0}>Sunday</option>
+                        <option value={1}>Monday</option>
+                        <option value={2}>Tuesday</option>
+                        <option value={3}>Wednesday</option>
+                        <option value={4}>Thursday</option>
+                        <option value={5}>Friday</option>
+                        <option value={6}>Saturday</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="dayStartTime" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                        Start Time
+                      </label>
+                      <select
+                        id="dayStartTime"
+                        value={newDayOverrideStartHour}
+                        onChange={(e) => setNewDayOverrideStartHour(Number(e.target.value))}
+                        className="mt-1 block w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:text-white"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <option key={i} value={i}>
+                            {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="dayEndTime" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                        End Time
+                      </label>
+                      <select
+                        id="dayEndTime"
+                        value={newDayOverrideEndHour}
+                        onChange={(e) => setNewDayOverrideEndHour(Number(e.target.value))}
+                        className="mt-1 block w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:text-white"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <option key={i} value={i}>
+                            {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    onClick={handleAddDaySpecificOverride}
+                  >
+                    Save Override
+                  </button>
+                </div>
+              )}
+
+              {daySpecificStudyWindows.length > 0 ? (
+                <ul className="mt-3 space-y-3">
+                  {daySpecificStudyWindows.map((override) => (
+                    <li key={override.dayOfWeek} className="flex justify-between items-center p-3 bg-white dark:bg-gray-900 rounded-md shadow">
+                      <div className="text-sm">
+                        <strong className="text-gray-700 dark:text-gray-200">{getDayName(override.dayOfWeek)}</strong>
+                        <span className="mx-2 text-gray-500">|</span>
+                        {formatTimeDisplay(override.startHour)} - {formatTimeDisplay(override.endHour)}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 rounded-full p-2"
+                          onClick={() => handleEditDaySpecificOverride(override)}
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="bg-red-100 text-red-700 hover:bg-red-200 rounded-full p-2"
+                          onClick={() => handleDeleteDaySpecificOverride(override.dayOfWeek)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className={`px-2 py-1 text-xs font-medium rounded-full ${override.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}
+                          onClick={() => handleToggleDayOverrideActive(override.dayOfWeek)}
+                        >
+                          {override.isActive ? 'Active' : 'Inactive'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">No day-specific overrides.</p>
               )}
             </div>
           )}

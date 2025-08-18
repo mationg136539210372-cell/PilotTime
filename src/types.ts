@@ -22,6 +22,8 @@ export interface Task {
   maxSessionLength?: number; // Maximum session length in hours (for no-deadline tasks or as general preference)
   isOneTimeTask?: boolean; // Task should be completed in one sitting, not divided into sessions
   startDate?: string; // New: earliest date the task can be scheduled (YYYY-MM-DD)
+  targetFrequency?: 'daily' | '3x-week' | 'weekly' | 'flexible'; // Preferred scheduling frequency
+  respectFrequencyForDeadlines?: boolean; // Whether to respect frequency even for deadline tasks
 }
 
 export interface SessionSchedulingMetadata {
@@ -109,6 +111,13 @@ export interface DateSpecificStudyWindow {
   isActive: boolean; // Whether this override is active
 }
 
+export interface DaySpecificStudyWindow {
+  dayOfWeek: number; // 0=Sunday, 1=Monday, 2=Tuesday, etc.
+  startHour: number; // 0-23
+  endHour: number; // 0-23
+  isActive: boolean; // Whether this override is active
+}
+
 export interface UserSettings {
   dailyAvailableHours: number;
   workDays: number[]; // Days of week user wants to work (0=Sunday, 1=Monday, etc.)
@@ -130,6 +139,8 @@ export interface UserSettings {
   studyPlanMode?: 'eisenhower' | 'even' | 'balanced';
   // Date-specific study windows (optional)
   dateSpecificStudyWindows?: DateSpecificStudyWindow[]; // Override study windows for specific dates
+  // Day-specific study windows (optional)
+  daySpecificStudyWindows?: DaySpecificStudyWindow[]; // Override study windows for specific days of the week
 }
 
 export interface TimerState {
@@ -137,6 +148,9 @@ export interface TimerState {
   currentTime: number;
   totalTime: number;
   currentTaskId: string | null;
+  startTime?: number; // High-resolution timestamp when timer started
+  pausedTime?: number; // Accumulated paused time in seconds
+  lastUpdateTime?: number; // Last time the timer was updated
 }
 
 export interface TimeRange {

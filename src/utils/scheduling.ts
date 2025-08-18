@@ -156,12 +156,12 @@ export const getEffectiveStudyWindow = (
   date: string,
   settings: UserSettings
 ): { startHour: number; endHour: number } => {
-  // Check if there's a date-specific study window for this date
+  // Check if there's a date-specific study window for this date (highest priority)
   if (settings.dateSpecificStudyWindows) {
     const dateSpecificWindow = settings.dateSpecificStudyWindows.find(
       window => window.date === date && window.isActive
     );
-    
+
     if (dateSpecificWindow) {
       return {
         startHour: dateSpecificWindow.startHour,
@@ -169,8 +169,24 @@ export const getEffectiveStudyWindow = (
       };
     }
   }
-  
-  // Return default study window
+
+  // Check if there's a day-specific study window for this day of the week (medium priority)
+  if (settings.daySpecificStudyWindows) {
+    const targetDate = new Date(date);
+    const dayOfWeek = targetDate.getDay();
+    const daySpecificWindow = settings.daySpecificStudyWindows.find(
+      window => window.dayOfWeek === dayOfWeek && window.isActive
+    );
+
+    if (daySpecificWindow) {
+      return {
+        startHour: daySpecificWindow.startHour,
+        endHour: daySpecificWindow.endHour
+      };
+    }
+  }
+
+  // Return default study window (lowest priority)
   return {
     startHour: settings.studyWindowStartHour || 6,
     endHour: settings.studyWindowEndHour || 23
@@ -327,6 +343,132 @@ export const markPastSessionsAsSkipped = (studyPlans: StudyPlan[]): StudyPlan[] 
   });
 };
 
+
+/**
+ * Check if frequency preferences conflict with deadline requirements
+ * @param task Task to check
+ * @param settings User settings
+ * @param fixedCommitments Fixed commitments
+ * @param dailyRemainingHours Available hours per day
+ * @returns Object indicating if there's a conflict
+ */
+const checkFrequencyDeadlineConflict = (
+  task: Task,
+  settings: UserSettings,
+  fixedCommitments: FixedCommitment[],
+  dailyRemainingHours: { [date: string]: number }
+): { hasConflict: boolean; reason?: string } => {
+  if (!task.targetFrequency || !task.deadline) {
+    return { hasConflict: false };
+  }
+
+  const now = new Date();
+  const deadline = new Date(task.deadline);
+  if (settings.bufferDays > 0) {
+    deadline.setDate(deadline.getDate() - settings.bufferDays);
+  }
+
+  const startDate = task.startDate ? new Date(task.startDate) : now;
+  const timeDiff = deadline.getTime() - startDate.getTime();
+  const totalDaysAvailable = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+  // Calculate how many sessions the frequency preference would allow
+  let expectedSessions = 0;
+  switch (task.targetFrequency) {
+    case 'daily':
+      expectedSessions = totalDaysAvailable;
+      break;
+    case '3x-week':
+      expectedSessions = Math.floor(totalDaysAvailable / 7) * 3;
+      break;
+    case 'weekly':
+      expectedSessions = Math.floor(totalDaysAvailable / 7);
+      break;
+    case 'flexible':
+      expectedSessions = Math.floor(totalDaysAvailable / 2); // Every other day
+      break;
+    default:
+      expectedSessions = totalDaysAvailable;
+  }
+
+  // Check if the expected sessions can accommodate the task hours
+  const maxSessionLength = settings.maxSessionHours || 4;
+  const maxPossibleHours = expectedSessions * maxSessionLength;
+
+  if (maxPossibleHours < task.estimatedHours) {
+    return {
+      hasConflict: true,
+      reason: `Task requires ${task.estimatedHours}h but ${task.targetFrequency} frequency only allows ${maxPossibleHours}h`
+    };
+  }
+
+  return { hasConflict: false };
+};
+
+/**
+ * Redistribute compromised session duration to other existing sessions of the same task
+ * @param compromisedSession The session that needs redistribution
+ * @param otherSessions Other sessions of the same task that can absorb extra hours
+ * @param maxSessionLength Maximum session length allowed
+ * @param dailyRemainingHours Available hours per day
+ * @returns Updated sessions with redistributed hours
+ */
+const redistributeCompromisedSession = (
+  compromisedSession: StudySession,
+  otherSessions: StudySession[],
+  maxSessionLength: number,
+  dailyRemainingHours: { [date: string]: number }
+): { redistributedSessions: StudySession[]; remainingHours: number } => {
+  const hoursToRedistribute = compromisedSession.allocatedHours;
+  let remainingHours = hoursToRedistribute;
+  const redistributedSessions: StudySession[] = [];
+
+  // Sort other sessions by available capacity (how much they can grow)
+  const sessionsWithCapacity = otherSessions
+    .map(session => {
+      const sessionDate = session.scheduledTime;
+      const currentDayHours = dailyRemainingHours[sessionDate] || 0;
+      const maxGrowth = Math.min(
+        maxSessionLength - session.allocatedHours, // Don't exceed max session length
+        currentDayHours // Don't exceed available hours for that day
+      );
+      return { session, maxGrowth };
+    })
+    .filter(item => item.maxGrowth > 0)
+    .sort((a, b) => b.maxGrowth - a.maxGrowth); // Sort by capacity descending
+
+  // Distribute hours to sessions that can accommodate them
+  for (const { session, maxGrowth } of sessionsWithCapacity) {
+    if (remainingHours <= 0) break;
+
+    const hoursToAdd = Math.min(remainingHours, maxGrowth);
+    if (hoursToAdd > 0) {
+      const sessionDate = session.scheduledTime;
+      const updatedSession = {
+        ...session,
+        allocatedHours: session.allocatedHours + hoursToAdd
+      };
+
+      // Update remaining hours for that day
+      dailyRemainingHours[sessionDate] -= hoursToAdd;
+      remainingHours -= hoursToAdd;
+
+      redistributedSessions.push(updatedSession);
+    } else {
+      redistributedSessions.push(session);
+    }
+  }
+
+  // Add any sessions that couldn't be modified
+  otherSessions.forEach(session => {
+    if (!redistributedSessions.find(rs => rs === session ||
+        (rs.taskId === session.taskId && rs.scheduledTime === session.scheduledTime && rs.sessionNumber === session.sessionNumber))) {
+      redistributedSessions.push(session);
+    }
+  });
+
+  return { redistributedSessions, remainingHours };
+};
 
 // Helper function to optimize session distribution by trying to create larger sessions
 const optimizeSessionDistribution = (task: Task, totalHours: number, daysForTask: string[], settings: UserSettings) => {
@@ -870,6 +1012,152 @@ export const reshuffleStudyPlan = (
   return { plans: reshuffledPlans, suggestions };
 };
 
+/**
+ * Handle compromised sessions by detecting sessions that are overwhelmed
+ * and redistributing their hours to other sessions of the same task
+ * @param studyPlans Study plans to process
+ * @param tasks All tasks for reference
+ * @param settings User settings
+ * @param dailyRemainingHours Available hours per day
+ */
+const handleCompromisedSessions = (
+  studyPlans: StudyPlan[],
+  tasks: Task[],
+  settings: UserSettings,
+  dailyRemainingHours: { [date: string]: number }
+): void => {
+  const maxSessionLength = settings.maxSessionHours || 4;
+  const minSessionLength = (settings.minSessionLength || 15) / 60; // Convert to hours
+
+  // Group all sessions by task
+  const sessionsByTask: { [taskId: string]: { session: StudySession; planIndex: number; sessionIndex: number }[] } = {};
+
+  studyPlans.forEach((plan, planIndex) => {
+    plan.plannedTasks.forEach((session, sessionIndex) => {
+      if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
+        if (!sessionsByTask[session.taskId]) {
+          sessionsByTask[session.taskId] = [];
+        }
+        sessionsByTask[session.taskId].push({ session, planIndex, sessionIndex });
+      }
+    });
+  });
+
+  // Process each task's sessions
+  Object.entries(sessionsByTask).forEach(([taskId, sessionItems]) => {
+    if (sessionItems.length <= 1) return; // Need at least 2 sessions to redistribute
+
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // Identify compromised sessions (those that are too small or overwhelmed by other sessions)
+    const compromisedSessions: typeof sessionItems = [];
+    const healthySessions: typeof sessionItems = [];
+
+    sessionItems.forEach(item => {
+      const session = item.session;
+      const planDate = studyPlans[item.planIndex].date;
+
+      // Consider a session compromised if:
+      // 1. It's below minimum session length
+      // 2. The day is overwhelmed (total study hours > 80% of available hours)
+      // 3. Session duration is significantly smaller than other sessions of the same task
+
+      const dayPlan = studyPlans[item.planIndex];
+      const dayCapacity = settings.dailyAvailableHours;
+      const dayUtilization = dayPlan.totalStudyHours / dayCapacity;
+
+      const averageSessionLength = sessionItems.reduce((sum, si) => sum + si.session.allocatedHours, 0) / sessionItems.length;
+      const isSignificantlySmaller = session.allocatedHours < (averageSessionLength * 0.5);
+
+      const isCompromised =
+        session.allocatedHours < minSessionLength ||
+        dayUtilization > 0.8 ||
+        isSignificantlySmaller;
+
+      if (isCompromised) {
+        compromisedSessions.push(item);
+      } else {
+        healthySessions.push(item);
+      }
+    });
+
+    // If no healthy sessions to redistribute to, skip
+    if (healthySessions.length === 0 || compromisedSessions.length === 0) {
+      return;
+    }
+
+    console.log(`Task "${task.title}": Found ${compromisedSessions.length} compromised sessions, redistributing to ${healthySessions.length} healthy sessions`);
+
+    // Redistribute hours from compromised sessions to healthy ones
+    compromisedSessions.forEach(compromisedItem => {
+      const compromisedSession = compromisedItem.session;
+      const hoursToRedistribute = compromisedSession.allocatedHours;
+
+      // Prepare other sessions for redistribution
+      const otherSessions = healthySessions.map(item => item.session);
+
+      // Calculate current available hours for each day with healthy sessions
+      const tempDailyHours: { [date: string]: number } = {};
+      healthySessions.forEach(item => {
+        const planDate = studyPlans[item.planIndex].date;
+        tempDailyHours[planDate] = dailyRemainingHours[planDate] || 0;
+        // Add back the hours that would be freed up if we redistribute
+        tempDailyHours[planDate] += compromisedSession.allocatedHours * (1 / healthySessions.length);
+      });
+
+      // Perform redistribution
+      const { redistributedSessions, remainingHours } = redistributeCompromisedSession(
+        compromisedSession,
+        otherSessions,
+        maxSessionLength,
+        tempDailyHours
+      );
+
+      // Apply the redistribution results
+      if (remainingHours < hoursToRedistribute * 0.1) { // Successfully redistributed at least 90%
+        // Remove the compromised session
+        const compromisedPlan = studyPlans[compromisedItem.planIndex];
+        compromisedPlan.plannedTasks.splice(compromisedItem.sessionIndex, 1);
+        compromisedPlan.totalStudyHours -= compromisedSession.allocatedHours;
+
+        // Update daily remaining hours for the compromised session's day
+        const compromisedPlanDate = compromisedPlan.date;
+        dailyRemainingHours[compromisedPlanDate] += compromisedSession.allocatedHours;
+
+        // Update the healthy sessions with redistributed hours
+        redistributedSessions.forEach(redistributedSession => {
+          // Find the corresponding healthy session and update it
+          const healthyItem = healthySessions.find(item =>
+            item.session.taskId === redistributedSession.taskId &&
+            item.session.scheduledTime === redistributedSession.scheduledTime &&
+            item.session.sessionNumber === redistributedSession.sessionNumber
+          );
+
+          if (healthyItem) {
+            const originalHours = healthyItem.session.allocatedHours;
+            const additionalHours = redistributedSession.allocatedHours - originalHours;
+
+            if (additionalHours > 0) {
+              // Update the session in the study plan
+              studyPlans[healthyItem.planIndex].plannedTasks[healthyItem.sessionIndex] = redistributedSession;
+              studyPlans[healthyItem.planIndex].totalStudyHours += additionalHours;
+
+              // Update daily remaining hours
+              const healthyPlanDate = studyPlans[healthyItem.planIndex].date;
+              dailyRemainingHours[healthyPlanDate] -= additionalHours;
+            }
+          }
+        });
+
+        console.log(`Successfully redistributed ${(hoursToRedistribute - remainingHours).toFixed(2)}h from compromised session of task "${task.title}"`);
+      } else {
+        console.log(`Could not effectively redistribute compromised session of task "${task.title}": ${remainingHours.toFixed(2)}h remaining`);
+      }
+    });
+  });
+};
+
 export const generateNewStudyPlan = (
   tasks: Task[],
   settings: UserSettings,
@@ -1277,9 +1565,12 @@ export const generateNewStudyPlan = (
       }
     }
     
+    // Handle compromised sessions - detect and redistribute
+    handleCompromisedSessions(studyPlans, tasksEven, settings, dailyRemainingHours);
+
     // Combine sessions of the same task on the same day
     combineSessionsOnSameDay(studyPlans);
-    
+
     // Validate scheduling for conflicts after all redistribution and combining
     studyPlans.forEach(plan => {
       if (!validateSessionTimes(plan.plannedTasks, fixedCommitments, plan.date)) {

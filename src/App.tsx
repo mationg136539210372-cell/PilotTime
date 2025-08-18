@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, Commitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, markPastSessionsAsSkipped, formatTime } from './utils/scheduling';
+import { useRobustTimer, startTimer, pauseTimer, resumeTimer, resetTimer } from './hooks/useRobustTimer';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
@@ -63,7 +64,8 @@ function App() {
         enableNotifications: true,
         userPrefersPressure: false,
         studyPlanMode: 'even',
-        dateSpecificStudyWindows: []
+        dateSpecificStudyWindows: [],
+        daySpecificStudyWindows: []
     });
     const [, setIsPlanStale] = useState(false);
     const [, setLastPlanStaleReason] = useState<"settings" | "commitment" | "task" | null>(null);
@@ -80,7 +82,10 @@ function App() {
         isRunning: false,
         currentTime: 0,
         totalTime: 0,
-        currentTaskId: null
+        currentTaskId: null,
+        startTime: undefined,
+        pausedTime: undefined,
+        lastUpdateTime: undefined
     });
 
     const [showTaskInput, setShowTaskInput] = useState(false);
@@ -219,7 +224,8 @@ function App() {
                         enableNotifications: true,
                         userPrefersPressure: false,
                         studyPlanMode: 'even',
-                        dateSpecificStudyWindows: []
+                        dateSpecificStudyWindows: [],
+                        daySpecificStudyWindows: []
                     };
                     setSettings({ ...defaultSettings, ...parsed });
                 }
@@ -428,27 +434,23 @@ function App() {
         // Removed user reschedules application
     }, [hasLoadedFromStorage, studyPlans]);
 
-    // Timer countdown effect
-    useEffect(() => {
-        let interval: number | undefined;
-
-        if (globalTimer.isRunning && globalTimer.currentTime > 0) {
-            interval = window.setInterval(() => {
-                setGlobalTimer(prev => {
-                    const newTime = prev.currentTime - 1;
-                    // Stop timer when it reaches 0
-                    if (newTime <= 0) {
-                        return { ...prev, currentTime: 0, isRunning: false };
-                    }
-                    return { ...prev, currentTime: newTime };
-                });
-            }, 1000);
+    // Use the robust timer hook instead of setInterval
+    useRobustTimer({
+        timer: globalTimer,
+        onTimerUpdate: setGlobalTimer,
+        taskTitle: currentTask?.title,
+        onTimerComplete: () => {
+            // Timer completed - stop it and keep at 0
+            setGlobalTimer(prev => ({
+                ...prev,
+                currentTime: 0,
+                isRunning: false,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
+            }));
         }
-
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [globalTimer.isRunning, globalTimer.currentTime]);
+    });
 
     useEffect(() => {
         try {
@@ -476,7 +478,8 @@ function App() {
                 enableNotifications: true,
                 userPrefersPressure: false,
                 studyPlanMode: 'even', // Set default to 'even'
-                dateSpecificStudyWindows: []
+                dateSpecificStudyWindows: [],
+                daySpecificStudyWindows: []
             };
             let initialCommitments: FixedCommitment[] = [];
             let initialStudyPlans: StudyPlan[] = [];
@@ -507,7 +510,8 @@ function App() {
                         enableNotifications: parsedSettings.enableNotifications !== false,
                         userPrefersPressure: parsedSettings.userPrefersPressure || false,
                         studyPlanMode: parsedSettings.studyPlanMode || 'even',
-                        dateSpecificStudyWindows: parsedSettings.dateSpecificStudyWindows || []
+                        dateSpecificStudyWindows: parsedSettings.dateSpecificStudyWindows || [],
+                        daySpecificStudyWindows: parsedSettings.daySpecificStudyWindows || []
                     };
                 }
             }
@@ -1434,7 +1438,10 @@ function App() {
             isRunning: false,
             currentTime: durationSeconds,
             totalTime: durationSeconds,
-            currentTaskId: commitment.id
+            currentTaskId: commitment.id,
+            startTime: undefined,
+            pausedTime: undefined,
+            lastUpdateTime: undefined
         });
         // Set the current commitment to distinguish from tasks
         setCurrentCommitment(commitment);
@@ -1474,7 +1481,10 @@ function App() {
                 isRunning: false,
                 currentTime: Math.floor(timeToUse * 3600),
                 totalTime: Math.floor(timeToUse * 3600),
-                currentTaskId: task.id
+                currentTaskId: task.id,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
             });
         } else if (session?.allocatedHours) {
             // If same task but different session, update timer to match session duration
@@ -1483,32 +1493,34 @@ function App() {
                 isRunning: false,
                 currentTime: Math.floor(timeToUse * 3600),
                 totalTime: Math.floor(timeToUse * 3600),
-                currentTaskId: task.id
+                currentTaskId: task.id,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
             });
         }
     };
 
     // Update handleTimerComplete to set readyToMarkDone for the last-timed session
-    // Timer control functions
+    // Timer control functions using robust timer helpers
     const handleTimerStart = () => {
-        setGlobalTimer(prev => ({ ...prev, isRunning: true }));
+        setGlobalTimer(prev => {
+            if (prev.isRunning) return prev; // Already running
+            return prev.startTime ? resumeTimer(prev) : startTimer(prev);
+        });
     };
 
     const handleTimerPause = () => {
-        setGlobalTimer(prev => ({ ...prev, isRunning: false }));
+        setGlobalTimer(prev => pauseTimer(prev));
     };
 
     const handleTimerStop = () => {
         // Just stop the timer without marking session as done
-        setGlobalTimer(prev => ({ ...prev, isRunning: false }));
+        setGlobalTimer(prev => pauseTimer(prev));
     };
 
     const handleTimerReset = () => {
-        setGlobalTimer(prev => ({
-            ...prev,
-            isRunning: false,
-            currentTime: prev.totalTime
-        }));
+        setGlobalTimer(prev => resetTimer(prev));
     };
 
     // Speed up timer for testing purposes
@@ -2624,7 +2636,10 @@ function App() {
                                     isRunning: false,
                                     currentTime: durationSeconds,
                                     totalTime: durationSeconds,
-                                    currentTaskId: commitment.id
+                                    currentTaskId: commitment.id,
+                                    startTime: undefined,
+                                    pausedTime: undefined,
+                                    lastUpdateTime: undefined
                                 });
                                 setCurrentTask({
                                     id: commitment.id,
