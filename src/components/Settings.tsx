@@ -62,6 +62,7 @@ const Settings: React.FC<SettingsProps> = ({
     setStudyWindowEndHour(settings.studyWindowEndHour || 23);
     setStudyPlanMode(settings.studyPlanMode || 'even');
     setDateSpecificStudyWindows(settings.dateSpecificStudyWindows || []);
+    setDaySpecificStudyWindows(settings.daySpecificStudyWindows || []);
   }, [settings]);
 
   // Enhanced validation functions with better error prevention
