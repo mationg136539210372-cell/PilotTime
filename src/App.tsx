@@ -1382,26 +1382,25 @@ function App() {
     };
 
     // Update handleTimerComplete to set readyToMarkDone for the last-timed session
-    // Timer control functions
+    // Timer control functions using robust timer helpers
     const handleTimerStart = () => {
-        setGlobalTimer(prev => ({ ...prev, isRunning: true }));
+        setGlobalTimer(prev => {
+            if (prev.isRunning) return prev; // Already running
+            return prev.startTime ? resumeTimer(prev) : startTimer(prev);
+        });
     };
 
     const handleTimerPause = () => {
-        setGlobalTimer(prev => ({ ...prev, isRunning: false }));
+        setGlobalTimer(prev => pauseTimer(prev));
     };
 
     const handleTimerStop = () => {
         // Just stop the timer without marking session as done
-        setGlobalTimer(prev => ({ ...prev, isRunning: false }));
+        setGlobalTimer(prev => pauseTimer(prev));
     };
 
     const handleTimerReset = () => {
-        setGlobalTimer(prev => ({
-            ...prev,
-            isRunning: false,
-            currentTime: prev.totalTime
-        }));
+        setGlobalTimer(prev => resetTimer(prev));
     };
 
     // Speed up timer for testing purposes
