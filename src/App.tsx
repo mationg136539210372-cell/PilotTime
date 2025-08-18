@@ -211,7 +211,8 @@ function App() {
                         enableNotifications: true,
                         userPrefersPressure: false,
                         studyPlanMode: 'even',
-                        dateSpecificStudyWindows: []
+                        dateSpecificStudyWindows: [],
+                        daySpecificStudyWindows: []
                     };
                     setSettings({ ...defaultSettings, ...parsed });
                 }
