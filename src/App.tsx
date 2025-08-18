@@ -416,9 +416,6 @@ function App() {
         // Removed user reschedules application
     }, [hasLoadedFromStorage, studyPlans]);
 
-    // Import the robust timer hook
-    const { useRobustTimer } = require('./hooks/useRobustTimer');
-
     // Use the robust timer hook instead of setInterval
     useRobustTimer({
         timer: globalTimer,
