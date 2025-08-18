@@ -962,6 +962,152 @@ export const reshuffleStudyPlan = (
   return { plans: reshuffledPlans, suggestions };
 };
 
+/**
+ * Handle compromised sessions by detecting sessions that are overwhelmed
+ * and redistributing their hours to other sessions of the same task
+ * @param studyPlans Study plans to process
+ * @param tasks All tasks for reference
+ * @param settings User settings
+ * @param dailyRemainingHours Available hours per day
+ */
+const handleCompromisedSessions = (
+  studyPlans: StudyPlan[],
+  tasks: Task[],
+  settings: UserSettings,
+  dailyRemainingHours: { [date: string]: number }
+): void => {
+  const maxSessionLength = settings.maxSessionHours || 4;
+  const minSessionLength = (settings.minSessionLength || 15) / 60; // Convert to hours
+
+  // Group all sessions by task
+  const sessionsByTask: { [taskId: string]: { session: StudySession; planIndex: number; sessionIndex: number }[] } = {};
+
+  studyPlans.forEach((plan, planIndex) => {
+    plan.plannedTasks.forEach((session, sessionIndex) => {
+      if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
+        if (!sessionsByTask[session.taskId]) {
+          sessionsByTask[session.taskId] = [];
+        }
+        sessionsByTask[session.taskId].push({ session, planIndex, sessionIndex });
+      }
+    });
+  });
+
+  // Process each task's sessions
+  Object.entries(sessionsByTask).forEach(([taskId, sessionItems]) => {
+    if (sessionItems.length <= 1) return; // Need at least 2 sessions to redistribute
+
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // Identify compromised sessions (those that are too small or overwhelmed by other sessions)
+    const compromisedSessions: typeof sessionItems = [];
+    const healthySessions: typeof sessionItems = [];
+
+    sessionItems.forEach(item => {
+      const session = item.session;
+      const planDate = studyPlans[item.planIndex].date;
+
+      // Consider a session compromised if:
+      // 1. It's below minimum session length
+      // 2. The day is overwhelmed (total study hours > 80% of available hours)
+      // 3. Session duration is significantly smaller than other sessions of the same task
+
+      const dayPlan = studyPlans[item.planIndex];
+      const dayCapacity = settings.dailyAvailableHours;
+      const dayUtilization = dayPlan.totalStudyHours / dayCapacity;
+
+      const averageSessionLength = sessionItems.reduce((sum, si) => sum + si.session.allocatedHours, 0) / sessionItems.length;
+      const isSignificantlySmaller = session.allocatedHours < (averageSessionLength * 0.5);
+
+      const isCompromised =
+        session.allocatedHours < minSessionLength ||
+        dayUtilization > 0.8 ||
+        isSignificantlySmaller;
+
+      if (isCompromised) {
+        compromisedSessions.push(item);
+      } else {
+        healthySessions.push(item);
+      }
+    });
+
+    // If no healthy sessions to redistribute to, skip
+    if (healthySessions.length === 0 || compromisedSessions.length === 0) {
+      return;
+    }
+
+    console.log(`Task "${task.title}": Found ${compromisedSessions.length} compromised sessions, redistributing to ${healthySessions.length} healthy sessions`);
+
+    // Redistribute hours from compromised sessions to healthy ones
+    compromisedSessions.forEach(compromisedItem => {
+      const compromisedSession = compromisedItem.session;
+      const hoursToRedistribute = compromisedSession.allocatedHours;
+
+      // Prepare other sessions for redistribution
+      const otherSessions = healthySessions.map(item => item.session);
+
+      // Calculate current available hours for each day with healthy sessions
+      const tempDailyHours: { [date: string]: number } = {};
+      healthySessions.forEach(item => {
+        const planDate = studyPlans[item.planIndex].date;
+        tempDailyHours[planDate] = dailyRemainingHours[planDate] || 0;
+        // Add back the hours that would be freed up if we redistribute
+        tempDailyHours[planDate] += compromisedSession.allocatedHours * (1 / healthySessions.length);
+      });
+
+      // Perform redistribution
+      const { redistributedSessions, remainingHours } = redistributeCompromisedSession(
+        compromisedSession,
+        otherSessions,
+        maxSessionLength,
+        tempDailyHours
+      );
+
+      // Apply the redistribution results
+      if (remainingHours < hoursToRedistribute * 0.1) { // Successfully redistributed at least 90%
+        // Remove the compromised session
+        const compromisedPlan = studyPlans[compromisedItem.planIndex];
+        compromisedPlan.plannedTasks.splice(compromisedItem.sessionIndex, 1);
+        compromisedPlan.totalStudyHours -= compromisedSession.allocatedHours;
+
+        // Update daily remaining hours for the compromised session's day
+        const compromisedPlanDate = compromisedPlan.date;
+        dailyRemainingHours[compromisedPlanDate] += compromisedSession.allocatedHours;
+
+        // Update the healthy sessions with redistributed hours
+        redistributedSessions.forEach(redistributedSession => {
+          // Find the corresponding healthy session and update it
+          const healthyItem = healthySessions.find(item =>
+            item.session.taskId === redistributedSession.taskId &&
+            item.session.scheduledTime === redistributedSession.scheduledTime &&
+            item.session.sessionNumber === redistributedSession.sessionNumber
+          );
+
+          if (healthyItem) {
+            const originalHours = healthyItem.session.allocatedHours;
+            const additionalHours = redistributedSession.allocatedHours - originalHours;
+
+            if (additionalHours > 0) {
+              // Update the session in the study plan
+              studyPlans[healthyItem.planIndex].plannedTasks[healthyItem.sessionIndex] = redistributedSession;
+              studyPlans[healthyItem.planIndex].totalStudyHours += additionalHours;
+
+              // Update daily remaining hours
+              const healthyPlanDate = studyPlans[healthyItem.planIndex].date;
+              dailyRemainingHours[healthyPlanDate] -= additionalHours;
+            }
+          }
+        });
+
+        console.log(`Successfully redistributed ${(hoursToRedistribute - remainingHours).toFixed(2)}h from compromised session of task "${task.title}"`);
+      } else {
+        console.log(`Could not effectively redistribute compromised session of task "${task.title}": ${remainingHours.toFixed(2)}h remaining`);
+      }
+    });
+  });
+};
+
 export const generateNewStudyPlan = (
   tasks: Task[],
   settings: UserSettings,
