@@ -1,7 +1,7 @@
 import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, DateSpecificStudyWindow, SkipMetadata } from '../types';
 
 // Helper function to calculate committed hours for a specific date that count toward daily hours
-const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
+export const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
   const targetDate = new Date(date);
   const dayOfWeek = targetDate.getDay();
 
@@ -12,7 +12,11 @@ const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitme
     if (!commitment.countsTowardDailyHours) return;
 
     // Skip all-day events (they don't have specific duration)
-    if (commitment.isAllDay || !commitment.startTime || !commitment.endTime) return;
+    if (commitment.isAllDay) return;
+
+    // For commitments using day-specific timing, we'll check for timing later
+    // For general timing, skip if no start/end time
+    if (!commitment.useDaySpecificTiming && (!commitment.startTime || !commitment.endTime)) return;
 
     let shouldInclude = false;
 
