@@ -415,27 +415,25 @@ function App() {
         // Removed user reschedules application
     }, [hasLoadedFromStorage, studyPlans]);
 
-    // Timer countdown effect
-    useEffect(() => {
-        let interval: number | undefined;
+    // Import the robust timer hook
+    const { useRobustTimer } = require('./hooks/useRobustTimer');
 
-        if (globalTimer.isRunning && globalTimer.currentTime > 0) {
-            interval = window.setInterval(() => {
-                setGlobalTimer(prev => {
-                    const newTime = prev.currentTime - 1;
-                    // Stop timer when it reaches 0
-                    if (newTime <= 0) {
-                        return { ...prev, currentTime: 0, isRunning: false };
-                    }
-                    return { ...prev, currentTime: newTime };
-                });
-            }, 1000);
+    // Use the robust timer hook instead of setInterval
+    useRobustTimer({
+        timer: globalTimer,
+        onTimerUpdate: setGlobalTimer,
+        onTimerComplete: () => {
+            // Timer completed - stop it and keep at 0
+            setGlobalTimer(prev => ({
+                ...prev,
+                currentTime: 0,
+                isRunning: false,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
+            }));
         }
-
-        return () => {
-            if (interval) clearInterval(interval);
-        };
-    }, [globalTimer.isRunning, globalTimer.currentTime]);
+    });
 
     useEffect(() => {
         try {
