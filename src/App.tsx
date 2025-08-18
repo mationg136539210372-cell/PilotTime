@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, Commitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped } from './utils/scheduling';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, markPastSessionsAsSkipped, formatTime } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
@@ -87,6 +87,19 @@ function App() {
     const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
     const [autoRemovedTasks, setAutoRemovedTasks] = useState<string[]>([]);
     const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
+
+    // State to track if current timer is for a commitment
+    const [currentCommitment, setCurrentCommitment] = useState<FixedCommitment | null>(null);
+
+    // State to track completed commitments for history/analytics
+    const [completedCommitments, setCompletedCommitments] = useState<Array<{
+        commitmentId: string;
+        title: string;
+        date: string;
+        duration: number;
+        actualHours: number;
+        completedAt: string;
+    }>>([]);
 
     // Onboarding tutorial state
     const [showInteractiveTutorial, setShowInteractiveTutorial] = useState(false);
@@ -504,6 +517,25 @@ function App() {
                 if (Array.isArray(parsedCommitments)) initialCommitments = parsedCommitments;
             }
 
+            // Load completed commitments history
+            const savedCompletedCommitments = localStorage.getItem('timepilot-completed-commitments');
+            let initialCompletedCommitments: Array<{
+                commitmentId: string;
+                title: string;
+                date: string;
+                duration: number;
+                actualHours: number;
+                completedAt: string;
+            }> = [];
+            if (savedCompletedCommitments) {
+                try {
+                    const parsed = JSON.parse(savedCompletedCommitments);
+                    if (Array.isArray(parsed)) initialCompletedCommitments = parsed;
+                } catch (error) {
+                    console.warn('Failed to parse completed commitments from localStorage:', error);
+                }
+            }
+
             if (savedStudyPlans) {
                 const parsedStudyPlans = JSON.parse(savedStudyPlans);
                 if (Array.isArray(parsedStudyPlans)) initialStudyPlans = parsedStudyPlans;
@@ -514,6 +546,7 @@ function App() {
             setSettings(initialSettings);
             setFixedCommitments(initialCommitments);
             setStudyPlans(initialStudyPlans);
+            setCompletedCommitments(initialCompletedCommitments);
             setIsPlanStale(false); // Mark plan as not stale on initial load
             setHasLoadedFromStorage(true); // Mark that initial load is complete
             setHasFirstChangeOccurred(false); // Reset first change flag
@@ -539,6 +572,7 @@ function App() {
             });
             setFixedCommitments([]);
             setStudyPlans([]);
+            setCompletedCommitments([]);
             setIsPlanStale(false); // Mark plan as not stale on initial load (even on error)
             setHasLoadedFromStorage(true); // Mark that initial load is complete
             setHasFirstChangeOccurred(false); // Reset first change flag
@@ -557,6 +591,10 @@ function App() {
     useEffect(() => {
         localStorage.setItem('timepilot-commitments', JSON.stringify(fixedCommitments));
     }, [fixedCommitments]);
+
+    useEffect(() => {
+        localStorage.setItem('timepilot-completed-commitments', JSON.stringify(completedCommitments));
+    }, [completedCommitments]);
 
 
     useEffect(() => {
@@ -800,34 +838,6 @@ function App() {
             } catch (error) {
                 console.error('Study plan refresh failed:', error);
                 setNotificationMessage('Failed to refresh study plan. Please try again.');
-                setTimeout(() => setNotificationMessage(''), 5000);
-            }
-        }
-    };
-
-    // Handle reshuffle study plan to balance workloads
-    const handleReshuffleStudyPlan = () => {
-        if (tasks.length > 0 && studyPlans.length > 0) {
-            try {
-                // Use reshuffle function to redistribute sessions for workload balance
-                const result = reshuffleStudyPlan(studyPlans, tasks, settings, fixedCommitments);
-                const newPlans = result.plans;
-
-                setStudyPlans(newPlans);
-                setLastPlanStaleReason("task");
-                setNotificationMessage('Study plan reshuffled! Sessions redistributed for balanced workload.');
-
-                if (result.suggestions.length > 0) {
-                    const totalUnscheduled = result.suggestions.reduce((sum, s) => sum + s.unscheduledMinutes, 0);
-                    setTimeout(() => {
-                        setNotificationMessage(`Study plan reshuffled! Note: ${Math.round(totalUnscheduled / 60)} hours could not be scheduled. Check the suggestions panel for details.`);
-                    }, 5100);
-                }
-
-                setTimeout(() => setNotificationMessage(''), 5000);
-            } catch (error) {
-                console.error('Study plan reshuffle failed:', error);
-                setNotificationMessage('Failed to reshuffle study plan. Please try again.');
                 setTimeout(() => setNotificationMessage(''), 5000);
             }
         }
@@ -1325,6 +1335,96 @@ function App() {
     };
 
     // Update handleSelectTask to also store planDate and sessionNumber if available
+    // Handle commitment timer completion separately from task completion
+    const handleCommitmentTimerComplete = (commitment: FixedCommitment, hoursSpent: number) => {
+        // Update gamification stats for commitment completion
+        setGamificationData(prevData => {
+            const updatedStats = updateUserStats(prevData.userStats, {
+                totalStudyTime: prevData.userStats.totalStudyTime + (hoursSpent * 60), // Convert to minutes
+                sessionsCompleted: prevData.userStats.sessionsCompleted + 1,
+                tasksCompleted: prevData.userStats.tasksCompleted, // Don't increment for commitments
+                streakDays: updateStudyStreak(prevData.userStats.streakDays, new Date()),
+                level: calculateLevel(prevData.userStats.totalStudyTime + (hoursSpent * 60))
+            });
+
+            const unlockedAchievements = checkAchievementUnlocks(updatedStats, prevData.achievements);
+
+            // Show achievement notification if any unlocked
+            if (unlockedAchievements.length > 0) {
+                setAchievementNotification(unlockedAchievements[0]);
+            }
+
+            return {
+                ...prevData,
+                userStats: updatedStats,
+                achievements: prevData.achievements.map(achievement => {
+                    const unlocked = unlockedAchievements.find(a => a.id === achievement.id);
+                    return unlocked ? { ...achievement, unlockedAt: unlocked.unlockedAt } : achievement;
+                })
+            };
+        });
+
+        // Add to completed commitments history
+        const completedRecord = {
+            commitmentId: commitment.id,
+            title: commitment.title,
+            date: new Date().toISOString().split('T')[0],
+            duration: currentSession?.allocatedHours || 0,
+            actualHours: hoursSpent,
+            completedAt: new Date().toISOString()
+        };
+        setCompletedCommitments(prev => [...prev, completedRecord]);
+
+        // Clear the commitment timer state
+        setCurrentCommitment(null);
+        setCurrentTask(null);
+        setCurrentSession(null);
+
+        // Show completion message
+        setNotificationMessage(`Commitment "${commitment.title}" completed! Time spent: ${formatTime(hoursSpent)}`);
+        setTimeout(() => setNotificationMessage(''), 5000);
+
+        // Navigate back to plan view
+        setActiveTab('plan');
+    };
+
+    // Handle skipping/cancelling commitments
+    const handleSkipCommitment = (commitmentId: string, date: string) => {
+        // Find the commitment
+        const commitment = fixedCommitments.find(c => c.id === commitmentId);
+        if (!commitment) return;
+
+        // For recurring commitments, add this date to deletedOccurrences
+        if (commitment.recurring) {
+            setFixedCommitments(prevCommitments =>
+                prevCommitments.map(c =>
+                    c.id === commitmentId
+                        ? {
+                            ...c,
+                            deletedOccurrences: [...(c.deletedOccurrences || []), date]
+                        }
+                        : c
+                )
+            );
+            setNotificationMessage(`Commitment "${commitment.title}" cancelled for ${new Date(date).toLocaleDateString()}`);
+        } else {
+            // For one-time commitments, remove the specific date from specificDates
+            setFixedCommitments(prevCommitments =>
+                prevCommitments.map(c =>
+                    c.id === commitmentId
+                        ? {
+                            ...c,
+                            specificDates: c.specificDates?.filter(d => d !== date) || []
+                        }
+                        : c
+                )
+            );
+            setNotificationMessage(`Commitment "${commitment.title}" cancelled`);
+        }
+
+        setTimeout(() => setNotificationMessage(''), 5000);
+    };
+
     const handleSelectCommitment = (commitment: FixedCommitment, duration: number) => {
         // Only allow timer for commitments that count toward daily hours
         if (!commitment.countsTowardDailyHours) return;
@@ -1336,6 +1436,8 @@ function App() {
             totalTime: durationSeconds,
             currentTaskId: commitment.id
         });
+        // Set the current commitment to distinguish from tasks
+        setCurrentCommitment(commitment);
         setCurrentTask({
             id: commitment.id,
             title: commitment.title,
@@ -1357,6 +1459,7 @@ function App() {
 
     const handleSelectTask = (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => {
         setCurrentTask(task);
+        setCurrentCommitment(null); // Clear commitment state when selecting a regular task
         setCurrentSession(session || null);
         setActiveTab('timer');
         if (session?.planDate && session?.sessionNumber) {
@@ -1423,12 +1526,19 @@ function App() {
         }));
     };
     const handleTimerComplete = (taskId: string, timeSpent: number) => {
+        // Convert seconds to hours for calculation
+        const hoursSpent = timeSpent / 3600;
+
+        // Check if this is a commitment timer
+        if (currentCommitment) {
+            handleCommitmentTimerComplete(currentCommitment, hoursSpent);
+            return;
+        }
+
         // Find the session in studyPlans
         if (lastTimedSession) {
             // Removed readyToMarkDone state
         }
-        // Convert seconds to hours for calculation
-        const hoursSpent = timeSpent / 3600;
 
         // Record estimation data for learning
         const completedTask = tasks.find(t => t.id === taskId);
@@ -1529,6 +1639,9 @@ function App() {
         if (completedTask && (completedTask.estimatedHours - hoursSpent) <= 0) {
             setCurrentTask(null);
         }
+
+        // Clear commitment state (in case it was set by mistake)
+        setCurrentCommitment(null);
     };
 
     // New function to handle when timer reaches zero and user wants to mark session as done
@@ -2493,8 +2606,8 @@ function App() {
                             settings={settings}
                             onAddFixedCommitment={handleAddFixedCommitment}
                             onRefreshStudyPlan={handleRefreshStudyPlan}
-                            onReshuffleStudyPlan={handleReshuffleStudyPlan}
                             onUpdateTask={handleUpdateTask}
+                            onSkipCommitment={handleSkipCommitment}
                         />
                     )}
 
