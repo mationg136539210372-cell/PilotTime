@@ -373,6 +373,13 @@ const Settings: React.FC<SettingsProps> = ({
     return { isValid: true, message: '' };
   };
 
+  const validateDaySpecificOverride = (): { isValid: boolean; message: string } => {
+    if (newDayOverrideStartHour >= newDayOverrideEndHour) {
+      return { isValid: false, message: 'End time must be after start time.' };
+    }
+    return { isValid: true, message: '' };
+  };
+
   const cancelDateSpecificForm = () => {
     setShowDateSpecificForm(false);
     setEditingOverride(null);
