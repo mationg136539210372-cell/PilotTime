@@ -1,11 +1,89 @@
-import React, { useState } from 'react';
-import { Plus, Clock, MapPin, User, AlertTriangle, Calendar } from 'lucide-react';
-import { FixedCommitment, UserSettings, StudyPlan } from '../types';
-import { checkCommitmentConflicts } from '../utils/scheduling';
+import React, { useState, useMemo } from 'react';
+import { Plus, Clock, MapPin, User, AlertTriangle, Calendar, Info, CheckCircle, XCircle } from 'lucide-react';
+import { FixedCommitment, UserSettings, StudyPlan, DaySpecificTiming } from '../types';
+import { checkCommitmentConflicts, doesCommitmentApplyToDate } from '../utils/scheduling';
 
 // Utility function to convert hour number to HH:MM format
 const formatHour = (hour: number): string => {
   return hour.toString().padStart(2, '0') + ':00';
+};
+
+// Helper function to get day name from day number
+const getDayName = (dayNum: number): string => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[dayNum];
+};
+
+// Helper function to get commitments for a specific day
+const getCommitmentsForDay = (dayOfWeek: number, commitments: FixedCommitment[], targetDate?: string): FixedCommitment[] => {
+  return commitments.filter(commitment => {
+    if (commitment.recurring) {
+      return commitment.daysOfWeek.includes(dayOfWeek);
+    } else if (targetDate && commitment.specificDates) {
+      const date = new Date(targetDate);
+      return commitment.specificDates.includes(targetDate) && date.getDay() === dayOfWeek;
+    }
+    return false;
+  });
+};
+
+// Helper function to find available time slots for a day
+const findAvailableTimeSlots = (
+  dayOfWeek: number,
+  commitments: FixedCommitment[],
+  studyPlans: StudyPlan[],
+  settings: UserSettings,
+  duration: number = 1 // duration in hours
+): { start: string; end: string }[] => {
+  const dayCommitments = getCommitmentsForDay(dayOfWeek, commitments);
+  const busySlots: { start: string; end: string }[] = [];
+
+  // Add commitment time slots
+  dayCommitments.forEach(commitment => {
+    if (!commitment.isAllDay && commitment.startTime && commitment.endTime) {
+      busySlots.push({
+        start: commitment.startTime,
+        end: commitment.endTime
+      });
+    }
+  });
+
+  // Sort busy slots by start time
+  busySlots.sort((a, b) => a.start.localeCompare(b.start));
+
+  // Find available slots
+  const availableSlots: { start: string; end: string }[] = [];
+  const workStart = settings.studyWindowStartHour || 6;
+  const workEnd = settings.studyWindowEndHour || 23;
+
+  let currentTime = workStart;
+
+  busySlots.forEach(busySlot => {
+    const busyStartHour = parseInt(busySlot.start.split(':')[0]);
+    const busyStartMinute = parseInt(busySlot.start.split(':')[1]);
+    const busyStart = busyStartHour + busyStartMinute / 60;
+
+    if (currentTime + duration <= busyStart) {
+      availableSlots.push({
+        start: formatHour(Math.floor(currentTime)),
+        end: formatHour(Math.floor(currentTime + duration))
+      });
+    }
+
+    const busyEndHour = parseInt(busySlot.end.split(':')[0]);
+    const busyEndMinute = parseInt(busySlot.end.split(':')[1]);
+    currentTime = Math.max(currentTime, busyEndHour + busyEndMinute / 60);
+  });
+
+  // Check if there's time after last commitment
+  if (currentTime + duration <= workEnd) {
+    availableSlots.push({
+      start: formatHour(Math.floor(currentTime)),
+      end: formatHour(Math.floor(currentTime + duration))
+    });
+  }
+
+  return availableSlots.slice(0, 3); // Return top 3 suggestions
 };
 
 interface FixedCommitmentInputProps {
@@ -34,6 +112,8 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
     description: '',
     isAllDay: false,
     countsTowardDailyHours: false,
+    useDaySpecificTiming: false,
+    daySpecificTimings: [] as DaySpecificTiming[],
     dateRange: {
       startDate: '',
       endDate: ''
@@ -41,6 +121,54 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
   });
 
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Compute preview data
+  const previewData = useMemo(() => {
+    if (!showPreview) return null;
+
+    const selectedDays = formData.recurring ? formData.daysOfWeek : [];
+    const previewInfo: {
+      dayOfWeek: number;
+      dayName: string;
+      existingCommitments: FixedCommitment[];
+      availableSlots: { start: string; end: string }[];
+      conflicts: FixedCommitment[];
+    }[] = [];
+
+    selectedDays.forEach(dayOfWeek => {
+      const dayCommitments = getCommitmentsForDay(dayOfWeek, existingCommitments);
+      const availableSlots = findAvailableTimeSlots(dayOfWeek, existingCommitments, existingPlans, settings);
+
+      // Check for conflicts with current form data
+      const conflicts: FixedCommitment[] = [];
+      if (formData.startTime && formData.endTime && !formData.isAllDay) {
+        dayCommitments.forEach(commitment => {
+          if (!commitment.isAllDay && commitment.startTime && commitment.endTime) {
+            const formStart = formData.startTime;
+            const formEnd = formData.endTime;
+            const commitStart = commitment.startTime;
+            const commitEnd = commitment.endTime;
+
+            // Check for time overlap
+            if ((formStart < commitEnd && formEnd > commitStart)) {
+              conflicts.push(commitment);
+            }
+          }
+        });
+      }
+
+      previewInfo.push({
+        dayOfWeek,
+        dayName: getDayName(dayOfWeek),
+        existingCommitments: dayCommitments,
+        availableSlots,
+        conflicts
+      });
+    });
+
+    return previewInfo;
+  }, [showPreview, formData.daysOfWeek, formData.startTime, formData.endTime, formData.isAllDay, formData.recurring, existingCommitments, existingPlans, settings]);
 
   // Enhanced validation for fixed commitments
   const isTitleValid = formData.title.trim().length > 0;
@@ -55,9 +183,17 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
   const isDateRangeValid = !formData.recurring || !formData.dateRange.startDate || !formData.dateRange.endDate ||
     formData.dateRange.startDate <= formData.dateRange.endDate;
 
+  // Day-specific timing validation
+  const isDaySpecificTimingValid = !formData.useDaySpecificTiming ||
+    (formData.daySpecificTimings.length > 0 &&
+     formData.daySpecificTimings.every(timing =>
+       timing.isAllDay || (timing.startTime && timing.endTime && timing.startTime < timing.endTime)
+     ));
+
   const isFormValid = isTitleValid && isTitleLengthValid && isDaysValid &&
                           isDatesValid && isTimeRangeValid && isLocationValid && isDateRangeValid &&
-                          (formData.isAllDay || (isStartTimeValid && isEndTimeValid));
+                          isDaySpecificTimingValid &&
+                          (formData.isAllDay || formData.useDaySpecificTiming || (isStartTimeValid && isEndTimeValid));
 
 
 
@@ -138,6 +274,8 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
       description: '',
       isAllDay: false,
       countsTowardDailyHours: false,
+      useDaySpecificTiming: false,
+      daySpecificTimings: [],
       dateRange: {
         startDate: '',
         endDate: ''
@@ -147,11 +285,67 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
   };
 
   const handleDayToggle = (day: number) => {
+    setFormData(prev => {
+      const newDaysOfWeek = prev.daysOfWeek.includes(day)
+        ? prev.daysOfWeek.filter(d => d !== day)
+        : [...prev.daysOfWeek, day].sort();
+
+      // Update day-specific timings when days change
+      let newDaySpecificTimings = prev.daySpecificTimings;
+      if (prev.useDaySpecificTiming) {
+        if (prev.daysOfWeek.includes(day) && !newDaysOfWeek.includes(day)) {
+          // Day was removed, remove its timing
+          newDaySpecificTimings = prev.daySpecificTimings.filter(timing => timing.dayOfWeek !== day);
+        } else if (!prev.daysOfWeek.includes(day) && newDaysOfWeek.includes(day)) {
+          // Day was added, add default timing
+          newDaySpecificTimings = [...prev.daySpecificTimings, {
+            dayOfWeek: day,
+            startTime: '09:00',
+            endTime: '10:00',
+            isAllDay: false
+          }].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+        }
+      }
+
+      return {
+        ...prev,
+        daysOfWeek: newDaysOfWeek,
+        daySpecificTimings: newDaySpecificTimings
+      };
+    });
+  };
+
+  const handleDaySpecificTimingToggle = () => {
+    setFormData(prev => {
+      const useDaySpecificTiming = !prev.useDaySpecificTiming;
+      let daySpecificTimings = prev.daySpecificTimings;
+
+      if (useDaySpecificTiming && prev.daysOfWeek.length > 0) {
+        // Initialize day-specific timings for selected days
+        daySpecificTimings = prev.daysOfWeek.map(day => ({
+          dayOfWeek: day,
+          startTime: prev.startTime || '09:00',
+          endTime: prev.endTime || '10:00',
+          isAllDay: prev.isAllDay || false
+        }));
+      }
+
+      return {
+        ...prev,
+        useDaySpecificTiming,
+        daySpecificTimings
+      };
+    });
+  };
+
+  const updateDaySpecificTiming = (dayOfWeek: number, field: string, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
-      daysOfWeek: prev.daysOfWeek.includes(day)
-        ? prev.daysOfWeek.filter(d => d !== day)
-        : [...prev.daysOfWeek, day].sort()
+      daySpecificTimings: prev.daySpecificTimings.map(timing =>
+        timing.dayOfWeek === dayOfWeek
+          ? { ...timing, [field]: value }
+          : timing
+      )
     }));
   };
 
@@ -264,7 +458,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
             </label>
           </div>
 
-        {!formData.isAllDay && (
+        {!formData.isAllDay && !formData.useDaySpecificTiming && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
@@ -274,7 +468,7 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
                 <Clock className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <input
                   type="time"
-                  required={!formData.isAllDay}
+                  required={!formData.isAllDay && !formData.useDaySpecificTiming}
                   value={formData.startTime}
                   onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
@@ -290,12 +484,88 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
                 <Clock className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <input
                   type="time"
-                  required={!formData.isAllDay}
+                  required={!formData.isAllDay && !formData.useDaySpecificTiming}
                   value={formData.endTime}
                   onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {formData.recurring && !formData.isAllDay && (
+          <div className="mb-4">
+            <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={formData.useDaySpecificTiming}
+                onChange={handleDaySpecificTimingToggle}
+                className="text-blue-600 focus:ring-blue-500"
+              />
+              <span>Different times for different days</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
+              Configure specific start and end times for each day of the week
+            </p>
+          </div>
+        )}
+
+        {formData.useDaySpecificTiming && formData.recurring && !formData.isAllDay && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-3">
+                Day-Specific Times
+              </h4>
+              <div className="space-y-3">
+                {daysOfWeekOptions
+                  .filter(day => formData.daysOfWeek.includes(day.value))
+                  .map(day => {
+                    const timing = formData.daySpecificTimings.find(t => t.dayOfWeek === day.value);
+                    return (
+                      <div key={day.value} className="flex items-center space-x-4">
+                        <div className="w-12 text-sm font-medium text-gray-700 dark:text-gray-200">
+                          {day.label}
+                        </div>
+                        <div className="flex items-center space-x-2 flex-1">
+                          <label className="flex items-center space-x-1">
+                            <input
+                              type="checkbox"
+                              checked={timing?.isAllDay || false}
+                              onChange={(e) => updateDaySpecificTiming(day.value, 'isAllDay', e.target.checked)}
+                              className="text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">All day</span>
+                          </label>
+                          {!timing?.isAllDay && (
+                            <>
+                              <input
+                                type="time"
+                                value={timing?.startTime || ''}
+                                onChange={(e) => updateDaySpecificTiming(day.value, 'startTime', e.target.value)}
+                                className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm"
+                                placeholder="Start"
+                              />
+                              <span className="text-gray-400">to</span>
+                              <input
+                                type="time"
+                                value={timing?.endTime || ''}
+                                onChange={(e) => updateDaySpecificTiming(day.value, 'endTime', e.target.value)}
+                                className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm"
+                                placeholder="End"
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              {formData.daysOfWeek.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  Select days of the week first to configure specific times
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -323,7 +593,159 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
                 ))}
               </div>
             </div>
-            
+
+            {/* Schedule Preview Toggle */}
+            {formData.daysOfWeek.length > 0 && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium"
+                >
+                  <Info size={16} />
+                  <span>{showPreview ? 'Hide' : 'Show'} Schedule Preview</span>
+                </button>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  View existing commitments and get scheduling suggestions for selected days
+                </p>
+              </div>
+            )}
+
+            {/* Schedule Preview */}
+            {showPreview && previewData && previewData.length > 0 && (
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-4">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center space-x-2 mb-2">
+                    <Calendar size={16} />
+                    <span>Schedule Preview for Selected Days</span>
+                  </h4>
+
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 gap-4 mb-4 p-3 bg-white dark:bg-gray-700 rounded-lg">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                        {previewData.reduce((sum, day) => sum + day.existingCommitments.length, 0)}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">Total Existing Commitments</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-green-600 dark:text-green-400">
+                        {previewData.reduce((sum, day) => sum + day.availableSlots.length, 0)}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">Available Time Suggestions</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {previewData.map(dayInfo => (
+                    <div key={dayInfo.dayOfWeek} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="font-medium text-gray-700 dark:text-gray-300">{dayInfo.dayName}</h5>
+                        {dayInfo.conflicts.length > 0 && (
+                          <div className="flex items-center space-x-1 text-red-600">
+                            <XCircle size={14} />
+                            <span className="text-xs">Conflicts detected</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Existing Commitments */}
+                      {dayInfo.existingCommitments.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Existing Commitments:</p>
+                          <div className="space-y-1">
+                            {dayInfo.existingCommitments.map((commitment, idx) => (
+                              <div key={idx} className={`text-xs p-2 rounded flex items-center justify-between ${
+                                dayInfo.conflicts.includes(commitment)
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+                                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+                              }`}>
+                                <span className="font-medium">{commitment.title}</span>
+                                <span>
+                                  {commitment.isAllDay
+                                    ? 'All Day'
+                                    : `${commitment.startTime} - ${commitment.endTime}`
+                                  }
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Available Time Slots */}
+                      {dayInfo.availableSlots.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Suggested Available Times:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {dayInfo.availableSlots.map((slot, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  if (formData.useDaySpecificTiming) {
+                                    // Update day-specific timing for this day
+                                    updateDaySpecificTiming(dayInfo.dayOfWeek, 'startTime', slot.start);
+                                    updateDaySpecificTiming(dayInfo.dayOfWeek, 'endTime', slot.end);
+                                  } else {
+                                    // Update general timing
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      startTime: slot.start,
+                                      endTime: slot.end
+                                    }));
+                                  }
+                                }}
+                                className="text-xs bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded transition-colors duration-200 dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30"
+                                title={`Click to set as ${formData.useDaySpecificTiming ? dayInfo.dayName : 'general'} time`}
+                              >
+                                {slot.start} - {slot.end}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* No conflicts indicator */}
+                      {dayInfo.existingCommitments.length === 0 && (
+                        <div className="flex items-center space-x-1 text-green-600">
+                          <CheckCircle size={14} />
+                          <span className="text-xs">No existing commitments - free to schedule anytime</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Daily Capacity Info */}
+                {settings && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Clock size={14} className="text-blue-600 dark:text-blue-400" />
+                      <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Daily Capacity Info</span>
+                    </div>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Your study window: {formatHour(settings.studyWindowStartHour || 6)} - {formatHour(settings.studyWindowEndHour || 23)}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Daily available hours: {settings.dailyAvailableHours}h
+                      {formData.countsTowardDailyHours && formData.startTime && formData.endTime && (
+                        <span className="ml-1">
+                          (This commitment will use {
+                            Math.abs(
+                              (parseInt(formData.endTime.split(':')[0]) + parseInt(formData.endTime.split(':')[1])/60) -
+                              (parseInt(formData.startTime.split(':')[0]) + parseInt(formData.startTime.split(':')[1])/60)
+                            ).toFixed(1)
+                          }h)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-200">
                 Date Range (Optional)

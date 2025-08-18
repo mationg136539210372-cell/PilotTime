@@ -167,12 +167,19 @@ export interface GeneratedSession {
 }
 
 
+export interface DaySpecificTiming {
+  dayOfWeek: number; // 0 = Sunday, 1 = Monday, etc.
+  startTime: string; // HH:MM format
+  endTime: string; // HH:MM format
+  isAllDay?: boolean; // Whether this day is all-day
+}
+
 export interface FixedCommitment {
   id: string;
   title: string;
   type?: 'fixed'; // Add type to distinguish from smart commitments
-  startTime?: string; // HH:MM format - optional for all-day events
-  endTime?: string; // HH:MM format - optional for all-day events
+  startTime?: string; // HH:MM format - optional for all-day events (used when useDaySpecificTiming is false)
+  endTime?: string; // HH:MM format - optional for all-day events (used when useDaySpecificTiming is false)
   recurring: boolean; // true for recurring, false for one-time
   daysOfWeek: number[]; // 0 = Sunday, 1 = Monday, etc. (for recurring commitments)
   specificDates?: string[]; // Array of date strings (YYYY-MM-DD) for non-recurring commitments
@@ -180,12 +187,15 @@ export interface FixedCommitment {
   location?: string;
   description?: string;
   createdAt: string;
-  isAllDay?: boolean; // New field for all-day events with no specific time
+  isAllDay?: boolean; // New field for all-day events with no specific time (used when useDaySpecificTiming is false)
   dateRange?: { // New field for recurring commitments with date range
     startDate: string; // YYYY-MM-DD format
     endDate: string; // YYYY-MM-DD format
   };
   countsTowardDailyHours?: boolean; // Whether this commitment counts toward daily available hours
+  // Day-specific timing configuration
+  useDaySpecificTiming?: boolean; // Whether to use day-specific times instead of general startTime/endTime
+  daySpecificTimings?: DaySpecificTiming[]; // Array of timing configurations for specific days
   // New fields for individual session management
   deletedOccurrences?: string[]; // Array of date strings (YYYY-MM-DD)
   modifiedOccurrences?: {

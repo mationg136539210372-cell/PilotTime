@@ -15,8 +15,8 @@ interface StudyPlanViewProps {
   settings: UserSettings; // Added settings prop
   onAddFixedCommitment?: (commitment: FixedCommitment) => void; // NEW PROP
   onRefreshStudyPlan?: (preserveManualReschedules: boolean) => void; // NEW PROP for refresh with options
-  onReshuffleStudyPlan?: () => void; // NEW PROP for reshuffling study plan
   onUpdateTask?: (taskId: string, updates: Partial<Task>) => void; // NEW PROP for task completion
+  onSkipCommitment?: (commitmentId: string, date: string) => void; // NEW PROP for skipping commitments
 }
 
 // Force warnings UI to be hidden for all users on first load unless they have a preference
@@ -174,7 +174,7 @@ const calculateCommittedHoursForDate = (date: string, fixedCommitments: FixedCom
   return totalCommittedHours;
 };
 
-const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onSelectCommitment, onGenerateStudyPlan, onUndoSessionDone, onSkipSession, settings, onAddFixedCommitment, onRefreshStudyPlan, onReshuffleStudyPlan, onUpdateTask }) => {
+const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onSelectCommitment, onGenerateStudyPlan, onUndoSessionDone, onSkipSession, settings, onAddFixedCommitment, onRefreshStudyPlan, onUpdateTask, onSkipCommitment }) => {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
   const [] = useState<{ taskTitle: string; unscheduledMinutes: number } | null>(null);
   const [showRegenerateConfirmation, setShowRegenerateConfirmation] = useState(false);
@@ -871,7 +871,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                           return (
                 <div
   key={`today-${session.taskId}-${session.sessionNumber || 0}-${session.startTime || ''}-${todaysPlan.date}`}
-  className={`p-3 mb-3 rounded-lg border study-session-item transition-all duration-300 shadow-sm hover:shadow-md ${!isDone && !isCompleted && sessionStatus !== 'missed' ? 'cursor-pointer sm:hover:scale-[1.01]' : 'cursor-default'} ${currentStatusColors.bg} ${currentStatusColors.border}`}
+  className={`p-3 mb-3 rounded-lg border study-session-item transition-all duration-300 shadow-sm hover:shadow-md ${!isDone && !isCompleted && sessionStatus !== 'missed' ? 'cursor-pointer sm:hover:scale-[1.01]' : 'cursor-default'} ${currentStatusColors.bg} ${currentStatusColors.border} overflow-hidden`}
   onClick={() => !isDone && !isCompleted && sessionStatus !== 'missed' && todaysPlan && onSelectTask(task, { allocatedHours: session.allocatedHours, planDate: todaysPlan.date, sessionNumber: session.sessionNumber })}
 >
                 <div className="space-y-2"> {/* Reduced from space-y-4 */}
@@ -883,15 +883,15 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className={`font-medium text-base ${  // Reduced from text-lg
-            isDone || isCompleted || sessionStatus === 'missed' 
-              ? 'line-through opacity-60' 
+          <h3 className={`font-medium text-base truncate ${  // Reduced from text-lg and added truncate
+            isDone || isCompleted || sessionStatus === 'missed'
+              ? 'line-through opacity-60'
               : currentStatusColors.text
           }`}>
             {task.title}
           </h3>
           {task.category && (
-            <span className="text-xs text-gray-600 dark:text-gray-400">
+            <span className="text-xs text-gray-600 dark:text-gray-400 truncate block">
               {task.category}
             </span>
           )}
@@ -905,18 +905,18 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
       </div>
     </div>
 
-    {/* Compact time and session info - Single row layout */}
+    {/* Compact time and session info - Responsive layout */}
     <div className="mb-2"> {/* Reduced from mb-3 */}
-      <div className="flex items-center justify-between flex-wrap gap-2 text-sm">
-        {/* Left side: Time and duration */}
-        <div className="flex items-center space-x-2">
-          <div className="flex items-center space-x-1 px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-xs"> {/* Reduced padding */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
+        {/* Top/Left side: Time and duration */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center space-x-1 px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-xs flex-shrink-0"> {/* Reduced padding */}
             <Clock size={14} className="text-gray-500 dark:text-gray-400" /> {/* Smaller icon */}
-            <span className="font-medium text-gray-700 dark:text-gray-300">
+            <span className="font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
               {session.startTime} - {session.endTime}
             </span>
           </div>
-          <div className="flex items-center space-x-1 px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-xs">
+          <div className="flex items-center space-x-1 px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-xs flex-shrink-0">
             <TrendingUp size={14} className="text-gray-500 dark:text-gray-400" />
             <span className="font-medium text-gray-700 dark:text-gray-300">
               {formatTime(session.allocatedHours)}
@@ -924,17 +924,17 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           </div>
         </div>
 
-        {/* Right side: Session info, due date, and importance */}
-        <div className="flex items-center space-x-2">
-          <span className="text-xs text-gray-600 dark:text-gray-400">
+        {/* Bottom/Right side: Session info, due date, and importance */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
             Session {sessionNumber}/{totalSessions}
           </span>
-          <span className="text-xs text-gray-600 dark:text-gray-400">
+          <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
             Due: {new Date(task.deadline).toLocaleDateString()}
           </span>
-          <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-            task.importance 
-              ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200' 
+          <span className={`px-2 py-0.5 text-xs rounded-full font-medium whitespace-nowrap ${
+            task.importance
+              ? 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200'
               : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
           }`}>
             {task.importance ? 'Important' : 'Normal'}
@@ -995,45 +995,62 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             return todaysCommitments.map((commitment) => (
               <div
                 key={`commitment-${commitment.id}`}
-                className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 mb-3 cursor-pointer hover:shadow-md transition-all duration-200"
-                onClick={() => {
-                  if (onSelectCommitment) {
-                    const fixedCommitment = fixedCommitments.find(c => c.id === commitment.id);
-                    if (fixedCommitment) {
-                      onSelectCommitment(fixedCommitment, commitment.duration);
-                    }
-                  }
-                }}
+                className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-4 mb-3 hover:shadow-md transition-all duration-200"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-lg">
-                        <Settings className="text-blue-600 dark:text-blue-400" size={16} />
-                      </div>
-                      <div>
-                        <h3 className="font-medium text-blue-800 dark:text-blue-200">{commitment.title}</h3>
-                        <div className="flex items-center space-x-4 text-sm text-blue-600 dark:text-blue-400">
-                          <span className="flex items-center space-x-1">
-                            <Clock size={14} />
-                            <span>{commitment.startTime} - {commitment.endTime}</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
-                            <BookOpen size={14} />
-                            <span>{commitment.duration.toFixed(1)}h</span>
-                          </span>
+                <div
+                  className="cursor-pointer"
+                  onClick={() => {
+                    if (onSelectCommitment) {
+                      const fixedCommitment = fixedCommitments.find(c => c.id === commitment.id);
+                      if (fixedCommitment) {
+                        onSelectCommitment(fixedCommitment, commitment.duration);
+                      }
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
+                        <div className="p-2 bg-blue-100 dark:bg-blue-800 rounded-lg">
+                          <Settings className="text-blue-600 dark:text-blue-400" size={16} />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-blue-800 dark:text-blue-200">{commitment.title}</h3>
+                          <div className="flex items-center space-x-4 text-sm text-blue-600 dark:text-blue-400">
+                            <span className="flex items-center space-x-1">
+                              <Clock size={14} />
+                              <span>{commitment.startTime} - {commitment.endTime}</span>
+                            </span>
+                            <span className="flex items-center space-x-1">
+                              <BookOpen size={14} />
+                              <span>{commitment.duration.toFixed(1)}h</span>
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                        {commitment.category}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                      {commitment.category}
-                    </span>
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                      📊 Productive Time
-                    </span>
-                  </div>
+                </div>
+
+                {/* Skip button for commitments */}
+                <div className="flex justify-end mt-2 pt-2 border-t border-blue-200 dark:border-blue-700">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onSkipCommitment && todaysPlan) {
+                        onSkipCommitment(commitment.id, todaysPlan.date);
+                      }
+                    }}
+                    className="px-3 py-1 text-xs bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors duration-200 dark:bg-orange-900 dark:text-orange-300 dark:hover:bg-orange-800"
+                    title="Mark this commitment as cancelled/couldn't attend"
+                  >
+                    Mark as Cancelled
+                  </button>
                 </div>
               </div>
             ));
@@ -1056,13 +1073,106 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
             <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
             <h2 className="text-xl font-semibold text-gray-800 ml-2 dark:text-white">Today's Sessions</h2>
           </div>
-          <div className="text-center py-8">
-            <div className="text-4xl mb-4">📚</div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2 dark:text-white">No Sessions Planned</h3>
-            <p className="text-gray-600 dark:text-gray-300">
-              You have no study sessions planned for today. Time to generate a study plan! 🚀
-            </p>
-          </div>
+
+          {/* Show commitments even without a study plan */}
+          {(() => {
+            const todaysCommitments = getCommitmentsForDate(today, fixedCommitments);
+            if (todaysCommitments.length > 0) {
+              return (
+                <div className="space-y-3 mb-6">
+                  <div className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+                    📊 Your productive commitments for today:
+                  </div>
+                  {todaysCommitments.map((commitment) => (
+                    <div
+                      key={`commitment-${commitment.id}`}
+                      className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl p-3 sm:p-4 hover:shadow-md transition-all duration-200"
+                    >
+                      <div
+                        className="cursor-pointer"
+                        onClick={() => {
+                          if (onSelectCommitment) {
+                            const fixedCommitment = fixedCommitments.find(c => c.id === commitment.id);
+                            if (fixedCommitment) {
+                              onSelectCommitment(fixedCommitment, commitment.duration);
+                            }
+                          }
+                        }}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+                            <div className="flex-shrink-0 p-2 bg-blue-100 dark:bg-blue-800 rounded-lg">
+                              <Settings className="text-blue-600 dark:text-blue-400" size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-medium text-blue-800 dark:text-blue-200 truncate">{commitment.title}</h3>
+                              <div className="flex flex-wrap items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                                <span className="flex items-center space-x-1 flex-shrink-0">
+                                  <Clock size={14} />
+                                  <span className="whitespace-nowrap">{commitment.startTime} - {commitment.endTime}</span>
+                                </span>
+                                <span className="flex items-center space-x-1 flex-shrink-0">
+                                  <BookOpen size={14} />
+                                  <span>{commitment.duration.toFixed(1)}h</span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 whitespace-nowrap">
+                              {commitment.category}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Skip button for commitments */}
+                      <div className="flex justify-end mt-2 pt-2 border-t border-blue-200 dark:border-blue-700">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onSkipCommitment) {
+                              onSkipCommitment(commitment.id, today);
+                            }
+                          }}
+                          className="px-3 py-1 text-xs bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors duration-200 dark:bg-orange-900 dark:text-orange-300 dark:hover:bg-orange-800"
+                          title="Mark this commitment as cancelled/couldn't attend"
+                        >
+                          Mark as Cancelled
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })()}
+
+          {/* Show "No Sessions Planned" only if there are no commitments either */}
+          {(() => {
+            const todaysCommitments = getCommitmentsForDate(today, fixedCommitments);
+            if (todaysCommitments.length === 0) {
+              return (
+                <div className="text-center py-8">
+                  <div className="text-4xl mb-4">📚</div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-2 dark:text-white">No Sessions Planned</h3>
+                  <p className="text-gray-600 dark:text-gray-300">
+                    You have no study sessions or productive commitments planned for today. Time to generate a study plan! 🚀
+                  </p>
+                </div>
+              );
+            }
+            return (
+              <div className="text-center py-4">
+                <div className="text-2xl mb-2">✅</div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2 dark:text-white">Only Commitments Today</h3>
+                <p className="text-gray-600 dark:text-gray-300">
+                  You have productive commitments but no study tasks scheduled. Add some tasks to generate a study plan! 📚
+                </p>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1130,36 +1240,36 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                       return (
                         <div
                           key={`upcoming-${session.taskId}-${session.sessionNumber || 0}-${session.startTime || ''}-${plan.date}`}
-                          className={`flex items-center justify-between p-2 rounded ${
-                            isRescheduled 
-                              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' 
+                          className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded space-y-1 sm:space-y-0 ${
+                            isRescheduled
+                              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
                               : 'bg-gray-50 dark:bg-gray-900'
                           }`}
                         >
-                          <div className="flex items-center space-x-2">
-                            <span className={`text-sm font-medium ${
-                              isRescheduled 
-                                ? 'text-blue-700 dark:text-blue-300' 
+                          <div className="flex items-center space-x-2 min-w-0 flex-1">
+                            <span className={`text-sm font-medium truncate ${
+                              isRescheduled
+                                ? 'text-blue-700 dark:text-blue-300'
                                 : 'text-gray-700 dark:text-gray-200'
                             }`}>
                               {task.title}
                             </span>
                             {task.category && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">({task.category})</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">({task.category})</span>
                     )}
                             {isRescheduled && (
-                              <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-300">
+                              <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-300 whitespace-nowrap">
                                 Rescheduled
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2 flex-shrink-0">
                           <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-300">
-                            <span>{session.startTime} - {session.endTime}</span>
-                            <span>•</span>
+                            <span className="whitespace-nowrap">{session.startTime} - {session.endTime}</span>
+                            <span>-</span>
                             <span>{formatTime(session.allocatedHours)}</span>
                             {isRescheduled && session.originalTime && (
-                              <span className="text-blue-600 dark:text-blue-400">
+                              <span className="text-blue-600 dark:text-blue-400 whitespace-nowrap">
                                 (from {session.originalTime})
                               </span>
                             )}
@@ -1176,25 +1286,22 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                       return upcomingCommitments.map((commitment) => (
                         <div
                           key={`upcoming-commitment-${commitment.id}`}
-                          className="flex items-center justify-between p-2 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 space-y-1 sm:space-y-0"
                         >
                           <div className="flex items-center space-x-2">
                             <div className="flex items-center space-x-1">
                               <Settings className="text-blue-600 dark:text-blue-400" size={14} />
-                              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                              <span className="text-sm font-medium text-blue-700 dark:text-blue-300 truncate">
                                 {commitment.title}
                               </span>
                             </div>
                             <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900 dark:text-blue-300">
                               {commitment.category}
                             </span>
-                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full dark:bg-gray-700 dark:text-gray-300">
-                              📊 Productive Time
-                            </span>
                           </div>
                           <div className="flex items-center space-x-2 text-xs text-blue-600 dark:text-blue-400">
                             <span>{commitment.startTime} - {commitment.endTime}</span>
-                            <span>��</span>
+                            <span>-</span>
                             <span>{formatTime(commitment.duration)}</span>
                           </div>
                         </div>
@@ -1213,7 +1320,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
               <Calendar className="text-blue-600 dark:text-blue-400" size={24} />
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Note: you should always refresh plan (reset all) when adding or editing tasks</h2>
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Study Plan Management</h2>
             </div>
             <div className="flex items-center space-x-3">
               <button
@@ -1227,18 +1334,6 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                 <span>Refresh Plan</span>
               </button>
 
-              {onReshuffleStudyPlan && (
-                <button
-                  onClick={() => onReshuffleStudyPlan()}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-sm rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-colors flex items-center space-x-2"
-                  title="Reshuffle sessions to balance workload across days"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                  </svg>
-                  <span>Reshuffle Plan</span>
-                </button>
-              )}
             </div>
           </div>
 
