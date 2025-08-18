@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Edit, Clock, MapPin, User, X, AlertTriangle, Calendar } from 'lucide-react';
-import { FixedCommitment } from '../types';
+import { FixedCommitment, DaySpecificTiming } from '../types';
 import { checkCommitmentConflicts } from '../utils/scheduling';
 
 interface FixedCommitmentEditProps {
@@ -23,6 +23,8 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
     description: commitment.description || '',
     isAllDay: commitment.isAllDay || false,
     countsTowardDailyHours: commitment.countsTowardDailyHours || false,
+    useDaySpecificTiming: commitment.useDaySpecificTiming || false,
+    daySpecificTimings: commitment.daySpecificTimings || [],
     dateRange: {
       startDate: commitment.dateRange?.startDate || '',
       endDate: commitment.dateRange?.endDate || ''
@@ -42,8 +44,19 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.title && 
-        (formData.isAllDay || (formData.startTime && formData.endTime)) && 
+    const isTimingValid = formData.isAllDay ||
+      formData.useDaySpecificTiming ||
+      (formData.startTime && formData.endTime);
+
+    const isDaySpecificTimingValid = !formData.useDaySpecificTiming ||
+      (formData.daySpecificTimings.length > 0 &&
+       formData.daySpecificTimings.every(timing =>
+         timing.isAllDay || (timing.startTime && timing.endTime && timing.startTime < timing.endTime)
+       ));
+
+    if (formData.title &&
+        isTimingValid &&
+        isDaySpecificTimingValid &&
         (formData.recurring ? formData.daysOfWeek.length > 0 : formData.specificDates.length > 0)) {
       // Check for conflicts, excluding the current commitment being edited
       const conflictCheck = checkCommitmentConflicts(formData, existingCommitments, commitment.id);
@@ -95,15 +108,21 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
         category: formData.category,
         location: formData.location,
         description: formData.description,
-        isAllDay: formData.isAllDay
+        isAllDay: formData.isAllDay,
+        useDaySpecificTiming: formData.useDaySpecificTiming,
+        daySpecificTimings: formData.daySpecificTimings,
+        countsTowardDailyHours: formData.countsTowardDailyHours,
+        // Preserve existing modified occurrences and deleted occurrences
+        modifiedOccurrences: commitment.modifiedOccurrences,
+        deletedOccurrences: commitment.deletedOccurrences
       };
 
-      // Only include startTime and endTime if not an all-day event
-      if (!formData.isAllDay) {
+      // Only include startTime and endTime if not an all-day event and not using day-specific timing
+      if (!formData.isAllDay && !formData.useDaySpecificTiming) {
         commitmentData.startTime = formData.startTime;
         commitmentData.endTime = formData.endTime;
       } else {
-        // For all-day events, set startTime and endTime to undefined
+        // For all-day events or day-specific timing, set startTime and endTime to undefined
         commitmentData.startTime = undefined;
         commitmentData.endTime = undefined;
       }
@@ -121,11 +140,67 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
   };
 
   const handleDayToggle = (day: number) => {
+    setFormData(prev => {
+      const newDaysOfWeek = prev.daysOfWeek.includes(day)
+        ? prev.daysOfWeek.filter(d => d !== day)
+        : [...prev.daysOfWeek, day].sort();
+
+      // Update day-specific timings when days change
+      let newDaySpecificTimings = prev.daySpecificTimings;
+      if (prev.useDaySpecificTiming) {
+        if (prev.daysOfWeek.includes(day) && !newDaysOfWeek.includes(day)) {
+          // Day was removed, remove its timing
+          newDaySpecificTimings = prev.daySpecificTimings.filter(timing => timing.dayOfWeek !== day);
+        } else if (!prev.daysOfWeek.includes(day) && newDaysOfWeek.includes(day)) {
+          // Day was added, add default timing
+          newDaySpecificTimings = [...prev.daySpecificTimings, {
+            dayOfWeek: day,
+            startTime: '09:00',
+            endTime: '10:00',
+            isAllDay: false
+          }].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+        }
+      }
+
+      return {
+        ...prev,
+        daysOfWeek: newDaysOfWeek,
+        daySpecificTimings: newDaySpecificTimings
+      };
+    });
+  };
+
+  const handleDaySpecificTimingToggle = () => {
+    setFormData(prev => {
+      const useDaySpecificTiming = !prev.useDaySpecificTiming;
+      let daySpecificTimings = prev.daySpecificTimings;
+
+      if (useDaySpecificTiming && prev.daysOfWeek.length > 0) {
+        // Initialize day-specific timings for selected days
+        daySpecificTimings = prev.daysOfWeek.map(day => ({
+          dayOfWeek: day,
+          startTime: prev.startTime || '09:00',
+          endTime: prev.endTime || '10:00',
+          isAllDay: prev.isAllDay || false
+        }));
+      }
+
+      return {
+        ...prev,
+        useDaySpecificTiming,
+        daySpecificTimings
+      };
+    });
+  };
+
+  const updateDaySpecificTiming = (dayOfWeek: number, field: string, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
-      daysOfWeek: prev.daysOfWeek.includes(day)
-        ? prev.daysOfWeek.filter(d => d !== day)
-        : [...prev.daysOfWeek, day].sort()
+      daySpecificTimings: prev.daySpecificTimings.map(timing =>
+        timing.dayOfWeek === dayOfWeek
+          ? { ...timing, [field]: value }
+          : timing
+      )
     }));
   };
 
@@ -140,6 +215,45 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
           <X size={20} />
         </button>
       </div>
+
+      {/* Show modified occurrences info */}
+      {commitment.modifiedOccurrences && Object.keys(commitment.modifiedOccurrences).length > 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-4">
+          <div className="flex items-center space-x-2 mb-2">
+            <AlertTriangle size={16} className="text-yellow-600 dark:text-yellow-400" />
+            <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+              Modified Schedule Instances
+            </h3>
+          </div>
+          <p className="text-xs text-yellow-700 dark:text-yellow-400 mb-3">
+            This commitment has been customized for specific dates through drag-and-drop. These modifications will be preserved.
+          </p>
+          <div className="space-y-2">
+            {Object.entries(commitment.modifiedOccurrences).map(([date, modification]) => (
+              <div key={date} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded p-2">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                </span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {modification.isAllDay ? 'All Day' : `${modification.startTime} - ${modification.endTime}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updatedModifiedOccurrences = { ...commitment.modifiedOccurrences };
+                    delete updatedModifiedOccurrences[date];
+                    onUpdateCommitment(commitment.id, { modifiedOccurrences: updatedModifiedOccurrences });
+                  }}
+                  className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 text-xs"
+                  title="Reset to default schedule"
+                >
+                  Reset
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -230,7 +344,7 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
           </label>
         </div>
 
-        {!formData.isAllDay && (
+        {!formData.isAllDay && !formData.useDaySpecificTiming && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
@@ -240,30 +354,106 @@ const FixedCommitmentEdit: React.FC<FixedCommitmentEditProps> = ({ commitment, e
                 <Clock className="absolute left-3 top-2.5 text-gray-400" size={20} />
                 <input
                   type="time"
-                  required={!formData.isAllDay}
+                  required={!formData.isAllDay && !formData.useDaySpecificTiming}
                   value={formData.startTime}
                   onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-              />
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
-              End Time
-            </label>
-            <div className="relative">
-              <Clock className="absolute left-3 top-2.5 text-gray-400" size={20} />
-              <input
-                type="time"
-                required={!formData.isAllDay}
-                value={formData.endTime}
-                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-              />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-200">
+                End Time
+              </label>
+              <div className="relative">
+                <Clock className="absolute left-3 top-2.5 text-gray-400" size={20} />
+                <input
+                  type="time"
+                  required={!formData.isAllDay && !formData.useDaySpecificTiming}
+                  value={formData.endTime}
+                  onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {formData.recurring && !formData.isAllDay && (
+          <div className="mb-4">
+            <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={formData.useDaySpecificTiming}
+                onChange={handleDaySpecificTimingToggle}
+                className="text-blue-600 focus:ring-blue-500"
+              />
+              <span>Different times for different days</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
+              Configure specific start and end times for each day of the week
+            </p>
+          </div>
+        )}
+
+        {formData.useDaySpecificTiming && formData.recurring && !formData.isAllDay && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300 mb-3">
+                Day-Specific Times
+              </h4>
+              <div className="space-y-3">
+                {daysOfWeekOptions
+                  .filter(day => formData.daysOfWeek.includes(day.value))
+                  .map(day => {
+                    const timing = formData.daySpecificTimings.find(t => t.dayOfWeek === day.value);
+                    return (
+                      <div key={day.value} className="flex items-center space-x-4">
+                        <div className="w-12 text-sm font-medium text-gray-700 dark:text-gray-200">
+                          {day.label}
+                        </div>
+                        <div className="flex items-center space-x-2 flex-1">
+                          <label className="flex items-center space-x-1">
+                            <input
+                              type="checkbox"
+                              checked={timing?.isAllDay || false}
+                              onChange={(e) => updateDaySpecificTiming(day.value, 'isAllDay', e.target.checked)}
+                              className="text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">All day</span>
+                          </label>
+                          {!timing?.isAllDay && (
+                            <>
+                              <input
+                                type="time"
+                                value={timing?.startTime || ''}
+                                onChange={(e) => updateDaySpecificTiming(day.value, 'startTime', e.target.value)}
+                                className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm"
+                                placeholder="Start"
+                              />
+                              <span className="text-gray-400">to</span>
+                              <input
+                                type="time"
+                                value={timing?.endTime || ''}
+                                onChange={(e) => updateDaySpecificTiming(day.value, 'endTime', e.target.value)}
+                                className="px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white text-sm"
+                                placeholder="End"
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              {formData.daysOfWeek.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  Select days of the week first to configure specific times
+                </p>
+              )}
+            </div>
+          </div>
         )}
 
         {formData.recurring ? (
