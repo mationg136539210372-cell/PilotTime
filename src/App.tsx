@@ -497,7 +497,8 @@ function App() {
                         enableNotifications: parsedSettings.enableNotifications !== false,
                         userPrefersPressure: parsedSettings.userPrefersPressure || false,
                         studyPlanMode: parsedSettings.studyPlanMode || 'even',
-                        dateSpecificStudyWindows: parsedSettings.dateSpecificStudyWindows || []
+                        dateSpecificStudyWindows: parsedSettings.dateSpecificStudyWindows || [],
+                        daySpecificStudyWindows: parsedSettings.daySpecificStudyWindows || []
                     };
                 }
             }
