@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, BookOpen, TrendingUp, AlertTriangle, CheckCircle, Lightbulb, X, CheckCircle2, Clock3, Settings } from 'lucide-react';
 import { StudyPlan, Task, StudySession, FixedCommitment, UserSettings } from '../types';
-import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionStatus, moveIndividualSession, isTaskDeadlinePast } from '../utils/scheduling';
+import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionStatus, moveIndividualSession, isTaskDeadlinePast, calculateCommittedHoursForDate } from '../utils/scheduling';
 
 interface StudyPlanViewProps {
   studyPlans: StudyPlan[];
@@ -85,10 +85,20 @@ const getCommitmentsForDate = (date: string, fixedCommitments: FixedCommitment[]
     if (shouldInclude) {
       // Check for manual override for this specific date
       const override = commitment.modifiedOccurrences?.[date];
-      const actualStartTime = override?.startTime || commitment.startTime || '00:00';
-      const actualEndTime = override?.endTime || commitment.endTime || '23:59';
-      const actualTitle = override?.title || commitment.title;
-      const actualIsAllDay = override?.isAllDay ?? commitment.isAllDay;
+      let actualStartTime = override?.startTime || commitment.startTime || '00:00';
+      let actualEndTime = override?.endTime || commitment.endTime || '23:59';
+      let actualTitle = override?.title || commitment.title;
+      let actualIsAllDay = override?.isAllDay ?? commitment.isAllDay;
+
+      // If no manual override, check for day-specific timing
+      if (!override && commitment.useDaySpecificTiming && commitment.daySpecificTimings) {
+        const daySpecificTiming = commitment.daySpecificTimings.find(t => t.dayOfWeek === dayOfWeek);
+        if (daySpecificTiming) {
+          actualStartTime = daySpecificTiming.startTime;
+          actualEndTime = daySpecificTiming.endTime;
+          actualIsAllDay = daySpecificTiming.isAllDay ?? false;
+        }
+      }
 
       if (!actualIsAllDay && actualStartTime && actualEndTime) {
         const startMinutes = timeToMinutes(actualStartTime);
@@ -117,61 +127,6 @@ const getCommitmentsForDate = (date: string, fixedCommitments: FixedCommitment[]
 const timeToMinutes = (timeStr: string): number => {
   const [hours, minutes] = timeStr.split(':').map(Number);
   return hours * 60 + minutes;
-};
-
-// Helper function to calculate committed hours for a specific date
-const calculateCommittedHoursForDate = (date: string, fixedCommitments: FixedCommitment[]): number => {
-  const targetDate = new Date(date);
-  const dayOfWeek = targetDate.getDay();
-
-  let totalCommittedHours = 0;
-
-  fixedCommitments.forEach(commitment => {
-    // Only count commitments that count toward daily hours
-    if (!commitment.countsTowardDailyHours) return;
-
-    // Skip all-day events (they don't have specific duration)
-    if (commitment.isAllDay || !commitment.startTime || !commitment.endTime) return;
-
-    let shouldInclude = false;
-
-    if (commitment.recurring) {
-      // For recurring commitments, check if this day of week is included
-      if (commitment.daysOfWeek.includes(dayOfWeek)) {
-        // Check if the date falls within the date range (if specified)
-        if (commitment.dateRange) {
-          const startDate = new Date(commitment.dateRange.startDate);
-          const endDate = new Date(commitment.dateRange.endDate);
-          if (targetDate >= startDate && targetDate <= endDate) {
-            shouldInclude = true;
-          }
-        } else {
-          // No date range specified, so it's active
-          shouldInclude = true;
-        }
-      }
-    } else {
-      // For one-time commitments, check if this date is in the specific dates
-      if (commitment.specificDates?.includes(date)) {
-        shouldInclude = true;
-      }
-    }
-
-    if (shouldInclude) {
-      // Calculate duration in hours
-      const [startHour, startMin] = commitment.startTime.split(':').map(Number);
-      const [endHour, endMin] = commitment.endTime.split(':').map(Number);
-      const startMinutes = startHour * 60 + startMin;
-      const endMinutes = endHour * 60 + endMin;
-      const durationMinutes = endMinutes - startMinutes;
-      const durationHours = durationMinutes / 60;
-
-      totalCommittedHours += durationHours;
-    }
-  });
-
-
-  return totalCommittedHours;
 };
 
 const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedCommitments, onSelectTask, onSelectCommitment, onGenerateStudyPlan, onUndoSessionDone, onSkipSession, settings, onAddFixedCommitment, onRefreshStudyPlan, onUpdateTask, onSkipCommitment }) => {
