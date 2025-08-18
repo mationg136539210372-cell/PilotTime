@@ -2518,7 +2518,10 @@ function App() {
                                     isRunning: false,
                                     currentTime: durationSeconds,
                                     totalTime: durationSeconds,
-                                    currentTaskId: commitment.id
+                                    currentTaskId: commitment.id,
+                                    startTime: undefined,
+                                    pausedTime: undefined,
+                                    lastUpdateTime: undefined
                                 });
                                 setCurrentTask({
                                     id: commitment.id,
