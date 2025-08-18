@@ -465,7 +465,8 @@ function App() {
                 enableNotifications: true,
                 userPrefersPressure: false,
                 studyPlanMode: 'even', // Set default to 'even'
-                dateSpecificStudyWindows: []
+                dateSpecificStudyWindows: [],
+                daySpecificStudyWindows: []
             };
             let initialCommitments: FixedCommitment[] = [];
             let initialStudyPlans: StudyPlan[] = [];
