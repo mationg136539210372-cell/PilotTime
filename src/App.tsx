@@ -423,6 +423,7 @@ function App() {
     useRobustTimer({
         timer: globalTimer,
         onTimerUpdate: setGlobalTimer,
+        taskTitle: currentTask?.title,
         onTimerComplete: () => {
             // Timer completed - stop it and keep at 0
             setGlobalTimer(prev => ({
