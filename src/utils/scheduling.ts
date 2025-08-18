@@ -297,6 +297,132 @@ export const markPastSessionsAsSkipped = (studyPlans: StudyPlan[]): StudyPlan[] 
 };
 
 
+/**
+ * Check if frequency preferences conflict with deadline requirements
+ * @param task Task to check
+ * @param settings User settings
+ * @param fixedCommitments Fixed commitments
+ * @param dailyRemainingHours Available hours per day
+ * @returns Object indicating if there's a conflict
+ */
+const checkFrequencyDeadlineConflict = (
+  task: Task,
+  settings: UserSettings,
+  fixedCommitments: FixedCommitment[],
+  dailyRemainingHours: { [date: string]: number }
+): { hasConflict: boolean; reason?: string } => {
+  if (!task.targetFrequency || !task.deadline) {
+    return { hasConflict: false };
+  }
+
+  const now = new Date();
+  const deadline = new Date(task.deadline);
+  if (settings.bufferDays > 0) {
+    deadline.setDate(deadline.getDate() - settings.bufferDays);
+  }
+
+  const startDate = task.startDate ? new Date(task.startDate) : now;
+  const timeDiff = deadline.getTime() - startDate.getTime();
+  const totalDaysAvailable = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+  // Calculate how many sessions the frequency preference would allow
+  let expectedSessions = 0;
+  switch (task.targetFrequency) {
+    case 'daily':
+      expectedSessions = totalDaysAvailable;
+      break;
+    case '3x-week':
+      expectedSessions = Math.floor(totalDaysAvailable / 7) * 3;
+      break;
+    case 'weekly':
+      expectedSessions = Math.floor(totalDaysAvailable / 7);
+      break;
+    case 'flexible':
+      expectedSessions = Math.floor(totalDaysAvailable / 2); // Every other day
+      break;
+    default:
+      expectedSessions = totalDaysAvailable;
+  }
+
+  // Check if the expected sessions can accommodate the task hours
+  const maxSessionLength = settings.maxSessionHours || 4;
+  const maxPossibleHours = expectedSessions * maxSessionLength;
+
+  if (maxPossibleHours < task.estimatedHours) {
+    return {
+      hasConflict: true,
+      reason: `Task requires ${task.estimatedHours}h but ${task.targetFrequency} frequency only allows ${maxPossibleHours}h`
+    };
+  }
+
+  return { hasConflict: false };
+};
+
+/**
+ * Redistribute compromised session duration to other existing sessions of the same task
+ * @param compromisedSession The session that needs redistribution
+ * @param otherSessions Other sessions of the same task that can absorb extra hours
+ * @param maxSessionLength Maximum session length allowed
+ * @param dailyRemainingHours Available hours per day
+ * @returns Updated sessions with redistributed hours
+ */
+const redistributeCompromisedSession = (
+  compromisedSession: StudySession,
+  otherSessions: StudySession[],
+  maxSessionLength: number,
+  dailyRemainingHours: { [date: string]: number }
+): { redistributedSessions: StudySession[]; remainingHours: number } => {
+  const hoursToRedistribute = compromisedSession.allocatedHours;
+  let remainingHours = hoursToRedistribute;
+  const redistributedSessions: StudySession[] = [];
+
+  // Sort other sessions by available capacity (how much they can grow)
+  const sessionsWithCapacity = otherSessions
+    .map(session => {
+      const sessionDate = session.scheduledTime;
+      const currentDayHours = dailyRemainingHours[sessionDate] || 0;
+      const maxGrowth = Math.min(
+        maxSessionLength - session.allocatedHours, // Don't exceed max session length
+        currentDayHours // Don't exceed available hours for that day
+      );
+      return { session, maxGrowth };
+    })
+    .filter(item => item.maxGrowth > 0)
+    .sort((a, b) => b.maxGrowth - a.maxGrowth); // Sort by capacity descending
+
+  // Distribute hours to sessions that can accommodate them
+  for (const { session, maxGrowth } of sessionsWithCapacity) {
+    if (remainingHours <= 0) break;
+
+    const hoursToAdd = Math.min(remainingHours, maxGrowth);
+    if (hoursToAdd > 0) {
+      const sessionDate = session.scheduledTime;
+      const updatedSession = {
+        ...session,
+        allocatedHours: session.allocatedHours + hoursToAdd
+      };
+
+      // Update remaining hours for that day
+      dailyRemainingHours[sessionDate] -= hoursToAdd;
+      remainingHours -= hoursToAdd;
+
+      redistributedSessions.push(updatedSession);
+    } else {
+      redistributedSessions.push(session);
+    }
+  }
+
+  // Add any sessions that couldn't be modified
+  otherSessions.forEach(session => {
+    if (!redistributedSessions.find(rs => rs === session ||
+        (rs.taskId === session.taskId && rs.scheduledTime === session.scheduledTime && rs.sessionNumber === session.sessionNumber))) {
+      redistributedSessions.push(session);
+    }
+  });
+
+  return { redistributedSessions, remainingHours };
+};
+
 // Helper function to optimize session distribution by trying to create larger sessions
 const optimizeSessionDistribution = (task: Task, totalHours: number, daysForTask: string[], settings: UserSettings) => {
   const minSessionLength = (settings.minSessionLength || 15) / 60; // in hours
