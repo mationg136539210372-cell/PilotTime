@@ -125,12 +125,12 @@ export const getEffectiveStudyWindow = (
   date: string,
   settings: UserSettings
 ): { startHour: number; endHour: number } => {
-  // Check if there's a date-specific study window for this date
+  // Check if there's a date-specific study window for this date (highest priority)
   if (settings.dateSpecificStudyWindows) {
     const dateSpecificWindow = settings.dateSpecificStudyWindows.find(
       window => window.date === date && window.isActive
     );
-    
+
     if (dateSpecificWindow) {
       return {
         startHour: dateSpecificWindow.startHour,
@@ -138,8 +138,24 @@ export const getEffectiveStudyWindow = (
       };
     }
   }
-  
-  // Return default study window
+
+  // Check if there's a day-specific study window for this day of the week (medium priority)
+  if (settings.daySpecificStudyWindows) {
+    const targetDate = new Date(date);
+    const dayOfWeek = targetDate.getDay();
+    const daySpecificWindow = settings.daySpecificStudyWindows.find(
+      window => window.dayOfWeek === dayOfWeek && window.isActive
+    );
+
+    if (daySpecificWindow) {
+      return {
+        startHour: daySpecificWindow.startHour,
+        endHour: daySpecificWindow.endHour
+      };
+    }
+  }
+
+  // Return default study window (lowest priority)
   return {
     startHour: settings.studyWindowStartHour || 6,
     endHour: settings.studyWindowEndHour || 23
