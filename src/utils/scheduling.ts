@@ -1471,21 +1471,41 @@ export const generateNewStudyPlan = (
             let dayPlan = studyPlans.find(p => p.date === date)!;
             const roundedSessionLength = Math.round(fullSessionLength * 60) / 60;
 
-            dayPlan.plannedTasks.push({
-              taskId: task.id,
-              scheduledTime: `${date}`,
-              startTime: '',
-              endTime: '',
-              allocatedHours: roundedSessionLength,
-              sessionNumber: 1,
-              isFlexible: true,
-              status: 'scheduled'
+            // Find available time slot for one-sitting task
+            const commitmentsForDay = fixedCommitments.filter(commitment => {
+              return doesCommitmentApplyToDate(commitment, date);
             });
-            dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
-            dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
-            totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
-            scheduledOneSitting = true;
-            break;
+
+            const timeSlot = findNextAvailableTimeSlot(
+              roundedSessionLength,
+              dayPlan.plannedTasks,
+              commitmentsForDay,
+              settings.studyWindowStartHour || 6,
+              settings.studyWindowEndHour || 23,
+              settings.bufferTimeBetweenSessions || 0,
+              date,
+              settings
+            );
+
+            if (timeSlot) {
+              dayPlan.plannedTasks.push({
+                taskId: task.id,
+                scheduledTime: `${date}`,
+                startTime: timeSlot.start,
+                endTime: timeSlot.end,
+                allocatedHours: roundedSessionLength,
+                sessionNumber: 1,
+                isFlexible: true,
+                status: 'scheduled'
+              });
+              dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
+              dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
+              totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+              scheduledOneSitting = true;
+              break;
+            } else {
+              console.log(`No available time slot found for one-sitting task "${task.title}\" (${roundedSessionLength}h) on ${date}`);
+            }
           }
         }
 
