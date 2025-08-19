@@ -596,11 +596,11 @@ export function findNextAvailableTimeSlot(
       return;
     }
     
-    // Handle time-specific events
-    const [sh, sm] = c.startTime?.split(":").map(Number) || [0, 0];
-    const [eh, em] = c.endTime?.split(":").map(Number) || [23, 59];
-    
-    // Apply modifications if they exist for the target date
+    // Determine the actual start and end times for this commitment on this date
+    let actualStartTime = c.startTime;
+    let actualEndTime = c.endTime;
+
+    // First check for manual overrides (modifiedOccurrences)
     if (targetDate && c.modifiedOccurrences?.[targetDate]) {
       const modified = c.modifiedOccurrences[targetDate];
 
@@ -610,19 +610,32 @@ export function findNextAvailableTimeSlot(
         return;
       }
 
-      // Use modified times if available, otherwise fall back to original times
-      const modifiedStartTime = modified.startTime || c.startTime;
-      const modifiedEndTime = modified.endTime || c.endTime;
-
-      if (modifiedStartTime && modifiedEndTime) {
-        const [msh, msm] = modifiedStartTime.split(":").map(Number);
-        const [meh, mem] = modifiedEndTime.split(":").map(Number);
-        busyIntervals.push({ start: msh * 60 + (msm || 0), end: meh * 60 + (mem || 0) });
-      } else {
-        // Fallback to original times if modified times are incomplete
-        busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
+      // Use modified times if available
+      if (modified.startTime && modified.endTime) {
+        actualStartTime = modified.startTime;
+        actualEndTime = modified.endTime;
       }
-    } else {
+    }
+    // If no manual override, check for day-specific timing
+    else if (c.useDaySpecificTiming && c.daySpecificTimings && targetDate) {
+      const targetDayOfWeek = new Date(targetDate).getDay();
+      const daySpecificTiming = c.daySpecificTimings.find(t => t.dayOfWeek === targetDayOfWeek);
+
+      if (daySpecificTiming) {
+        if (daySpecificTiming.isAllDay) {
+          busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
+          return;
+        } else if (daySpecificTiming.startTime && daySpecificTiming.endTime) {
+          actualStartTime = daySpecificTiming.startTime;
+          actualEndTime = daySpecificTiming.endTime;
+        }
+      }
+    }
+
+    // Add busy interval if we have valid times
+    if (actualStartTime && actualEndTime) {
+      const [sh, sm] = actualStartTime.split(":").map(Number);
+      const [eh, em] = actualEndTime.split(":").map(Number);
       busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
     }
   });
@@ -1471,21 +1484,41 @@ export const generateNewStudyPlan = (
             let dayPlan = studyPlans.find(p => p.date === date)!;
             const roundedSessionLength = Math.round(fullSessionLength * 60) / 60;
 
-            dayPlan.plannedTasks.push({
-              taskId: task.id,
-              scheduledTime: `${date}`,
-              startTime: '',
-              endTime: '',
-              allocatedHours: roundedSessionLength,
-              sessionNumber: 1,
-              isFlexible: true,
-              status: 'scheduled'
+            // Find available time slot for one-sitting task
+            const commitmentsForDay = fixedCommitments.filter(commitment => {
+              return doesCommitmentApplyToDate(commitment, date);
             });
-            dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
-            dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
-            totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
-            scheduledOneSitting = true;
-            break;
+
+            const timeSlot = findNextAvailableTimeSlot(
+              roundedSessionLength,
+              dayPlan.plannedTasks,
+              commitmentsForDay,
+              settings.studyWindowStartHour || 6,
+              settings.studyWindowEndHour || 23,
+              settings.bufferTimeBetweenSessions || 0,
+              date,
+              settings
+            );
+
+            if (timeSlot) {
+              dayPlan.plannedTasks.push({
+                taskId: task.id,
+                scheduledTime: `${date}`,
+                startTime: timeSlot.start,
+                endTime: timeSlot.end,
+                allocatedHours: roundedSessionLength,
+                sessionNumber: 1,
+                isFlexible: true,
+                status: 'scheduled'
+              });
+              dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
+              dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
+              totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+              scheduledOneSitting = true;
+              break;
+            } else {
+              console.log(`No available time slot found for one-sitting task "${task.title}\" (${roundedSessionLength}h) on ${date}`);
+            }
           }
         }
 
@@ -1505,19 +1538,39 @@ export const generateNewStudyPlan = (
               let dayPlan = studyPlans.find(p => p.date === date)!;
               const roundedHours = Math.round(hours * 60) / 60;
 
-              dayPlan.plannedTasks.push({
-                taskId: task.id,
-                scheduledTime: date,
-                startTime: '',
-                endTime: '',
-                allocatedHours: roundedHours,
-                sessionNumber: fallbackResult.scheduledSessions.indexOf({ date, hours }) + 1,
-                isFlexible: true,
-                status: 'scheduled'
+              // Find available time slot for fallback session
+              const commitmentsForDay = fixedCommitments.filter(commitment => {
+                return doesCommitmentApplyToDate(commitment, date);
               });
 
-              dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedHours) * 60) / 60;
-              dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedHours) * 60) / 60;
+              const timeSlot = findNextAvailableTimeSlot(
+                roundedHours,
+                dayPlan.plannedTasks,
+                commitmentsForDay,
+                settings.studyWindowStartHour || 6,
+                settings.studyWindowEndHour || 23,
+                settings.bufferTimeBetweenSessions || 0,
+                date,
+                settings
+              );
+
+              if (timeSlot) {
+                dayPlan.plannedTasks.push({
+                  taskId: task.id,
+                  scheduledTime: date,
+                  startTime: timeSlot.start,
+                  endTime: timeSlot.end,
+                  allocatedHours: roundedHours,
+                  sessionNumber: fallbackResult.scheduledSessions.indexOf({ date, hours }) + 1,
+                  isFlexible: true,
+                  status: 'scheduled'
+                });
+
+                dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedHours) * 60) / 60;
+                dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedHours) * 60) / 60;
+              } else {
+                console.log(`No available time slot found for fallback session of task "${task.title}" (${roundedHours}h) on ${date}`);
+              }
             }
             totalHours = Math.round((totalHours - fallbackResult.totalScheduled) * 60) / 60;
           }
@@ -1537,19 +1590,42 @@ export const generateNewStudyPlan = (
 
           if (thisSessionLength > 0) {
             const roundedSessionLength = Math.round(thisSessionLength * 60) / 60;
-            dayPlan.plannedTasks.push({
-              taskId: task.id,
-              scheduledTime: `${date}`,
-              startTime: '',
-              endTime: '',
-              allocatedHours: roundedSessionLength,
-              sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
-              isFlexible: true,
-              status: 'scheduled'
+
+            // Find available time slot for regular session
+            const commitmentsForDay = fixedCommitments.filter(commitment => {
+              return doesCommitmentApplyToDate(commitment, date);
             });
-            dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
-            dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
-            totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+
+            const timeSlot = findNextAvailableTimeSlot(
+              roundedSessionLength,
+              dayPlan.plannedTasks,
+              commitmentsForDay,
+              settings.studyWindowStartHour || 6,
+              settings.studyWindowEndHour || 23,
+              settings.bufferTimeBetweenSessions || 0,
+              date,
+              settings
+            );
+
+            if (timeSlot) {
+              dayPlan.plannedTasks.push({
+                taskId: task.id,
+                scheduledTime: `${date}`,
+                startTime: timeSlot.start,
+                endTime: timeSlot.end,
+                allocatedHours: roundedSessionLength,
+                sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
+                isFlexible: true,
+                status: 'scheduled'
+              });
+              dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
+              dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
+              totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+            } else {
+              console.log(`No available time slot found for session of task "${task.title}" (${roundedSessionLength}h) on ${date}`);
+              // Track unscheduled hours for redistribution
+              unscheduledHours += roundedSessionLength;
+            }
           } else {
             // Track unscheduled hours for redistribution
             unscheduledHours += sessionLengths[i];
@@ -1696,6 +1772,7 @@ export const generateNewStudyPlan = (
           session.endTime = slot.end;
           assignedSessions.push(session);
         } else {
+          console.warn(`No available time slot found for session of task on ${plan.date} during final assignment - session will have no time`);
           session.startTime = '';
           session.endTime = '';
         }
