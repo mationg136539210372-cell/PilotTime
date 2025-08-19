@@ -1577,19 +1577,42 @@ export const generateNewStudyPlan = (
 
           if (thisSessionLength > 0) {
             const roundedSessionLength = Math.round(thisSessionLength * 60) / 60;
-            dayPlan.plannedTasks.push({
-              taskId: task.id,
-              scheduledTime: `${date}`,
-              startTime: '',
-              endTime: '',
-              allocatedHours: roundedSessionLength,
-              sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
-              isFlexible: true,
-              status: 'scheduled'
+
+            // Find available time slot for regular session
+            const commitmentsForDay = fixedCommitments.filter(commitment => {
+              return doesCommitmentApplyToDate(commitment, date);
             });
-            dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
-            dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
-            totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+
+            const timeSlot = findNextAvailableTimeSlot(
+              roundedSessionLength,
+              dayPlan.plannedTasks,
+              commitmentsForDay,
+              settings.studyWindowStartHour || 6,
+              settings.studyWindowEndHour || 23,
+              settings.bufferTimeBetweenSessions || 0,
+              date,
+              settings
+            );
+
+            if (timeSlot) {
+              dayPlan.plannedTasks.push({
+                taskId: task.id,
+                scheduledTime: `${date}`,
+                startTime: timeSlot.start,
+                endTime: timeSlot.end,
+                allocatedHours: roundedSessionLength,
+                sessionNumber: (dayPlan.plannedTasks.filter(s => s.taskId === task.id).length) + 1,
+                isFlexible: true,
+                status: 'scheduled'
+              });
+              dayPlan.totalStudyHours = Math.round((dayPlan.totalStudyHours + roundedSessionLength) * 60) / 60;
+              dailyRemainingHours[date] = Math.round((dailyRemainingHours[date] - roundedSessionLength) * 60) / 60;
+              totalHours = Math.round((totalHours - roundedSessionLength) * 60) / 60;
+            } else {
+              console.log(`No available time slot found for session of task "${task.title}" (${roundedSessionLength}h) on ${date}`);
+              // Track unscheduled hours for redistribution
+              unscheduledHours += roundedSessionLength;
+            }
           } else {
             // Track unscheduled hours for redistribution
             unscheduledHours += sessionLengths[i];
