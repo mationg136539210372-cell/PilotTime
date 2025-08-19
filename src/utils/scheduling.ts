@@ -1759,6 +1759,7 @@ export const generateNewStudyPlan = (
           session.endTime = slot.end;
           assignedSessions.push(session);
         } else {
+          console.warn(`No available time slot found for session of task on ${plan.date} during final assignment - session will have no time`);
           session.startTime = '';
           session.endTime = '';
         }
