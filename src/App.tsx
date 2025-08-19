@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, CalendarDays, Lightbulb, Edit, Trash2, Menu, X, HelpCircle, Trophy, User } from 'lucide-react';
 import { Task, StudyPlan, UserSettings, FixedCommitment, Commitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
-import { useRobustTimer, startTimer, pauseTimer, resumeTimer, resetTimer } from './hooks/useRobustTimer';
+import { useRobustTimer, startTimer, pauseTimer, resumeTimer, resetTimer, updateTimerTime } from './hooks/useRobustTimer';
 import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
@@ -1472,33 +1472,21 @@ function App() {
         if (session?.planDate && session?.sessionNumber) {
             setLastTimedSession({ planDate: session.planDate, sessionNumber: session.sessionNumber });
         }
-        
-        // Initialize timer for this task if it's a new task or different task
-        if (globalTimer.currentTaskId !== task.id) {
-            // Always use session allocatedHours if available, otherwise use task estimatedHours
-            const timeToUse = session?.allocatedHours || task.estimatedHours;
-            setGlobalTimer({
-                isRunning: false,
-                currentTime: Math.floor(timeToUse * 3600),
-                totalTime: Math.floor(timeToUse * 3600),
-                currentTaskId: task.id,
-                startTime: undefined,
-                pausedTime: undefined,
-                lastUpdateTime: undefined
-            });
-        } else if (session?.allocatedHours) {
-            // If same task but different session, update timer to match session duration
-            const timeToUse = session.allocatedHours;
-            setGlobalTimer({
-                isRunning: false,
-                currentTime: Math.floor(timeToUse * 3600),
-                totalTime: Math.floor(timeToUse * 3600),
-                currentTaskId: task.id,
-                startTime: undefined,
-                pausedTime: undefined,
-                lastUpdateTime: undefined
-            });
-        }
+
+        // Always initialize timer for any task selection (new task, different task, or different session)
+        const timeToUse = session?.allocatedHours || task.estimatedHours;
+        const timeInSeconds = Math.floor(timeToUse * 3600);
+
+        // Force reset timer state for new session
+        setGlobalTimer({
+            isRunning: false,
+            currentTime: timeInSeconds,
+            totalTime: timeInSeconds,
+            currentTaskId: task.id,
+            startTime: undefined,
+            pausedTime: undefined,
+            lastUpdateTime: undefined
+        });
     };
 
     // Update handleTimerComplete to set readyToMarkDone for the last-timed session
@@ -1532,9 +1520,14 @@ function App() {
     };
     // Update timer to custom time
     const handleTimerUpdateTime = (newTimeInSeconds: number) => {
+        const newTime = Math.max(0, Math.min(newTimeInSeconds, globalTimer.totalTime));
         setGlobalTimer(prev => ({
             ...prev,
-            currentTime: Math.max(0, Math.min(newTimeInSeconds, prev.totalTime))
+            currentTime: newTime,
+            isRunning: false, // Ensure timer is paused when manually updated
+            startTime: undefined,
+            pausedTime: undefined,
+            lastUpdateTime: performance.now()
         }));
     };
     const handleTimerComplete = (taskId: string, timeSpent: number) => {
@@ -3221,7 +3214,6 @@ function App() {
                         onDismiss={() => setMotivationalToast(null)}
                     />
                 )}
-
 
             </div>
         </div>
