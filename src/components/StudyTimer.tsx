@@ -132,7 +132,7 @@ const StudyTimer: React.FC<StudyTimerProps> = ({
   };
 
   const handleTimerClick = () => {
-    if (!timer.isRunning) {
+    if (!timer.isRunning && timer.currentTime > 0) {
       setIsEditingTime(true);
       setCustomTimeInput(formatCustomTimeInput(timer.currentTime));
     }
@@ -144,12 +144,18 @@ const StudyTimer: React.FC<StudyTimerProps> = ({
 
   const handleTimeInputSubmit = () => {
     const newTimeInSeconds = parseCustomTimeInput(customTimeInput);
-    if (newTimeInSeconds > 0) {
+    if (newTimeInSeconds >= 0 && newTimeInSeconds <= timer.totalTime) {
       // Update the timer current time without affecting total time (session duration)
       onTimerUpdateTime(newTimeInSeconds);
+      // Small delay to ensure state update completes
+      setTimeout(() => {
+        setIsEditingTime(false);
+        setCustomTimeInput('');
+      }, 50);
+    } else {
+      // Invalid input - show the total time as maximum
+      alert(`Please enter a time between 0 and ${formatCustomTimeInput(timer.totalTime)}`);
     }
-    setIsEditingTime(false);
-    setCustomTimeInput('');
   };
 
   const handleTimeInputCancel = () => {
@@ -243,16 +249,16 @@ const StudyTimer: React.FC<StudyTimerProps> = ({
               <>
                 <div
                   className={`text-4xl sm:text-6xl lg:text-8xl font-bold text-gray-800 dark:text-white mb-2 ${
-                    !timer.isRunning ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors' : ''
+                    !timer.isRunning && timer.currentTime > 0 ? 'cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors' : ''
                   }`}
                   onClick={handleTimerClick}
-                  title={!timer.isRunning ? 'Click to edit timer' : ''}
+                  title={!timer.isRunning && timer.currentTime > 0 ? 'Click to edit timer' : ''}
                 >
                   {formatTimeForTimerWithSeconds(timer.currentTime)}
                 </div>
                 <div className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
-                  {timer.isRunning ? 'Time Remaining' : 'Paused'}
-                  {!timer.isRunning && (
+                  {timer.isRunning ? 'Time Remaining' : timer.currentTime === 0 ? 'Timer Complete' : 'Paused'}
+                  {!timer.isRunning && timer.currentTime > 0 && (
                     <span className="block text-xs text-gray-400 dark:text-gray-500 mt-1">
                       Click timer to edit
                     </span>
