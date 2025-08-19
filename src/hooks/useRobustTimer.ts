@@ -18,6 +18,7 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
   const intervalId = useRef<number>();
   const wasRunning = useRef(false);
   const lastVisibilityChange = useRef<number>(performance.now());
+  const hasCompletedRef = useRef(false);
 
   // Calculate the actual current time based on elapsed time since start
   const calculateActualTime = useCallback((timerState: TimerState): number => {
@@ -51,8 +52,9 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
 
       onTimerUpdate(newTimer);
 
-      // Check if timer completed
-      if (actualTime <= 0 && onTimerComplete) {
+      // Check if timer completed (only trigger once)
+      if (actualTime <= 0 && onTimerComplete && !hasCompletedRef.current) {
+        hasCompletedRef.current = true;
         // Show notification and play alert if tab is hidden
         if (document.hidden && taskTitle) {
           const timeSpent = timer.totalTime - actualTime;
@@ -90,7 +92,8 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
       if (timer.isRunning) {
         intervalId.current = window.setInterval(() => {
           const actualTime = calculateActualTime(timer);
-          if (actualTime <= 0 && onTimerComplete) {
+          if (actualTime <= 0 && onTimerComplete && !hasCompletedRef.current) {
+            hasCompletedRef.current = true;
             clearInterval(intervalId.current);
             // Show notification when completing in background
             if (taskTitle) {
@@ -120,9 +123,10 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
 
         onTimerUpdate(newTimer);
 
-        // Check if timer completed while hidden
+        // Check if timer completed while hidden (only trigger once)
         if (actualTime <= 0) {
-          if (onTimerComplete) {
+          if (onTimerComplete && !hasCompletedRef.current) {
+            hasCompletedRef.current = true;
             onTimerComplete();
           }
         } else {
@@ -132,6 +136,13 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
       }
     }
   }, [timer, calculateActualTime, onTimerUpdate, onTimerComplete, updateTimerDisplay]);
+
+  // Reset completion flag when timer is reset or restarted
+  useEffect(() => {
+    if (timer.currentTime === timer.totalTime && !timer.isRunning) {
+      hasCompletedRef.current = false;
+    }
+  }, [timer.currentTime, timer.totalTime, timer.isRunning]);
 
   // Start/stop timer effects
   useEffect(() => {
@@ -255,6 +266,20 @@ export const resetTimer = (currentTimer: TimerState): TimerState => {
     ...currentTimer,
     isRunning: false,
     currentTime: currentTimer.totalTime,
+    startTime: undefined,
+    pausedTime: undefined,
+    lastUpdateTime: undefined
+  };
+};
+
+/**
+ * Helper function to update timer with new time (for manual editing)
+ */
+export const updateTimerTime = (currentTimer: TimerState, newTimeInSeconds: number): TimerState => {
+  return {
+    ...currentTimer,
+    currentTime: Math.max(0, Math.min(newTimeInSeconds, currentTimer.totalTime)),
+    // Clear timing state when manually updating time
     startTime: undefined,
     pausedTime: undefined,
     lastUpdateTime: undefined
