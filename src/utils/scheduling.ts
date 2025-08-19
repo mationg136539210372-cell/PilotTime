@@ -596,11 +596,11 @@ export function findNextAvailableTimeSlot(
       return;
     }
     
-    // Handle time-specific events
-    const [sh, sm] = c.startTime?.split(":").map(Number) || [0, 0];
-    const [eh, em] = c.endTime?.split(":").map(Number) || [23, 59];
-    
-    // Apply modifications if they exist for the target date
+    // Determine the actual start and end times for this commitment on this date
+    let actualStartTime = c.startTime;
+    let actualEndTime = c.endTime;
+
+    // First check for manual overrides (modifiedOccurrences)
     if (targetDate && c.modifiedOccurrences?.[targetDate]) {
       const modified = c.modifiedOccurrences[targetDate];
 
@@ -610,19 +610,32 @@ export function findNextAvailableTimeSlot(
         return;
       }
 
-      // Use modified times if available, otherwise fall back to original times
-      const modifiedStartTime = modified.startTime || c.startTime;
-      const modifiedEndTime = modified.endTime || c.endTime;
-
-      if (modifiedStartTime && modifiedEndTime) {
-        const [msh, msm] = modifiedStartTime.split(":").map(Number);
-        const [meh, mem] = modifiedEndTime.split(":").map(Number);
-        busyIntervals.push({ start: msh * 60 + (msm || 0), end: meh * 60 + (mem || 0) });
-      } else {
-        // Fallback to original times if modified times are incomplete
-        busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
+      // Use modified times if available
+      if (modified.startTime && modified.endTime) {
+        actualStartTime = modified.startTime;
+        actualEndTime = modified.endTime;
       }
-    } else {
+    }
+    // If no manual override, check for day-specific timing
+    else if (c.useDaySpecificTiming && c.daySpecificTimings && targetDate) {
+      const targetDayOfWeek = new Date(targetDate).getDay();
+      const daySpecificTiming = c.daySpecificTimings.find(t => t.dayOfWeek === targetDayOfWeek);
+
+      if (daySpecificTiming) {
+        if (daySpecificTiming.isAllDay) {
+          busyIntervals.push({ start: 0, end: 24 * 60 - 1 });
+          return;
+        } else if (daySpecificTiming.startTime && daySpecificTiming.endTime) {
+          actualStartTime = daySpecificTiming.startTime;
+          actualEndTime = daySpecificTiming.endTime;
+        }
+      }
+    }
+
+    // Add busy interval if we have valid times
+    if (actualStartTime && actualEndTime) {
+      const [sh, sm] = actualStartTime.split(":").map(Number);
+      const [eh, em] = actualEndTime.split(":").map(Number);
       busyIntervals.push({ start: sh * 60 + (sm || 0), end: eh * 60 + (em || 0) });
     }
   });
