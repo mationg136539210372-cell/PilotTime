@@ -1751,7 +1751,13 @@ function App() {
                     plannedTasks: plan.plannedTasks.map(session => {
                         // Only mark the session as done if it matches both the sessionNumber AND the current task
                         if (session.sessionNumber === sessionNumber && currentTask && session.taskId === currentTask.id) {
-                            const updatedSession = { ...session, done: true };
+                            const updatedSession = {
+                                ...session,
+                                done: true,
+                                status: 'completed' as const,
+                                actualHours: session.allocatedHours,
+                                completedAt: new Date().toISOString()
+                            };
                             
                             // Check if this completes the task with the updated plans
                             setTimeout(() => {
