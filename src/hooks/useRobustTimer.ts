@@ -276,9 +276,11 @@ export const resetTimer = (currentTimer: TimerState): TimerState => {
  * Helper function to update timer with new time (for manual editing)
  */
 export const updateTimerTime = (currentTimer: TimerState, newTimeInSeconds: number): TimerState => {
+  const newTime = Math.max(0, newTimeInSeconds);
   return {
     ...currentTimer,
-    currentTime: Math.max(0, Math.min(newTimeInSeconds, currentTimer.totalTime)),
+    currentTime: newTime,
+    totalTime: newTime, // Update totalTime so timer calculations use the edited value
     // Clear timing state when manually updating time
     startTime: undefined,
     pausedTime: undefined,
