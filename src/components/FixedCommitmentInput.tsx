@@ -171,10 +171,17 @@ const findAvailableTimeSlots = (
     });
   }
 
-  // Sort by optimal slots first, then by duration (largest first)
+  // Sort by optimal slots first, then by duration (largest first), then by start time
   availableSlots.sort((a, b) => {
     if (a.isOptimal !== b.isOptimal) return a.isOptimal ? -1 : 1;
-    return b.duration - a.duration;
+    if (b.duration !== a.duration) return b.duration - a.duration;
+
+    // Sort by start time chronologically (earlier times first)
+    const toMinutes = (timeStr: string) => {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+    return toMinutes(a.start) - toMinutes(b.start);
   });
 
   return availableSlots.slice(0, 4); // Return top 4 suggestions
@@ -773,10 +780,20 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
                               }`}>
                                 <span className="font-medium">{commitment.title}</span>
                                 <span>
-                                  {commitment.isAllDay
-                                    ? 'All Day'
-                                    : `${commitment.startTime} - ${commitment.endTime}`
-                                  }
+                                  {(() => {
+                                    // Handle day-specific timings for commitments
+                                    const dayTiming = commitment.useDaySpecificTiming && commitment.daySpecificTimings
+                                      ? commitment.daySpecificTimings.find(t => t.dayOfWeek === dayInfo.dayOfWeek)
+                                      : undefined;
+
+                                    if (commitment.isAllDay || dayTiming?.isAllDay) return 'All Day';
+
+                                    const start = dayTiming?.startTime ?? commitment.startTime;
+                                    const end = dayTiming?.endTime ?? commitment.endTime;
+
+                                    if (start && end) return `${start} - ${end}`;
+                                    return 'Time not set';
+                                  })()}
                                 </span>
                               </div>
                             ))}
