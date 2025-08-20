@@ -187,7 +187,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
         </div>
       </div>
 
-          {(() => {
+          {useMemo(() => {
         const totalAllEstimatedHours = tasks.reduce((sum, task) => sum + task.estimatedHours, 0);
         
         const taskCompletionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
