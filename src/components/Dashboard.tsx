@@ -286,7 +286,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
             </div>
           </div>
         );
-      })()}
+      }, [Math.floor((tasks.length > 0 ? (completedTasks.length / tasks.length) * 100 : 0) / 10), completedTasks.length])}
 
       {/* Progress Overview and Today's Sessions - Side by Side */}
       <div className="flex flex-col lg:flex-row gap-6 mb-6">
