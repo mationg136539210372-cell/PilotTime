@@ -1520,10 +1520,11 @@ function App() {
     };
     // Update timer to custom time
     const handleTimerUpdateTime = (newTimeInSeconds: number) => {
-        const newTime = Math.max(0, Math.min(newTimeInSeconds, globalTimer.totalTime));
+        const newTime = Math.max(0, newTimeInSeconds);
         setGlobalTimer(prev => ({
             ...prev,
             currentTime: newTime,
+            totalTime: newTime, // Update totalTime so timer calculations use the edited value
             isRunning: false, // Ensure timer is paused when manually updated
             startTime: undefined,
             pausedTime: undefined,
