@@ -1520,10 +1520,11 @@ function App() {
     };
     // Update timer to custom time
     const handleTimerUpdateTime = (newTimeInSeconds: number) => {
-        const newTime = Math.max(0, Math.min(newTimeInSeconds, globalTimer.totalTime));
+        const newTime = Math.max(0, newTimeInSeconds);
         setGlobalTimer(prev => ({
             ...prev,
             currentTime: newTime,
+            totalTime: newTime, // Update totalTime so timer calculations use the edited value
             isRunning: false, // Ensure timer is paused when manually updated
             startTime: undefined,
             pausedTime: undefined,
@@ -1743,6 +1744,30 @@ function App() {
 
     // Handler to mark a session as done in studyPlans
     const handleMarkSessionDone = (planDate: string, sessionNumber: number) => {
+        // Update task estimated hours first
+        if (currentTask) {
+            setTasks(prevTasks =>
+                prevTasks.map(task => {
+                    if (task.id === currentTask.id) {
+                        const sessionHours = studyPlans
+                            .find(p => p.date === planDate)
+                            ?.plannedTasks.find(s => s.sessionNumber === sessionNumber && s.taskId === currentTask.id)
+                            ?.allocatedHours || 0;
+
+                        const newEstimatedHours = Math.max(0, task.estimatedHours - sessionHours);
+                        const newStatus = newEstimatedHours === 0 ? 'completed' : task.status;
+
+                        return {
+                            ...task,
+                            estimatedHours: newEstimatedHours,
+                            status: newStatus
+                        };
+                    }
+                    return task;
+                })
+            );
+        }
+
         setStudyPlans(prevPlans => {
             const updatedPlans = prevPlans.map(plan => {
                 if (plan.date !== planDate) return plan;
@@ -1751,7 +1776,13 @@ function App() {
                     plannedTasks: plan.plannedTasks.map(session => {
                         // Only mark the session as done if it matches both the sessionNumber AND the current task
                         if (session.sessionNumber === sessionNumber && currentTask && session.taskId === currentTask.id) {
-                            const updatedSession = { ...session, done: true };
+                            const updatedSession = {
+                                ...session,
+                                done: true,
+                                status: 'completed' as const,
+                                actualHours: session.allocatedHours,
+                                completedAt: new Date().toISOString()
+                            };
                             
                             // Check if this completes the task with the updated plans
                             setTimeout(() => {

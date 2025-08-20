@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Clock, BookOpen, TrendingUp, Calendar, Bell, CheckCircle2, AlertTriangle, Clock3, X } from 'lucide-react';
 import { Task, StudyPlan } from '../types';
 import { formatTime, getLocalDateString, checkSessionStatus } from '../utils/scheduling';
@@ -187,7 +187,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
         </div>
       </div>
 
-          {(() => {
+          {useMemo(() => {
         const totalAllEstimatedHours = tasks.reduce((sum, task) => sum + task.estimatedHours, 0);
         
         const taskCompletionRate = tasks.length > 0 ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
@@ -286,7 +286,7 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
             </div>
           </div>
         );
-      })()}
+      }, [Math.floor((tasks.length > 0 ? (completedTasks.length / tasks.length) * 100 : 0) / 10), completedTasks.length])}
 
       {/* Progress Overview and Today's Sessions - Side by Side */}
       <div className="flex flex-col lg:flex-row gap-6 mb-6">

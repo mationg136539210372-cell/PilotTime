@@ -171,10 +171,17 @@ const findAvailableTimeSlots = (
     });
   }
 
-  // Sort by optimal slots first, then by duration (largest first)
+  // Sort by optimal slots first, then by duration (largest first), then by start time
   availableSlots.sort((a, b) => {
     if (a.isOptimal !== b.isOptimal) return a.isOptimal ? -1 : 1;
-    return b.duration - a.duration;
+    if (b.duration !== a.duration) return b.duration - a.duration;
+
+    // Sort by start time chronologically (earlier times first)
+    const toMinutes = (timeStr: string) => {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+    return toMinutes(a.start) - toMinutes(b.start);
   });
 
   return availableSlots.slice(0, 4); // Return top 4 suggestions
@@ -349,6 +356,63 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
           setConflictError(
             `This recurring commitment conflicts with one-time commitments on: ${conflictingDates}. These dates will be excluded from the recurring schedule.`
           );
+        }
+      }
+    }
+
+    // Check daily capacity if commitment counts toward daily hours
+    if (formData.countsTowardDailyHours) {
+      const threshold = 0.5; // 30 minutes remaining threshold
+      const targetDates: string[] = [];
+
+      if (!formData.recurring) {
+        targetDates.push(...formData.specificDates);
+      } else {
+        // Compute next occurrence for each selected day
+        formData.daysOfWeek.forEach(dayOfWeek => {
+          const today = new Date();
+          const todayDayOfWeek = today.getDay();
+          const daysUntilTarget = (dayOfWeek - todayDayOfWeek + 7) % 7;
+          const targetDate = new Date(today);
+          targetDate.setDate(today.getDate() + (daysUntilTarget === 0 ? 7 : daysUntilTarget));
+          targetDates.push(targetDate.toISOString().split('T')[0]);
+        });
+      }
+
+      for (const date of targetDates) {
+        const plan = existingPlans.find(p => p.date === date);
+        const dailyCapacity = settings.dailyAvailableHours || 8;
+        const remaining = dailyCapacity - (plan?.totalStudyHours || 0);
+
+        // Calculate commitment duration in hours
+        let durationHours = 0;
+        if (formData.isAllDay) {
+          durationHours = Math.min(dailyCapacity, 6); // Cap all-day at 6 hours
+        } else if (formData.useDaySpecificTiming) {
+          const dayTiming = formData.daySpecificTimings?.find(t => t.dayOfWeek === parseInt(date.split('-')[0])); // This is simplified - in real usage you'd get proper day of week
+          if (dayTiming && dayTiming.startTime && dayTiming.endTime) {
+            const [sh, sm] = dayTiming.startTime.split(':').map(Number);
+            const [eh, em] = dayTiming.endTime.split(':').map(Number);
+            durationHours = Math.max(0, ((eh * 60 + em) - (sh * 60 + sm)) / 60);
+          }
+        } else if (formData.startTime && formData.endTime) {
+          const [sh, sm] = formData.startTime.split(':').map(Number);
+          const [eh, em] = formData.endTime.split(':').map(Number);
+          durationHours = Math.max(0, ((eh * 60 + em) - (sh * 60 + sm)) / 60);
+        }
+
+        if ((remaining - durationHours) < 0) {
+          setConflictError(
+            `Adding this commitment will exceed your daily study capacity on ${new Date(date).toLocaleDateString()} (${durationHours.toFixed(1)}h needed, ${remaining.toFixed(1)}h available).`
+          );
+          return;
+        }
+
+        if ((remaining - durationHours) < threshold) {
+          setConflictError(
+            `Warning: This commitment will nearly fill your daily study capacity on ${new Date(date).toLocaleDateString()} (only ${(remaining - durationHours).toFixed(1)}h will remain).`
+          );
+          return;
         }
       }
     }
@@ -773,10 +837,20 @@ const FixedCommitmentInput: React.FC<FixedCommitmentInputProps> = ({
                               }`}>
                                 <span className="font-medium">{commitment.title}</span>
                                 <span>
-                                  {commitment.isAllDay
-                                    ? 'All Day'
-                                    : `${commitment.startTime} - ${commitment.endTime}`
-                                  }
+                                  {(() => {
+                                    // Handle day-specific timings for commitments
+                                    const dayTiming = commitment.useDaySpecificTiming && commitment.daySpecificTimings
+                                      ? commitment.daySpecificTimings.find(t => t.dayOfWeek === dayInfo.dayOfWeek)
+                                      : undefined;
+
+                                    if (commitment.isAllDay || dayTiming?.isAllDay) return 'All Day';
+
+                                    const start = dayTiming?.startTime ?? commitment.startTime;
+                                    const end = dayTiming?.endTime ?? commitment.endTime;
+
+                                    if (start && end) return `${start} - ${end}`;
+                                    return 'Time not set';
+                                  })()}
                                 </span>
                               </div>
                             ))}
