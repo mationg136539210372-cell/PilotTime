@@ -412,18 +412,18 @@ const Settings: React.FC<SettingsProps> = ({
       return;
     }
 
+    let updatedHours;
     // Check if hours for this day already exists
     const existingIndex = daySpecificStudyHours.findIndex(hours => hours.dayOfWeek === newDayHoursDayOfWeek);
 
     if (existingIndex !== -1) {
       // Update existing hours
-      const updatedHours = [...daySpecificStudyHours];
+      updatedHours = [...daySpecificStudyHours];
       updatedHours[existingIndex] = {
         dayOfWeek: newDayHoursDayOfWeek,
         studyHours: newDayHoursStudyHours,
         isActive: true
       };
-      setDaySpecificStudyHours(updatedHours);
     } else {
       // Add new day-specific hours
       const newHours: DaySpecificStudyHours = {
@@ -431,8 +431,27 @@ const Settings: React.FC<SettingsProps> = ({
         studyHours: newDayHoursStudyHours,
         isActive: true
       };
-      setDaySpecificStudyHours([...daySpecificStudyHours, newHours]);
+      updatedHours = [...daySpecificStudyHours, newHours];
     }
+
+    setDaySpecificStudyHours(updatedHours);
+
+    // Immediately save the changes
+    onUpdateSettings({
+      ...settings,
+      dailyAvailableHours,
+      workDays,
+      bufferDays,
+      minSessionLength,
+      bufferTimeBetweenSessions,
+      studyWindowStartHour,
+      studyWindowEndHour,
+      studyPlanMode,
+      dateSpecificStudyWindows,
+      daySpecificStudyWindows,
+      daySpecificStudyHours: updatedHours,
+      showDaySpecificHoursSection
+    });
 
     // Reset form
     setShowDaySpecificHoursForm(false);
@@ -451,6 +470,23 @@ const Settings: React.FC<SettingsProps> = ({
   const handleDeleteDaySpecificHours = (dayOfWeek: number) => {
     const updatedHours = daySpecificStudyHours.filter(hours => hours.dayOfWeek !== dayOfWeek);
     setDaySpecificStudyHours(updatedHours);
+
+    // Immediately save the changes
+    onUpdateSettings({
+      ...settings,
+      dailyAvailableHours,
+      workDays,
+      bufferDays,
+      minSessionLength,
+      bufferTimeBetweenSessions,
+      studyWindowStartHour,
+      studyWindowEndHour,
+      studyPlanMode,
+      dateSpecificStudyWindows,
+      daySpecificStudyWindows,
+      daySpecificStudyHours: updatedHours,
+      showDaySpecificHoursSection
+    });
   };
 
   const handleToggleDayHoursActive = (dayOfWeek: number) => {
@@ -460,6 +496,23 @@ const Settings: React.FC<SettingsProps> = ({
         : hours
     );
     setDaySpecificStudyHours(updatedHours);
+
+    // Immediately save the changes
+    onUpdateSettings({
+      ...settings,
+      dailyAvailableHours,
+      workDays,
+      bufferDays,
+      minSessionLength,
+      bufferTimeBetweenSessions,
+      studyWindowStartHour,
+      studyWindowEndHour,
+      studyPlanMode,
+      dateSpecificStudyWindows,
+      daySpecificStudyWindows,
+      daySpecificStudyHours: updatedHours,
+      showDaySpecificHoursSection
+    });
   };
 
   const formatTimeDisplay = (hour: number): string => {
