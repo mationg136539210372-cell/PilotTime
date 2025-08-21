@@ -1,4 +1,23 @@
-import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, DateSpecificStudyWindow, SkipMetadata } from '../types';
+import { Task, StudyPlan, StudySession, UserSettings, FixedCommitment, UserReschedule, DateSpecificStudyWindow, DaySpecificStudyHours, SkipMetadata } from '../types';
+
+// Helper function to get day-specific daily hours
+export const getDaySpecificDailyHours = (date: string, settings: UserSettings): number => {
+  const targetDate = new Date(date);
+  const dayOfWeek = targetDate.getDay();
+
+  // Check for day-specific study hours
+  if (settings.daySpecificStudyHours) {
+    const daySpecific = settings.daySpecificStudyHours.find(
+      hours => hours.dayOfWeek === dayOfWeek && hours.isActive
+    );
+    if (daySpecific) {
+      return daySpecific.studyHours;
+    }
+  }
+
+  // Fall back to default daily available hours
+  return settings.dailyAvailableHours;
+};
 
 // Helper function to calculate committed hours for a specific date that count toward daily hours
 export const calculateCommittedHoursForDate = (date: string, commitments: FixedCommitment[]): number => {
@@ -1252,7 +1271,7 @@ export const generateNewStudyPlan = (
     availableDays.forEach(date => {
       // Calculate committed hours for this date that count toward daily hours
       const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
-      const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+      const availableHoursAfterCommitments = Math.max(0, getDaySpecificDailyHours(date, settings) - committedHours);
 
       dailyRemainingHours[date] = availableHoursAfterCommitments;
       studyPlans.push({
@@ -2023,7 +2042,7 @@ export const generateNewStudyPlan = (
     availableDays.forEach(date => {
       // Calculate committed hours for this date that count toward daily hours
       const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
-      const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+      const availableHoursAfterCommitments = Math.max(0, getDaySpecificDailyHours(date, settings) - committedHours);
 
       dailyRemainingHours[date] = availableHoursAfterCommitments;
       studyPlans.push({
@@ -2323,7 +2342,7 @@ export const generateNewStudyPlan = (
   availableDays.forEach(date => {
     // Calculate committed hours for this date that count toward daily hours
     const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
-    const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+    const availableHoursAfterCommitments = Math.max(0, getDaySpecificDailyHours(date, settings) - committedHours);
 
     dailyRemainingHours[date] = availableHoursAfterCommitments;
     studyPlans.push({
@@ -3013,7 +3032,7 @@ export const redistributeAfterTaskDeletion = (
   availableDays.forEach(date => {
     // Calculate committed hours for this date that count toward daily hours
     const committedHours = calculateCommittedHoursForDate(date, fixedCommitments);
-    const availableHoursAfterCommitments = Math.max(0, settings.dailyAvailableHours - committedHours);
+    const availableHoursAfterCommitments = Math.max(0, getDaySpecificDailyHours(date, settings) - committedHours);
 
     dailyRemainingHours[date] = availableHoursAfterCommitments;
     studyPlans.push({
