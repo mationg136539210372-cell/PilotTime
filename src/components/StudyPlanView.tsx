@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, BookOpen, TrendingUp, AlertTriangle, CheckCircle, Lightbulb, X, CheckCircle2, Clock3, Settings } from 'lucide-react';
 import { StudyPlan, Task, StudySession, FixedCommitment, UserSettings } from '../types';
-import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionStatus, moveIndividualSession, isTaskDeadlinePast, calculateCommittedHoursForDate } from '../utils/scheduling';
+import { formatTime, generateSmartSuggestions, getLocalDateString, checkSessionStatus, moveIndividualSession, isTaskDeadlinePast, calculateCommittedHoursForDate, getDaySpecificDailyHours } from '../utils/scheduling';
 
 interface StudyPlanViewProps {
   studyPlans: StudyPlan[];
@@ -614,12 +614,13 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                 }).reduce((sum, session) => sum + session.allocatedHours, 0);
                 const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
                 const totalPlannedHours = taskHours + committedHours;
-                const remainingHours = Math.max(0, settings.dailyAvailableHours - totalPlannedHours);
+                const dailyCapacity = getDaySpecificDailyHours(todaysPlan.date, settings);
+                const remainingHours = Math.max(0, dailyCapacity - totalPlannedHours);
 
                 return (
                   <div className="space-y-1">
                     <div className="text-lg font-bold text-gray-800 dark:text-white">
-                      {formatTime(totalPlannedHours)} / {formatTime(settings.dailyAvailableHours)}
+                      {formatTime(totalPlannedHours)} / {formatTime(dailyCapacity)}
                     </div>
                     <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
                       <div>📝 Tasks: {formatTime(taskHours)}</div>
@@ -709,7 +710,8 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                       }).reduce((sum, session) => sum + session.allocatedHours, 0);
                       const committedHours = calculateCommittedHoursForDate(todaysPlan.date, fixedCommitments);
                       const totalHours = taskHours + committedHours;
-                      return `${formatTime(totalHours)} / ${formatTime(settings.dailyAvailableHours)} total hours`;
+                      const dailyCapacity = getDaySpecificDailyHours(plan.date, settings);
+                      return `${formatTime(totalHours)} / ${formatTime(dailyCapacity)} total hours`;
                     })()})
                   </span>
                   <span className="text-xs text-blue-500 dark:text-blue-400" title="Buffer time between sessions is not counted in study hours">
