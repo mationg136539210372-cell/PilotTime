@@ -65,7 +65,9 @@ function App() {
         userPrefersPressure: false,
         studyPlanMode: 'even',
         dateSpecificStudyWindows: [],
-        daySpecificStudyWindows: []
+        daySpecificStudyWindows: [],
+        daySpecificStudyHours: [],
+        showDaySpecificHoursSection: false
     });
     const [, setIsPlanStale] = useState(false);
     const [, setLastPlanStaleReason] = useState<"settings" | "commitment" | "task" | null>(null);
@@ -225,7 +227,9 @@ function App() {
                         userPrefersPressure: false,
                         studyPlanMode: 'even',
                         dateSpecificStudyWindows: [],
-                        daySpecificStudyWindows: []
+                        daySpecificStudyWindows: [],
+                        daySpecificStudyHours: [],
+                        showDaySpecificHoursSection: false
                     };
                     setSettings({ ...defaultSettings, ...parsed });
                 }
@@ -479,7 +483,9 @@ function App() {
                 userPrefersPressure: false,
                 studyPlanMode: 'even', // Set default to 'even'
                 dateSpecificStudyWindows: [],
-                daySpecificStudyWindows: []
+                daySpecificStudyWindows: [],
+                daySpecificStudyHours: [],
+                showDaySpecificHoursSection: false
             };
             let initialCommitments: FixedCommitment[] = [];
             let initialStudyPlans: StudyPlan[] = [];
@@ -511,7 +517,9 @@ function App() {
                         userPrefersPressure: parsedSettings.userPrefersPressure || false,
                         studyPlanMode: parsedSettings.studyPlanMode || 'even',
                         dateSpecificStudyWindows: parsedSettings.dateSpecificStudyWindows || [],
-                        daySpecificStudyWindows: parsedSettings.daySpecificStudyWindows || []
+                        daySpecificStudyWindows: parsedSettings.daySpecificStudyWindows || [],
+                        daySpecificStudyHours: parsedSettings.daySpecificStudyHours || [],
+                        showDaySpecificHoursSection: parsedSettings.showDaySpecificHoursSection || false
                     };
                 }
             }
