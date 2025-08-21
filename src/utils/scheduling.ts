@@ -1681,13 +1681,10 @@ export const generateNewStudyPlan = (
     const suggestions: Array<{ taskTitle: string; unscheduledMinutes: number }> = [];
     let taskScheduledHours: { [taskId: string]: number } = {};
     
-    // Calculate how many hours each task actually got scheduled (excluding skipped and completed sessions)
+    // Include completed and skipped sessions so their durations are preserved and not redistributed
     for (const plan of studyPlans) {
       for (const session of plan.plannedTasks) {
-        // Skip sessions that are marked as skipped or completed - they shouldn't count towards scheduled hours
-        if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
-          taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
-        }
+        taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
       }
     }
     
@@ -1729,15 +1726,12 @@ export const generateNewStudyPlan = (
         }
       }
       
-      // Recalculate scheduled hours after global redistribution (excluding skipped and completed sessions)
+      // Recalculate scheduled hours after global redistribution, still including completed/skipped sessions
       taskScheduledHours = {};
-    for (const plan of studyPlans) {
-      for (const session of plan.plannedTasks) {
-        // Skip sessions that are marked as skipped or completed - they shouldn't count towards scheduled hours
-        if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
+      for (const plan of studyPlans) {
+        for (const session of plan.plannedTasks) {
           taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
         }
-      }
       }
       
       // Combine sessions again after global redistribution
@@ -3121,8 +3115,8 @@ export const redistributeAfterTaskDeletion = (
       const sessionsByTask: { [taskId: string]: StudySession[] } = {};
       
       plan.plannedTasks.forEach(session => {
-        // Skip sessions that are marked as skipped - they shouldn't be combined with other sessions
-        if (session.status === 'skipped') {
+        // Skip sessions that are completed/skipped/done - they shouldn't be combined with other sessions
+        if (session.status === 'skipped' || session.status === 'completed' || session.done) {
           return;
         }
         
