@@ -118,6 +118,12 @@ export interface DaySpecificStudyWindow {
   isActive: boolean; // Whether this override is active
 }
 
+export interface DaySpecificStudyHours {
+  dayOfWeek: number; // 0=Sunday, 1=Monday, 2=Tuesday, etc.
+  studyHours: number; // Hours available for study on this day
+  isActive: boolean; // Whether this override is active
+}
+
 export interface UserSettings {
   dailyAvailableHours: number;
   workDays: number[]; // Days of week user wants to work (0=Sunday, 1=Monday, etc.)
@@ -141,6 +147,10 @@ export interface UserSettings {
   dateSpecificStudyWindows?: DateSpecificStudyWindow[]; // Override study windows for specific dates
   // Day-specific study windows (optional)
   daySpecificStudyWindows?: DaySpecificStudyWindow[]; // Override study windows for specific days of the week
+  // Day-specific study hours (optional)
+  daySpecificStudyHours?: DaySpecificStudyHours[]; // Override daily study hours for specific days of the week
+  // UI preference for showing day-specific hours section
+  showDaySpecificHoursSection?: boolean; // Whether to show the day-specific hours section in settings
 }
 
 export interface TimerState {
