@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, BookOpen, X, Play, Trash2 } from 'lucide-react';
 import { StudyPlan, FixedCommitment, Task, StudySession, UserSettings } from '../types';
-import { checkSessionStatus, formatTime, validateTimeSlot, doesCommitmentApplyToDate } from '../utils/scheduling';
+import { checkSessionStatus, formatTime, validateTimeSlot, doesCommitmentApplyToDate, getDaySpecificDailyHours } from '../utils/scheduling';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { TouchBackend } from 'react-dnd-touch-backend';
 import moment from 'moment';
@@ -446,7 +446,7 @@ const MobileCalendarView: React.FC<MobileCalendarViewProps> = ({
         plannedTasks: [newSession],
         totalStudyHours: sessionDuration,
         isOverloaded: false,
-        availableHours: settings.dailyAvailableHours
+        availableHours: getDaySpecificDailyHours(newPlanDate, settings)
       });
 
       const originalPlanIndex = updatedPlans.findIndex(plan => plan.date === originalDate);
