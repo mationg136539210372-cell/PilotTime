@@ -118,6 +118,14 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
     isOneTimeTask: false, // New field for one-time tasks
     startDate: new Date().toISOString().split('T')[0], // New: start date defaults to today
   });
+
+  // Session-based estimation state
+  const [estimationMode, setEstimationMode] = useState<'total' | 'session'>('total');
+  const [sessionData, setSessionData] = useState({
+    sessionDuration: '2.0', // Default 2 hours per session
+    sessionHours: '2',
+    sessionMinutes: '0'
+  });
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showTimePresets, setShowTimePresets] = useState(false);
   const [showTaskTimeline, setShowTaskTimeline] = useState(false);
@@ -146,6 +154,81 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
   }, [formData.deadline]);
 
 
+
+  // Calculate session-based total time and metadata
+  const calculateSessionBasedTime = () => {
+    if (!formData.startDate || !formData.deadline || estimationMode !== 'session') {
+      return { totalTime: 0, sessions: 0, frequency: '', feasible: true, warning: '' };
+    }
+
+    const startDate = new Date(formData.startDate);
+    const endDate = new Date(formData.deadline);
+    const timeDiff = endDate.getTime() - startDate.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    if (daysDiff <= 0) {
+      return { totalTime: 0, sessions: 0, frequency: 'Invalid date range', feasible: false, warning: 'Deadline must be after start date' };
+    }
+
+    const sessionDuration = (parseInt(sessionData.sessionHours) || 0) + (parseInt(sessionData.sessionMinutes) || 0) / 60;
+    if (sessionDuration <= 0) {
+      return { totalTime: 0, sessions: 0, frequency: '', feasible: true, warning: '' };
+    }
+
+    // Calculate work days in the range
+    let workDaysInRange = 0;
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      const dayOfWeek = currentDate.getDay();
+      if (userSettings.workDays.includes(dayOfWeek)) {
+        workDaysInRange++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    if (workDaysInRange === 0) {
+      return { totalTime: 0, sessions: 0, frequency: 'No work days', feasible: false, warning: 'No work days in the selected range' };
+    }
+
+    // Calculate sessions - default to daily
+    const numberOfSessions = workDaysInRange;
+    const frequency = 'Daily';
+
+    const totalTime = sessionDuration * numberOfSessions;
+
+    // Check feasibility
+    const dailyCapacity = userSettings.dailyAvailableHours;
+    const totalCapacity = workDaysInRange * dailyCapacity;
+    let feasible = true;
+    let warning = '';
+
+    if (sessionDuration > dailyCapacity) {
+      feasible = false;
+      warning = `Session duration (${sessionDuration.toFixed(1)}h) exceeds daily capacity (${dailyCapacity}h)`;
+    } else if (totalTime > totalCapacity * 0.8) {
+      feasible = false;
+      warning = `Total time (${totalTime.toFixed(1)}h) may exceed available capacity`;
+    }
+
+    return { totalTime, sessions: numberOfSessions, frequency, feasible, warning };
+  };
+
+  // Update total time when session data changes
+  useEffect(() => {
+    if (estimationMode === 'session') {
+      const calculation = calculateSessionBasedTime();
+      if (calculation.totalTime > 0) {
+        const hours = Math.floor(calculation.totalTime);
+        const minutes = Math.round((calculation.totalTime - hours) * 60);
+        setFormData(prev => ({
+          ...prev,
+          estimatedHours: hours.toString(),
+          estimatedMinutes: minutes.toString()
+        }));
+      }
+    }
+  }, [sessionData.sessionHours, sessionData.sessionMinutes, formData.startDate, formData.deadline, estimationMode, userSettings.workDays]);
 
   // Check if form is valid for submission
   const isFormInvalid = useMemo(() => {
@@ -650,97 +733,253 @@ const TaskInput: React.FC<TaskInputProps> = ({ onAddTask, onCancel, userSettings
             placeholder="Describe the task..."
               />
             </div>
-        {/* Estimated Time - New Dual Input System */}
-        <div className="flex flex-col md:flex-row md:items-center gap-2">
-          <div className="flex-1">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Estimated Time <span className="text-red-500">*</span></label>
-            <div className="flex gap-2 items-center">
-              <div className="flex-1">
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.estimatedHours}
-                  onChange={e => {
-                    const value = e.target.value;
-                    if (value === '' || (/^\d*$/.test(value) && parseInt(value) >= 0)) {
-                      setFormData(f => ({ ...f, estimatedHours: value }));
-                    }
-                  }}
-                  className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
-                  placeholder="0"
-                />
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Hours</div>
-              </div>
-              <div className="text-gray-500 dark:text-gray-400 text-lg font-bold">:</div>
-              <div className="flex-1">
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
-                  value={formData.estimatedMinutes}
-                  onChange={e => {
-                    const value = e.target.value;
-                    if (value === '' || /^\d*$/.test(value)) {
-                      const numValue = parseInt(value) || 0;
-                      if (numValue >= 0 && numValue <= 59) {
-                        setFormData(f => ({ ...f, estimatedMinutes: value }));
-                      }
-                    }
-                  }}
-                  className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
-                  placeholder="0"
-                />
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minutes</div>
-              </div>
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {totalTime > 0 && (
-                <span className="text-blue-600 dark:text-blue-400 font-medium">
-                  {formatTimeDisplay(formData.estimatedHours, formData.estimatedMinutes)} 
-                  {totalTime !== Math.round(totalTime) && ` (${totalTime.toFixed(1)} hours)`}
-                </span>
-              )}
-            </div>
-            
-            {/* Time Presets - Hidden by default */}
-            <div className="mt-2">
+        {/* Estimated Time - Mode Toggle and Input System */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">Estimated Time <span className="text-red-500">*</span></label>
+            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
               <button
                 type="button"
-                onClick={() => setShowTimePresets(!showTimePresets)}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                onClick={() => setEstimationMode('total')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  estimationMode === 'total'
+                    ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
               >
-                {showTimePresets ? 'Hide quick presets' : 'Show quick presets'}
+                Total Time
               </button>
-              {showTimePresets && (
-                <div className="mt-1">
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Quick presets:</div>
-                  <div className="flex flex-wrap gap-1">
-                    {timePresets.map((preset, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        onClick={() => setFormData(f => ({ 
-                          ...f, 
-                          estimatedHours: preset.hours, 
-                          estimatedMinutes: preset.minutes 
-                        }))}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white rounded border transition-colors"
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+              <button
+                type="button"
+                onClick={() => setEstimationMode('session')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  estimationMode === 'session'
+                    ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
+              >
+                Session Planning
+              </button>
+            </div>
+          </div>
+
+          {estimationMode === 'total' ? (
+            <div className="flex flex-col md:flex-row md:items-center gap-2">
+              <div className="flex-1">
+                <div className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.estimatedHours}
+                      onChange={e => {
+                        const value = e.target.value;
+                        if (value === '' || (/^\d*$/.test(value) && parseInt(value) >= 0)) {
+                          setFormData(f => ({ ...f, estimatedHours: value }));
+                        }
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
+                      placeholder="0"
+                    />
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Hours</div>
                   </div>
+                  <div className="text-gray-500 dark:text-gray-400 text-lg font-bold">:</div>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={formData.estimatedMinutes}
+                      onChange={e => {
+                        const value = e.target.value;
+                        if (value === '' || /^\d*$/.test(value)) {
+                          const numValue = parseInt(value) || 0;
+                          if (numValue >= 0 && numValue <= 59) {
+                            setFormData(f => ({ ...f, estimatedMinutes: value }));
+                          }
+                        }
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
+                      placeholder="0"
+                    />
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minutes</div>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {totalTime > 0 && (
+                    <span className="text-blue-600 dark:text-blue-400 font-medium">
+                      {formatTimeDisplay(formData.estimatedHours, formData.estimatedMinutes)}
+                      {totalTime !== Math.round(totalTime) && ` (${totalTime.toFixed(1)} hours)`}
+                    </span>
+                  )}
+                </div>
+
+                {/* Time Presets - Hidden by default */}
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTimePresets(!showTimePresets)}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    {showTimePresets ? 'Hide quick presets' : 'Show quick presets'}
+                  </button>
+                  {showTimePresets && (
+                    <div className="mt-1">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Quick presets:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {timePresets.map((preset, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => setFormData(f => ({
+                              ...f,
+                              estimatedHours: preset.hours,
+                              estimatedMinutes: preset.minutes
+                            }))}
+                            className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white rounded border transition-colors"
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="text-blue-600 underline text-sm mt-2 md:mt-6 md:ml-4 whitespace-nowrap"
+                onClick={handleShowEstimationHelper}
+              >
+                Need help estimating?
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+              <div className="flex items-center space-x-2 text-blue-700 dark:text-blue-300">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium text-sm">Session-Based Planning</span>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
+                  How long will each work session be?
+                </label>
+                <div className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      min="0"
+                      max="8"
+                      value={sessionData.sessionHours}
+                      onChange={e => {
+                        const value = e.target.value;
+                        if (value === '' || (/^\d*$/.test(value) && parseInt(value) >= 0 && parseInt(value) <= 8)) {
+                          setSessionData(prev => ({ ...prev, sessionHours: value }));
+                        }
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
+                      placeholder="2"
+                    />
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Hours</div>
+                  </div>
+                  <div className="text-gray-500 dark:text-gray-400 text-lg font-bold">:</div>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      step="15"
+                      value={sessionData.sessionMinutes}
+                      onChange={e => {
+                        const value = e.target.value;
+                        if (value === '' || /^\d*$/.test(value)) {
+                          const numValue = parseInt(value) || 0;
+                          if (numValue >= 0 && numValue <= 59) {
+                            setSessionData(prev => ({ ...prev, sessionMinutes: value }));
+                          }
+                        }
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent border-gray-300 bg-white dark:bg-gray-800 dark:text-white"
+                      placeholder="0"
+                    />
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minutes</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Auto-calculated preview */}
+              {formData.startDate && formData.deadline && (() => {
+                const calculation = calculateSessionBasedTime();
+                return (
+                  <div className={`p-3 rounded-lg border ${
+                    calculation.feasible
+                      ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600'
+                      : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700'
+                  }`}>
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Automatic Calculation:</div>
+                    <div className="grid grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <div className="text-gray-500 dark:text-gray-400">Session Duration:</div>
+                        <div className="font-medium text-gray-800 dark:text-white">
+                          {sessionData.sessionHours}h {sessionData.sessionMinutes}m
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500 dark:text-gray-400">Planned Sessions:</div>
+                        <div className="font-medium text-gray-800 dark:text-white">
+                          {calculation.sessions} sessions
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500 dark:text-gray-400">Total Time:</div>
+                        <div className={`font-medium ${
+                          calculation.feasible
+                            ? 'text-blue-600 dark:text-blue-400'
+                            : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {calculation.totalTime > 0 ? `${calculation.totalTime.toFixed(1)}h` : 'Set session duration'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {calculation.frequency && (
+                      <div className="mt-2 flex items-center space-x-1">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Frequency:</span>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{calculation.frequency}</span>
+                      </div>
+                    )}
+
+                    {calculation.warning && (
+                      <div className="mt-2 flex items-start space-x-2 text-xs text-red-600 dark:text-red-400">
+                        <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{calculation.warning}</span>
+                      </div>
+                    )}
+
+                    {calculation.feasible && calculation.totalTime > 0 && (
+                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        The app will automatically schedule {calculation.sessions} sessions based on your availability.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {(!formData.startDate || !formData.deadline) && (
+                <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg flex items-center space-x-2">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Please set both start date and deadline to see the automatic calculation.</span>
                 </div>
               )}
             </div>
-          </div>
-          <button
-            type="button"
-            className="text-blue-600 underline text-sm mt-2 md:mt-6 md:ml-4 whitespace-nowrap"
-            onClick={handleShowEstimationHelper}
-          >
-            Need help estimating?
-          </button>
+          )}
         </div>
         {/* Impact */}
         <div>
