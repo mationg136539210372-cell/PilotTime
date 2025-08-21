@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Clock, AlertTriangle, Calendar, Zap, Sun, Plus, Trash2, Edit3 } from 'lucide-react';
-import { UserSettings, StudyPlan, DateSpecificStudyWindow, DaySpecificStudyWindow } from '../types';
+import { UserSettings, StudyPlan, DateSpecificStudyWindow, DaySpecificStudyWindow, DaySpecificStudyHours } from '../types';
 
 interface SettingsProps {
   settings: UserSettings;
@@ -35,6 +35,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [studyPlanMode, setStudyPlanMode] = useState(settings.studyPlanMode || 'even');
   const [dateSpecificStudyWindows, setDateSpecificStudyWindows] = useState<DateSpecificStudyWindow[]>(settings.dateSpecificStudyWindows || []);
   const [daySpecificStudyWindows, setDaySpecificStudyWindows] = useState<DaySpecificStudyWindow[]>(settings.daySpecificStudyWindows || []);
+  const [daySpecificStudyHours, setDaySpecificStudyHours] = useState<DaySpecificStudyHours[]>(settings.daySpecificStudyHours || []);
 
   // State for date-specific override form
   const [showDateSpecificForm, setShowDateSpecificForm] = useState(false);
@@ -51,6 +52,18 @@ const Settings: React.FC<SettingsProps> = ({
   const [newDayOverrideStartHour, setNewDayOverrideStartHour] = useState(6);
   const [newDayOverrideEndHour, setNewDayOverrideEndHour] = useState(23);
 
+  // State for day-specific study hours form
+  const [showDaySpecificHoursForm, setShowDaySpecificHoursForm] = useState(false);
+  const [editingDayHours, setEditingDayHours] = useState<DaySpecificStudyHours | null>(null);
+  const [newDayHoursDayOfWeek, setNewDayHoursDayOfWeek] = useState(1); // Default to Monday
+  const [newDayHoursStudyHours, setNewDayHoursStudyHours] = useState(4);
+
+  // State for toggling day-specific hours section visibility
+  const [showDaySpecificHoursSection, setShowDaySpecificHoursSection] = useState(
+    settings.showDaySpecificHoursSection ??
+    ((settings.daySpecificStudyHours && settings.daySpecificStudyHours.length > 0) || false)
+  );
+
   // Update local state when settings prop changes (e.g., on initial load or external update)
   useEffect(() => {
     setDailyAvailableHours(settings.dailyAvailableHours);
@@ -63,6 +76,13 @@ const Settings: React.FC<SettingsProps> = ({
     setStudyPlanMode(settings.studyPlanMode || 'even');
     setDateSpecificStudyWindows(settings.dateSpecificStudyWindows || []);
     setDaySpecificStudyWindows(settings.daySpecificStudyWindows || []);
+    setDaySpecificStudyHours(settings.daySpecificStudyHours || []);
+
+    // Load persisted toggle preference, or default to expanded if user has day-specific hours
+    setShowDaySpecificHoursSection(
+      settings.showDaySpecificHoursSection ??
+      ((settings.daySpecificStudyHours && settings.daySpecificStudyHours.length > 0) || false)
+    );
   }, [settings]);
 
   // Enhanced validation functions with better error prevention
@@ -215,7 +235,9 @@ const Settings: React.FC<SettingsProps> = ({
       enableNotifications: settings.enableNotifications !== false,
       studyPlanMode,
       dateSpecificStudyWindows,
-      daySpecificStudyWindows
+      daySpecificStudyWindows,
+      daySpecificStudyHours,
+      showDaySpecificHoursSection
     });
   };
 
@@ -228,6 +250,29 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  // Handle day-specific hours section toggle with immediate save
+  const handleToggleDaySpecificHoursSection = () => {
+    const newToggleState = !showDaySpecificHoursSection;
+    setShowDaySpecificHoursSection(newToggleState);
+
+    // Immediately save the toggle preference
+    onUpdateSettings({
+      ...settings,
+      dailyAvailableHours,
+      workDays,
+      bufferDays,
+      minSessionLength,
+      bufferTimeBetweenSessions,
+      studyWindowStartHour,
+      studyWindowEndHour,
+      studyPlanMode,
+      dateSpecificStudyWindows,
+      daySpecificStudyWindows,
+      daySpecificStudyHours,
+      showDaySpecificHoursSection: newToggleState
+    });
+  };
 
   // Helper function to check if a setting is disabled
   const isSettingDisabled = (settingKey: string) => {
@@ -359,6 +404,64 @@ const Settings: React.FC<SettingsProps> = ({
     setDaySpecificStudyWindows(updatedOverrides);
   };
 
+  // Day-specific study hours handlers
+  const handleAddDaySpecificHours = () => {
+    const validation = validateDaySpecificHours();
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
+    // Check if hours for this day already exists
+    const existingIndex = daySpecificStudyHours.findIndex(hours => hours.dayOfWeek === newDayHoursDayOfWeek);
+
+    if (existingIndex !== -1) {
+      // Update existing hours
+      const updatedHours = [...daySpecificStudyHours];
+      updatedHours[existingIndex] = {
+        dayOfWeek: newDayHoursDayOfWeek,
+        studyHours: newDayHoursStudyHours,
+        isActive: true
+      };
+      setDaySpecificStudyHours(updatedHours);
+    } else {
+      // Add new day-specific hours
+      const newHours: DaySpecificStudyHours = {
+        dayOfWeek: newDayHoursDayOfWeek,
+        studyHours: newDayHoursStudyHours,
+        isActive: true
+      };
+      setDaySpecificStudyHours([...daySpecificStudyHours, newHours]);
+    }
+
+    // Reset form
+    setShowDaySpecificHoursForm(false);
+    setEditingDayHours(null);
+    setNewDayHoursDayOfWeek(1);
+    setNewDayHoursStudyHours(4);
+  };
+
+  const handleEditDaySpecificHours = (hours: DaySpecificStudyHours) => {
+    setEditingDayHours(hours);
+    setNewDayHoursDayOfWeek(hours.dayOfWeek);
+    setNewDayHoursStudyHours(hours.studyHours);
+    setShowDaySpecificHoursForm(true);
+  };
+
+  const handleDeleteDaySpecificHours = (dayOfWeek: number) => {
+    const updatedHours = daySpecificStudyHours.filter(hours => hours.dayOfWeek !== dayOfWeek);
+    setDaySpecificStudyHours(updatedHours);
+  };
+
+  const handleToggleDayHoursActive = (dayOfWeek: number) => {
+    const updatedHours = daySpecificStudyHours.map(hours =>
+      hours.dayOfWeek === dayOfWeek
+        ? { ...hours, isActive: !hours.isActive }
+        : hours
+    );
+    setDaySpecificStudyHours(updatedHours);
+  };
+
   const formatTimeDisplay = (hour: number): string => {
     return hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`;
   };
@@ -382,6 +485,29 @@ const Settings: React.FC<SettingsProps> = ({
     if (newDayOverrideStartHour >= newDayOverrideEndHour) {
       return { isValid: false, message: 'End time must be after start time.' };
     }
+    return { isValid: true, message: '' };
+  };
+
+  const validateDaySpecificHours = (): { isValid: boolean; message: string } => {
+    if (newDayHoursStudyHours <= 0) {
+      return { isValid: false, message: 'Study hours must be greater than 0.' };
+    }
+    if (newDayHoursStudyHours > 24) {
+      return { isValid: false, message: 'Study hours cannot exceed 24 hours.' };
+    }
+
+    // Check if there's a day-specific window for this day and validate against it
+    const dayWindow = daySpecificStudyWindows.find(w => w.dayOfWeek === newDayHoursDayOfWeek && w.isActive);
+    if (dayWindow) {
+      const windowHours = dayWindow.endHour - dayWindow.startHour;
+      if (newDayHoursStudyHours > windowHours) {
+        return {
+          isValid: false,
+          message: `Study hours (${newDayHoursStudyHours}h) cannot exceed the study window duration (${windowHours}h) for ${getDayName(newDayHoursDayOfWeek)}.`
+        };
+      }
+    }
+
     return { isValid: true, message: '' };
   };
 
@@ -449,12 +575,23 @@ const Settings: React.FC<SettingsProps> = ({
           <div className="space-y-6">
         {/* Daily Available Hours */}
         <div className="backdrop-blur-sm bg-white/50 dark:bg-white/5 rounded-2xl p-5 border border-white/20 dark:border-white/10 transition-all duration-300 hover:bg-white/60 dark:hover:bg-white/10">
-              <label htmlFor="dailyHours" className="flex text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2 items-center space-x-2">
-                <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
-                  <Clock size={14} className="text-white" />
-                </div>
-            <span>How many hours can you study per day?</span>
-          </label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="dailyHours" className="flex text-sm font-semibold text-gray-700 dark:text-gray-200 items-center space-x-2">
+                  <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
+                    <Clock size={14} className="text-white" />
+                  </div>
+                  <span>How many hours can you study per day?</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleToggleDaySpecificHoursSection}
+                  className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center gap-1.5"
+                  title={showDaySpecificHoursSection ? "Hide day-specific hours" : "Set different hours for specific days"}
+                >
+                  <Calendar size={12} />
+                  {showDaySpecificHoursSection ? 'Hide Day-Specific' : 'Day-Specific Hours'}
+                </button>
+              </div>
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">This includes all your study time for the day.</p>
           <input
             type="number"
@@ -468,6 +605,151 @@ const Settings: React.FC<SettingsProps> = ({
             required
           />
         </div>
+
+        {/* Day-Specific Study Hours */}
+        {showDaySpecificHoursSection && (
+        <div className="backdrop-blur-sm bg-white/50 dark:bg-white/5 rounded-2xl p-5 border border-white/20 dark:border-white/10 transition-all duration-300 hover:bg-white/60 dark:hover:bg-white/10">
+          <div className="flex items-center justify-between mb-3">
+            <label className="flex text-sm font-semibold text-gray-700 dark:text-gray-200 items-center space-x-2">
+              <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                <Calendar size={14} className="text-white" />
+              </div>
+              <span>Day-Specific Study Hours</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowDaySpecificHoursForm(true)}
+              className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center gap-1.5"
+            >
+              <Plus size={12} />
+              Add Day
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
+            Set different study hour targets for specific days of the week. If not set, the default daily hours will be used.
+          </p>
+
+          {/* Existing Day-Specific Hours */}
+          {daySpecificStudyHours.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {daySpecificStudyHours.map((hours) => (
+                <div
+                  key={hours.dayOfWeek}
+                  className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-200 ${hours.isActive
+                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700'
+                    : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <span className={`text-sm font-medium ${hours.isActive ? 'text-purple-700 dark:text-purple-300' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {getDayName(hours.dayOfWeek)}
+                    </span>
+                    <span className={`text-sm ${hours.isActive ? 'text-purple-600 dark:text-purple-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                      {hours.studyHours}h
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      className={`px-2 py-1 text-xs font-medium rounded-full transition-colors ${hours.isActive
+                        ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                      onClick={() => handleToggleDayHoursActive(hours.dayOfWeek)}
+                    >
+                      {hours.isActive ? 'Active' : 'Inactive'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEditDaySpecificHours(hours)}
+                      className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                      title="Edit hours"
+                    >
+                      <Edit3 size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDaySpecificHours(hours.dayOfWeek)}
+                      className="p-1.5 text-red-600 hover:bg-red-100 rounded transition-colors"
+                      title="Delete hours"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add/Edit Day-Specific Hours Form */}
+          {showDaySpecificHoursForm && (
+            <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">
+                {editingDayHours ? 'Edit' : 'Add'} Day-Specific Hours
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    Day of Week
+                  </label>
+                  <select
+                    value={newDayHoursDayOfWeek}
+                    onChange={(e) => setNewDayHoursDayOfWeek(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value={0}>Sunday</option>
+                    <option value={1}>Monday</option>
+                    <option value={2}>Tuesday</option>
+                    <option value={3}>Wednesday</option>
+                    <option value={4}>Thursday</option>
+                    <option value={5}>Friday</option>
+                    <option value={6}>Saturday</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    Study Hours
+                  </label>
+                  <input
+                    type="number"
+                    value={newDayHoursStudyHours}
+                    onChange={(e) => setNewDayHoursStudyHours(Number(e.target.value))}
+                    min="0.5"
+                    max="24"
+                    step="0.5"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDaySpecificHoursForm(false);
+                    setEditingDayHours(null);
+                    setNewDayHoursDayOfWeek(1);
+                    setNewDayHoursStudyHours(4);
+                  }}
+                  className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddDaySpecificHours}
+                  className="px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors"
+                >
+                  {editingDayHours ? 'Update' : 'Add'} Hours
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        )}
 
         {/* Buffer Days */}
         <div>
