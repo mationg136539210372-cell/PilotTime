@@ -93,6 +93,7 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
       // Cancel RAF since it won't work reliably in background
       if (rafId.current) {
         cancelAnimationFrame(rafId.current);
+        rafId.current = undefined;
       }
 
       // Use interval fallback for background updates (less frequent but more reliable)
