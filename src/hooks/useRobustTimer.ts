@@ -208,9 +208,11 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
     return () => {
       if (rafId.current) {
         cancelAnimationFrame(rafId.current);
+        rafId.current = undefined;
       }
       if (intervalId.current) {
         clearInterval(intervalId.current);
+        intervalId.current = undefined;
       }
     };
   }, []);
