@@ -137,12 +137,16 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
     }
   }, [timer, calculateActualTime, onTimerUpdate, onTimerComplete, updateTimerDisplay]);
 
-  // Reset completion flag when timer is reset or restarted
+  // Reset completion flag when timer is reset, restarted, or new session starts
   useEffect(() => {
+    // Reset when timer is reset to full duration
     if (timer.currentTime === timer.totalTime && !timer.isRunning) {
       hasCompletedRef.current = false;
     }
-  }, [timer.currentTime, timer.totalTime, timer.isRunning]);
+    // Also reset when starting a new session (totalTime or currentTaskId changes)
+    // This ensures the flag is cleared when switching between tasks/sessions
+    hasCompletedRef.current = false;
+  }, [timer.totalTime, timer.currentTaskId]);
 
   // Start/stop timer effects
   useEffect(() => {
