@@ -651,9 +651,8 @@ const Dashboard: React.FC<DashboardProps> = ({ tasks, studyPlans, dailyAvailable
             const totalSessions = allSessionsForTask.length;
             const completedHours = completedSessions.reduce((sum, session) => sum + session.allocatedHours, 0);
             const skippedHours = skippedSessions.reduce((sum, session) => sum + session.allocatedHours, 0);
-            // Remaining hours only count completed sessions (skipped sessions don't reduce remaining work)
-            const remainingHours = Math.max(0, task.estimatedHours - completedHours);
-            // Progress percent includes skipped sessions for display purposes (to show overall completion)
+            // Remaining hours should account for both completed and skipped sessions
+            const remainingHours = Math.max(0, task.estimatedHours - completedHours - skippedHours);
             const progressPercent = task.estimatedHours > 0 ? ((completedHours + skippedHours) / task.estimatedHours) * 100 : 0;
             const sessionProgressPercent = totalSessions > 0 ? ((completedSessions.length + skippedSessions.length) / totalSessions) * 100 : 0;
             
