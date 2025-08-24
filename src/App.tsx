@@ -1738,29 +1738,8 @@ function App() {
 
     // Handler to mark a session as done in studyPlans
     const handleMarkSessionDone = (planDate: string, sessionNumber: number) => {
-        // Update task estimated hours first
-        if (currentTask) {
-            setTasks(prevTasks =>
-                prevTasks.map(task => {
-                    if (task.id === currentTask.id) {
-                        const sessionHours = studyPlans
-                            .find(p => p.date === planDate)
-                            ?.plannedTasks.find(s => s.sessionNumber === sessionNumber && s.taskId === currentTask.id)
-                            ?.allocatedHours || 0;
-
-                        const newEstimatedHours = Math.max(0, task.estimatedHours - sessionHours);
-                        const newStatus = newEstimatedHours === 0 ? 'completed' : task.status;
-
-                        return {
-                            ...task,
-                            estimatedHours: newEstimatedHours,
-                            status: newStatus
-                        };
-                    }
-                    return task;
-                })
-            );
-        }
+        // Don't modify task estimated hours - they should remain as the original estimation
+        // Task completion is determined by session status, not by reducing estimated hours
 
         setStudyPlans(prevPlans => {
             const updatedPlans = prevPlans.map(plan => {
