@@ -3225,14 +3225,12 @@ export const redistributeAfterTaskDeletion = (
   while (redistributionPasses < maxRedistributionPasses) {
     redistributionPasses++;
     
-    // Calculate current scheduled hours (excluding skipped sessions)
+    // Calculate current scheduled hours (including skipped sessions to prevent redistribution)
     let taskScheduledHours: { [taskId: string]: number } = {};
     for (const plan of studyPlans) {
       for (const session of plan.plannedTasks) {
-        // Skip sessions that are marked as skipped or completed - they shouldn't count towards scheduled hours
-        if (session.status !== 'skipped' && !session.done && session.status !== 'completed') {
-          taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
-        }
+        // Include all sessions (including skipped) so their durations are preserved and not redistributed
+        taskScheduledHours[session.taskId] = (taskScheduledHours[session.taskId] || 0) + session.allocatedHours;
       }
     }
 
