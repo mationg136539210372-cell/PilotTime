@@ -1589,22 +1589,8 @@ function App() {
             }
         }
 
-        // Update the task's estimated hours based on actual time spent
-        setTasks(prevTasks =>
-            prevTasks.map(task => {
-                if (task.id === taskId) {
-                    const newEstimatedHours = Math.max(0, task.estimatedHours - hoursSpent);
-                    const newStatus = newEstimatedHours === 0 ? 'completed' : task.status;
-
-                    return {
-                        ...task,
-                        estimatedHours: newEstimatedHours,
-                        status: newStatus
-                    };
-                }
-                return task;
-            })
-        );
+        // Don't modify task estimated hours - they should remain as the original estimation
+        // Task completion is determined by session status, not by reducing estimated hours
 
         // Update study plans to mark session as done
         if (lastTimedSession) {
