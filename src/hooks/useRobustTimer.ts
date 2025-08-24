@@ -37,7 +37,14 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
 
   // Update timer display using RAF for smooth updates when visible
   const updateTimerDisplay = useCallback(() => {
-    if (!timer.isRunning) return;
+    if (!timer.isRunning) {
+      // Ensure RAF is cancelled if timer is not running
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+        rafId.current = undefined;
+      }
+      return;
+    }
 
     const actualTime = calculateActualTime(timer);
     const now = performance.now();
@@ -66,8 +73,8 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
       }
     }
 
-    // Continue animation loop if still running
-    if (timer.isRunning) {
+    // Only continue animation loop if still running and no RAF is pending
+    if (timer.isRunning && !rafId.current) {
       rafId.current = requestAnimationFrame(updateTimerDisplay);
     }
   }, [timer, calculateActualTime, onTimerUpdate, onTimerComplete]);
@@ -150,27 +157,31 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
 
   // Start/stop timer effects
   useEffect(() => {
+    // Always cancel any existing RAF/interval first to prevent race conditions
+    if (rafId.current) {
+      cancelAnimationFrame(rafId.current);
+      rafId.current = undefined;
+    }
+    if (intervalId.current) {
+      clearInterval(intervalId.current);
+      intervalId.current = undefined;
+    }
+
     if (timer.isRunning) {
       // Start RAF updates if page is visible
       if (!document.hidden) {
         rafId.current = requestAnimationFrame(updateTimerDisplay);
-      }
-    } else {
-      // Stop all updates
-      if (rafId.current) {
-        cancelAnimationFrame(rafId.current);
-      }
-      if (intervalId.current) {
-        clearInterval(intervalId.current);
       }
     }
 
     return () => {
       if (rafId.current) {
         cancelAnimationFrame(rafId.current);
+        rafId.current = undefined;
       }
       if (intervalId.current) {
         clearInterval(intervalId.current);
+        intervalId.current = undefined;
       }
     };
   }, [timer.isRunning, updateTimerDisplay]);
