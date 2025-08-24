@@ -117,7 +117,8 @@ export const getLocalDateString = (): string => {
 /**
  * Utility function to calculate total study hours for a plan, including skipped sessions as "done"
  * @param plannedTasks Array of study sessions
- * @returns Total study hours including skipped sessions as completed
+ * @returns Total study hours including both completed and skipped sessions
+ * Note: Skipped sessions are included to reduce remaining estimated hours and prevent redistribution
  */
 export const calculateTotalStudyHours = (plannedTasks: StudySession[]): number => {
   return plannedTasks
