@@ -1671,10 +1671,10 @@ function App() {
                     sum + (session.done || session.status === 'skipped' ? session.allocatedHours : 0), 0
                 );
                 
-                // Update task status to completed
-                const updatedTasks = tasks.map(t => 
-                    t.id === taskId 
-                        ? { ...t, status: 'completed' as const, estimatedHours: totalCompletedHours }
+                // Update task status to completed without modifying estimated hours
+                const updatedTasks = tasks.map(t =>
+                    t.id === taskId
+                        ? { ...t, status: 'completed' as const }
                         : t
                 );
                 
@@ -3173,7 +3173,7 @@ function App() {
                                                 <span>Keep TimePilot free for everyone</span>
                                             </div>
                                             <div className="flex items-center space-x-2">
-                                                <span className="text-green-500">✅</span>
+                                                <span className="text-green-500">���</span>
                                                 <span>Better performance and reliability</span>
                                             </div>
                                         </div>
