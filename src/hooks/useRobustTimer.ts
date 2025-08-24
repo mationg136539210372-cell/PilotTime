@@ -102,7 +102,10 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
           const actualTime = calculateActualTime(timer);
           if (actualTime <= 0 && onTimerComplete && !hasCompletedRef.current) {
             hasCompletedRef.current = true;
-            clearInterval(intervalId.current);
+            if (intervalId.current) {
+              clearInterval(intervalId.current);
+              intervalId.current = undefined;
+            }
             // Show notification when completing in background
             if (taskTitle) {
               const timeSpent = timer.totalTime - actualTime;
