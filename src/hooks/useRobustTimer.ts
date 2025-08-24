@@ -117,6 +117,7 @@ export const useRobustTimer = ({ timer, onTimerUpdate, onTimerComplete, taskTitl
       // Tab became visible again
       if (intervalId.current) {
         clearInterval(intervalId.current);
+        intervalId.current = undefined;
       }
 
       if (wasRunning.current && timer.isRunning) {
