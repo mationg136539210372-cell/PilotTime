@@ -1907,7 +1907,14 @@ function App() {
                     plannedTasks: plan.plannedTasks.map(session => {
                         // Only skip the session if it matches both taskId and sessionNumber
                         if (session.taskId === taskId && session.sessionNumber === sessionNumber) {
-                            return { ...session, status: 'skipped' };
+                            return {
+                                ...session,
+                                status: 'skipped',
+                                skipMetadata: {
+                                    skippedAt: new Date().toISOString(),
+                                    reason: 'user_choice'
+                                }
+                            };
                         }
                         return session;
                     })
