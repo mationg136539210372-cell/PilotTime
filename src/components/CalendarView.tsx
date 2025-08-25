@@ -1244,6 +1244,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     );
   }
 
+  // Helper function to convert time string to minutes for sorting
+  const timeToMinutes = (timeStr: string): number => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
   // Custom Agenda Component
   const CustomAgenda = () => {
     const agendaEvents = useMemo(() => {
@@ -1321,9 +1327,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         const dateCompare = a.date.getTime() - b.date.getTime();
         if (dateCompare !== 0) return dateCompare;
 
+        // Convert time strings to minutes for proper sorting
         const aTime = a.time.split(' - ')[0];
         const bTime = b.time.split(' - ')[0];
-        return aTime.localeCompare(bTime);
+
+        const aMinutes = timeToMinutes(aTime);
+        const bMinutes = timeToMinutes(bTime);
+
+        return aMinutes - bMinutes;
       });
 
       return agendaItems;
