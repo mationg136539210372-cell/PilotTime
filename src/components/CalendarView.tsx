@@ -1523,6 +1523,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             views={[Views.MONTH, Views.WEEK, Views.DAY]}
             defaultView={Views.WEEK}
             view={currentView as any}
+            onView={(view: string) => setCurrentView(view)}
             step={timeInterval}
             timeslots={
               timeInterval === 5 ? 12 :
