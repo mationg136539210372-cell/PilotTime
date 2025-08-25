@@ -1511,66 +1511,71 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         }}
         className="calendar-grid-container dark:bg-gray-900 dark:bg-opacity-95"
       >
-        <DragAndDropCalendar
-          localizer={localizer}
-          events={events}
-          startAccessor={(event: any) => (event as CalendarEvent).start}
-          endAccessor={(event: any) => (event as CalendarEvent).end}
-          style={{ height: '100%' }}
-          views={[Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA]}
-          defaultView={Views.WEEK}
-          step={timeInterval}
-          timeslots={
-            timeInterval === 5 ? 12 :
-            timeInterval === 10 ? 6 :
-            timeInterval === 15 ? 4 :
-            timeInterval === 30 ? 2 :
-            1
-          }
-          min={minTime}
-          max={maxTime}
-          onSelectEvent={(event: any) => handleSelectEvent(event as CalendarEvent)}
-          eventPropGetter={(event: any, start: Date, end: Date, isSelected: boolean) => eventStyleGetter(event as CalendarEvent, start, end, isSelected)}
-          formats={{
-            timeGutterFormat: customGutterHeader,
-            eventTimeRangeFormat: ({ start, end }) =>
-              `${moment(start).format('HH:mm')} - ${moment(end).format('HH:mm')}`
-          }}
-          components={{
-            toolbar: CustomToolbar,
-            event: CustomEventComponent
-          }}
-          rtl={false}
-          dayLayoutAlgorithm="no-overlap"
-          draggableAccessor={(event: any) => {
-            const calendarEvent = event as CalendarEvent;
-
-            // Allow dragging of commitments that count toward daily hours
-            if (calendarEvent.resource.type === 'commitment') {
-              const commitment = calendarEvent.resource.data as FixedCommitment;
-              return commitment.countsTowardDailyHours || false;
+        {currentView === 'agenda' ? (
+          <CustomAgenda />
+        ) : (
+          <DragAndDropCalendar
+            localizer={localizer}
+            events={events}
+            startAccessor={(event: any) => (event as CalendarEvent).start}
+            endAccessor={(event: any) => (event as CalendarEvent).end}
+            style={{ height: '100%' }}
+            views={[Views.MONTH, Views.WEEK, Views.DAY]}
+            defaultView={Views.WEEK}
+            view={currentView as any}
+            step={timeInterval}
+            timeslots={
+              timeInterval === 5 ? 12 :
+              timeInterval === 10 ? 6 :
+              timeInterval === 15 ? 4 :
+              timeInterval === 30 ? 2 :
+              1
             }
+            min={minTime}
+            max={maxTime}
+            onSelectEvent={(event: any) => handleSelectEvent(event as CalendarEvent)}
+            eventPropGetter={(event: any, start: Date, end: Date, isSelected: boolean) => eventStyleGetter(event as CalendarEvent, start, end, isSelected)}
+            formats={{
+              timeGutterFormat: customGutterHeader,
+              eventTimeRangeFormat: ({ start, end }) =>
+                `${moment(start).format('HH:mm')} - ${moment(end).format('HH:mm')}`
+            }}
+            components={{
+              toolbar: CustomToolbar,
+              event: CustomEventComponent
+            }}
+            rtl={false}
+            dayLayoutAlgorithm="no-overlap"
+            draggableAccessor={(event: any) => {
+              const calendarEvent = event as CalendarEvent;
 
-            // Allow dragging of study sessions
-            if (calendarEvent.resource.type === 'study') {
-              const session = calendarEvent.resource.data;
-              const planDate = calendarEvent.resource.planDate || moment(calendarEvent.start).format('YYYY-MM-DD');
-              const sessionStatus = checkSessionStatus(session as StudySession, planDate);
+              // Allow dragging of commitments that count toward daily hours
+              if (calendarEvent.resource.type === 'commitment') {
+                const commitment = calendarEvent.resource.data as FixedCommitment;
+                return commitment.countsTowardDailyHours || false;
+              }
 
-              // Don't allow dragging of completed or done sessions
-              return sessionStatus !== 'completed' &&
-                     !(session as StudySession).done;
-            }
+              // Allow dragging of study sessions
+              if (calendarEvent.resource.type === 'study') {
+                const session = calendarEvent.resource.data;
+                const planDate = calendarEvent.resource.planDate || moment(calendarEvent.start).format('YYYY-MM-DD');
+                const sessionStatus = checkSessionStatus(session as StudySession, planDate);
 
-            return false;
-          }}
-          resizable={false}
-          onEventDrop={(args: any) => {
-            const { event, start, end } = args;
-            handleEventDrop({ event: event as CalendarEvent, start, end });
-          }}
-          onDragStart={handleDragStart}
-        />
+                // Don't allow dragging of completed or done sessions
+                return sessionStatus !== 'completed' &&
+                       !(session as StudySession).done;
+              }
+
+              return false;
+            }}
+            resizable={false}
+            onEventDrop={(args: any) => {
+              const { event, start, end } = args;
+              handleEventDrop({ event: event as CalendarEvent, start, end });
+            }}
+            onDragStart={handleDragStart}
+          />
+        )}
       </div>
       {/* Add custom CSS for thicker interval lines and better spacing */}
       <style>{`
