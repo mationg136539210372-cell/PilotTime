@@ -64,7 +64,6 @@ const DEFAULT_COMPLETED_COLOR = '#d1d5db'; // Gray
 const DEFAULT_IMPORTANT_TASK_COLOR = '#f59e0b'; // Amber
 const DEFAULT_NOT_IMPORTANT_TASK_COLOR = '#64748b'; // Gray
 const DEFAULT_UNCATEGORIZED_COLOR = '#64748b'; // Gray
-const DEFAULT_UNCATEGORIZED_COLOR = '#64748b'; // Gray for uncategorized items
 
 interface ColorSettings {
   missedColor: string;
