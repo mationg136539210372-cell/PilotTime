@@ -1368,7 +1368,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               </div>
               <div className="divide-y dark:divide-gray-700">
                 {events.map(event => (
-                  <div key={event.id} className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <div key={event.id} className={`flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                    event.type === 'commitment' ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''
+                  }`}>
                     <div className="flex-shrink-0 w-16 text-right">
                       <span className="text-sm text-gray-500 dark:text-gray-400">
                         {event.time.split(' - ')[0]}
@@ -1379,18 +1381,25 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                       style={{ backgroundColor: event.color }}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                        {event.title}
+                      <div className={`text-sm font-medium truncate flex items-center gap-2 ${
+                        event.type === 'commitment'
+                          ? 'text-blue-900 dark:text-blue-100'
+                          : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {event.type === 'commitment' && (
+                          <Settings size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                        )}
+                        <span className="truncate">{event.title}</span>
+                        {event.type === 'commitment' && (
+                          <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full flex-shrink-0">
+                            Fixed
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {event.time}
                       </div>
                     </div>
-                    {event.type === 'commitment' && (
-                      <div className="flex-shrink-0 ml-2">
-                        <Settings size={14} className="text-blue-500" />
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
