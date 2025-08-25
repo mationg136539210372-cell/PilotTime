@@ -150,12 +150,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const [selectedManualSession, setSelectedManualSession] = useState<FixedCommitment | null>(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [currentView, setCurrentView] = useState('week');
+  const [currentView, setCurrentView] = useState(() => {
+    const saved = localStorage.getItem('timepilot-calendar-view');
+    return saved || 'week';
+  });
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isDragging, setIsDragging] = useState(false);
   const [dragFeedback, setDragFeedback] = useState<string>('');
   const [showInfoModal, setShowInfoModal] = useState(false);
 
+
+  // Persist calendar view to localStorage
+  useEffect(() => {
+    localStorage.setItem('timepilot-calendar-view', currentView);
+  }, [currentView]);
 
   // Mobile detection
   useEffect(() => {
@@ -1287,22 +1295,25 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         }
       });
 
-      // Get commitments
-      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const dayString = d.toISOString().split('T')[0];
+      // Get commitments - fix date iteration bug
+      let currentDay = new Date(startDate);
+      while (currentDay <= endDate) {
+        const dayString = currentDay.toISOString().split('T')[0];
         fixedCommitments.forEach(commitment => {
           if (doesCommitmentApplyToDate(commitment, dayString)) {
             const color = categoryColors[commitment.category] || COMMITMENT_DEFAULT_COLOR;
             agendaItems.push({
-              date: new Date(d),
+              date: new Date(currentDay),
               time: `${commitment.startTime} - ${commitment.endTime}`,
               title: commitment.title,
               type: 'commitment',
               color,
-              id: `commitment-${commitment.id}-${d.toISOString().split('T')[0]}`
+              id: `commitment-${commitment.id}-${dayString}`
             });
           }
         });
+        currentDay = new Date(currentDay);
+        currentDay.setDate(currentDay.getDate() + 1);
       }
 
       // Sort by date and time
