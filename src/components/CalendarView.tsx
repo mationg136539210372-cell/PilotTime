@@ -1159,45 +1159,77 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   // Custom toolbar for interval selector
   function CustomToolbar({ label, onNavigate, onView, view }: any) {
+    const handleViewChange = (newView: string) => {
+      setCurrentView(newView);
+      if (newView !== 'agenda') {
+        onView(newView);
+      }
+    };
+
+    const handleNavigate = (action: string) => {
+      if (currentView === 'agenda') {
+        const newDate = new Date(currentDate);
+        if (action === 'PREV') {
+          newDate.setDate(newDate.getDate() - 7);
+        } else if (action === 'NEXT') {
+          newDate.setDate(newDate.getDate() + 7);
+        }
+        setCurrentDate(newDate);
+      } else {
+        onNavigate(action);
+      }
+    };
+
+    const getLabel = () => {
+      if (currentView === 'agenda') {
+        const endDate = new Date(currentDate);
+        endDate.setDate(endDate.getDate() + 6);
+        return `${moment(currentDate).format('MMM D')} - ${moment(endDate).format('MMM D, YYYY')}`;
+      }
+      return label;
+    };
+
     return (
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
-          <button onClick={() => onNavigate('PREV')} className="rounded-full p-2 hover:bg-gray-100 dark:hover:bg-gray-800">
+          <button onClick={() => handleNavigate('PREV')} className="rounded-full p-2 hover:bg-gray-100 dark:hover:bg-gray-800">
             <span className="sr-only">Previous</span>
             <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
-          <span className="font-semibold text-lg text-gray-800 dark:text-gray-100">{label}</span>
-          <button onClick={() => onNavigate('NEXT')} className="rounded-full p-2 hover:bg-gray-100 dark:hover:bg-gray-800">
+          <span className="font-semibold text-lg text-gray-800 dark:text-gray-100">{getLabel()}</span>
+          <button onClick={() => handleNavigate('NEXT')} className="rounded-full p-2 hover:bg-gray-100 dark:hover:bg-gray-800">
             <span className="sr-only">Next</span>
             <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
         </div>
         <div className="flex items-center space-x-2">
-          <select
-            value={timeInterval}
-            onChange={e => setTimeInterval(Number(e.target.value))}
-            className="border rounded-lg px-2 py-1 text-sm shadow-sm focus:ring-2 focus:ring-blue-400 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
-            style={{ minWidth: 80 }}
-          >
-            {intervalOptions.map(opt => (
-              <option key={opt.value} value={opt.value} className="dark:bg-gray-800 dark:text-gray-100">{opt.label}</option>
-            ))}
-          </select>
+          {currentView !== 'agenda' && (
+            <select
+              value={timeInterval}
+              onChange={e => setTimeInterval(Number(e.target.value))}
+              className="border rounded-lg px-2 py-1 text-sm shadow-sm focus:ring-2 focus:ring-blue-400 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+              style={{ minWidth: 80 }}
+            >
+              {intervalOptions.map(opt => (
+                <option key={opt.value} value={opt.value} className="dark:bg-gray-800 dark:text-gray-100">{opt.label}</option>
+              ))}
+            </select>
+          )}
           <button
-            onClick={() => onView('day')}
-            className={`px-2 py-1 rounded-lg text-sm font-medium ${view === 'day' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
+            onClick={() => handleViewChange('day')}
+            className={`px-2 py-1 rounded-lg text-sm font-medium ${currentView === 'day' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
           >Day</button>
           <button
-            onClick={() => onView('week')}
-            className={`px-2 py-1 rounded-lg text-sm font-medium ${view === 'week' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
+            onClick={() => handleViewChange('week')}
+            className={`px-2 py-1 rounded-lg text-sm font-medium ${currentView === 'week' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
           >Week</button>
           <button
-            onClick={() => onView('month')}
-            className={`px-2 py-1 rounded-lg text-sm font-medium ${view === 'month' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
+            onClick={() => handleViewChange('month')}
+            className={`px-2 py-1 rounded-lg text-sm font-medium ${currentView === 'month' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
           >Month</button>
           <button
-            onClick={() => onView('agenda')}
-            className={`px-2 py-1 rounded-lg text-sm font-medium ${view === 'agenda' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
+            onClick={() => handleViewChange('agenda')}
+            className={`px-2 py-1 rounded-lg text-sm font-medium ${currentView === 'agenda' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
           >Agenda</button>
         </div>
       </div>
