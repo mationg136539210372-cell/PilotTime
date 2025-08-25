@@ -1193,6 +1193,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             onClick={() => onView('month')}
             className={`px-2 py-1 rounded-lg text-sm font-medium ${view === 'month' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
           >Month</button>
+          <button
+            onClick={() => onView('agenda')}
+            className={`px-2 py-1 rounded-lg text-sm font-medium ${view === 'agenda' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'}`}
+          >Agenda</button>
         </div>
       </div>
     );
@@ -1226,7 +1230,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         {/* Drag feedback notification */}
         {dragFeedback && (
           <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border-l-4 transition-all duration-300 transform ${
-            dragFeedback.includes('���') ? 'bg-green-500 border-green-700 text-white' :
+            dragFeedback.includes('✅') ? 'bg-green-500 border-green-700 text-white' :
             dragFeedback.includes('📍') ? 'bg-blue-500 border-blue-700 text-white' :
             dragFeedback.includes('🔄') ? 'bg-orange-500 border-orange-700 text-white' :
             dragFeedback.includes('Dragging') ? 'bg-purple-500 border-purple-700 text-white' :
