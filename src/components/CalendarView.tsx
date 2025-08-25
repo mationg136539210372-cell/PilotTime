@@ -1501,9 +1501,34 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
         )}
       </div>
+      {/* Always render the toolbar */}
+      <CustomToolbar
+        label={currentView === 'agenda' ?
+          (() => {
+            const endDate = new Date(currentDate);
+            endDate.setDate(endDate.getDate() + 6);
+            return `${moment(currentDate).format('MMM D')} - ${moment(endDate).format('MMM D, YYYY')}`;
+          })() :
+          'Calendar'
+        }
+        onNavigate={(action: string) => {
+          if (currentView === 'agenda') {
+            const newDate = new Date(currentDate);
+            if (action === 'PREV') {
+              newDate.setDate(newDate.getDate() - 7);
+            } else if (action === 'NEXT') {
+              newDate.setDate(newDate.getDate() + 7);
+            }
+            setCurrentDate(newDate);
+          }
+        }}
+        onView={(view: string) => setCurrentView(view)}
+        view={currentView}
+      />
+
       <div
         style={{
-          height: '650px',
+          height: '600px',
           borderRadius: '1.5rem',
           overflow: 'hidden',
           background: 'rgba(255,255,255,0.95)',
