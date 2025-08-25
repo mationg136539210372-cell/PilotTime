@@ -1509,18 +1509,37 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             endDate.setDate(endDate.getDate() + 6);
             return `${moment(currentDate).format('MMM D')} - ${moment(endDate).format('MMM D, YYYY')}`;
           })() :
-          'Calendar'
+          moment(currentDate).format('MMMM YYYY')
         }
         onNavigate={(action: string) => {
+          const newDate = new Date(currentDate);
           if (currentView === 'agenda') {
-            const newDate = new Date(currentDate);
             if (action === 'PREV') {
               newDate.setDate(newDate.getDate() - 7);
             } else if (action === 'NEXT') {
               newDate.setDate(newDate.getDate() + 7);
             }
-            setCurrentDate(newDate);
+          } else {
+            // For other views, navigate by month/week/day
+            if (action === 'PREV') {
+              if (currentView === 'month') {
+                newDate.setMonth(newDate.getMonth() - 1);
+              } else if (currentView === 'week') {
+                newDate.setDate(newDate.getDate() - 7);
+              } else if (currentView === 'day') {
+                newDate.setDate(newDate.getDate() - 1);
+              }
+            } else if (action === 'NEXT') {
+              if (currentView === 'month') {
+                newDate.setMonth(newDate.getMonth() + 1);
+              } else if (currentView === 'week') {
+                newDate.setDate(newDate.getDate() + 7);
+              } else if (currentView === 'day') {
+                newDate.setDate(newDate.getDate() + 1);
+              }
+            }
           }
+          setCurrentDate(newDate);
         }}
         onView={(view: string) => setCurrentView(view)}
         view={currentView}
