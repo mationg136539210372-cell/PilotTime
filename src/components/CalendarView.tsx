@@ -1567,7 +1567,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 `${moment(start).format('HH:mm')} - ${moment(end).format('HH:mm')}`
             }}
             components={{
-              toolbar: CustomToolbar,
+              toolbar: () => null, // Disable built-in toolbar since we render it separately
               event: CustomEventComponent
             }}
             rtl={false}
