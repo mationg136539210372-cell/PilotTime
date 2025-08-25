@@ -1236,6 +1236,149 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     );
   }
 
+  // Custom Agenda Component
+  const CustomAgenda = () => {
+    const agendaEvents = useMemo(() => {
+      const startDate = new Date(currentDate);
+      const endDate = new Date(currentDate);
+      endDate.setDate(endDate.getDate() + 6);
+
+      const agendaItems: Array<{
+        date: Date;
+        time: string;
+        title: string;
+        type: 'study' | 'commitment';
+        color: string;
+        id: string;
+      }> = [];
+
+      // Get study sessions
+      studyPlans.forEach(plan => {
+        const planDate = new Date(plan.date);
+        if (planDate >= startDate && planDate <= endDate) {
+          plan.plannedTasks
+            .filter(session => session.status !== 'skipped')
+            .forEach(session => {
+              const task = tasks.find(t => t.id === session.taskId);
+              if (task && session.startTime && session.endTime) {
+                const sessionStatus = checkSessionStatus(session, plan.date);
+                let color = '#64748b'; // Default gray
+
+                if (sessionStatus === 'completed' || session.done) {
+                  color = colorSettings.completedColor;
+                } else if (sessionStatus === 'missed') {
+                  color = colorSettings.missedColor;
+                } else if (task.importance) {
+                  color = colorSettings.importantTaskColor;
+                } else {
+                  color = colorSettings.notImportantTaskColor;
+                }
+
+                agendaItems.push({
+                  date: planDate,
+                  time: `${session.startTime} - ${session.endTime}`,
+                  title: task.title,
+                  type: 'study',
+                  color,
+                  id: `study-${session.taskId}-${session.sessionNumber}`
+                });
+              }
+            });
+        }
+      });
+
+      // Get commitments
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dayString = getLocalDateString();
+        fixedCommitments.forEach(commitment => {
+          if (doesCommitmentApplyToDate(commitment, d.toISOString().split('T')[0])) {
+            const color = categoryColors[commitment.category] || COMMITMENT_DEFAULT_COLOR;
+            agendaItems.push({
+              date: new Date(d),
+              time: `${commitment.startTime} - ${commitment.endTime}`,
+              title: commitment.title,
+              type: 'commitment',
+              color,
+              id: `commitment-${commitment.id}-${d.toISOString().split('T')[0]}`
+            });
+          }
+        });
+      }
+
+      // Sort by date and time
+      agendaItems.sort((a, b) => {
+        const dateCompare = a.date.getTime() - b.date.getTime();
+        if (dateCompare !== 0) return dateCompare;
+
+        const aTime = a.time.split(' - ')[0];
+        const bTime = b.time.split(' - ')[0];
+        return aTime.localeCompare(bTime);
+      });
+
+      return agendaItems;
+    }, [studyPlans, fixedCommitments, tasks, currentDate, colorSettings, categoryColors]);
+
+    const groupedEvents = useMemo(() => {
+      const groups: Record<string, typeof agendaEvents> = {};
+      agendaEvents.forEach(event => {
+        const dateKey = moment(event.date).format('YYYY-MM-DD');
+        if (!groups[dateKey]) {
+          groups[dateKey] = [];
+        }
+        groups[dateKey].push(event);
+      });
+      return groups;
+    }, [agendaEvents]);
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 max-h-[600px] overflow-y-auto">
+        {Object.keys(groupedEvents).length === 0 ? (
+          <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+            No events scheduled for this week
+          </div>
+        ) : (
+          Object.entries(groupedEvents).map(([dateKey, events]) => (
+            <div key={dateKey} className="border-b dark:border-gray-700 last:border-b-0">
+              <div className="bg-gray-50 dark:bg-gray-700 px-4 py-2 sticky top-0">
+                <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                  {moment(dateKey).format('ddd MMM D')}
+                </h3>
+              </div>
+              <div className="divide-y dark:divide-gray-700">
+                {events.map(event => (
+                  <div key={event.id} className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <div className="flex-shrink-0 w-16 text-right">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {event.time.split(' - ')[0]}
+                      </span>
+                    </div>
+                    <div
+                      className="w-1 h-8 mx-4 rounded-full"
+                      style={{ backgroundColor: event.color }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {event.title}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {event.time}
+                      </div>
+                    </div>
+                    {event.type === 'commitment' && (
+                      <div className="flex-shrink-0 ml-2">
+                        <Settings size={14} className="text-blue-500" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
+
   // Calculate min/max for zoom effect - consistent full day view
   let minTime: Date, maxTime: Date;
   // All intervals show the same full day range - extended to show all commitments
