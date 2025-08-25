@@ -350,7 +350,7 @@ function App() {
             // Update the last check date
             localStorage.setItem('timepilot-last-past-session-check', today);
         }
-    }, [hasLoadedFromStorage, studyPlans]); // Run when app loads and when studyPlans change
+    }, [hasLoadedFromStorage]); // Run when app loads
 
     // Update gamification when study data changes
     const updateGamificationData = (updatedStudyPlans?: StudyPlan[], updatedTasks?: Task[]) => {
