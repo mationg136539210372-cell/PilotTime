@@ -1289,9 +1289,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
       // Get commitments
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const dayString = getLocalDateString();
+        const dayString = d.toISOString().split('T')[0];
         fixedCommitments.forEach(commitment => {
-          if (doesCommitmentApplyToDate(commitment, d.toISOString().split('T')[0])) {
+          if (doesCommitmentApplyToDate(commitment, dayString)) {
             const color = categoryColors[commitment.category] || COMMITMENT_DEFAULT_COLOR;
             agendaItems.push({
               date: new Date(d),
