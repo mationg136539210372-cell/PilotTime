@@ -25,17 +25,17 @@ const Settings: React.FC<SettingsProps> = ({
   studyPlans = [],
   canChangeSetting = () => true
 }) => {
-  const [dailyAvailableHours, setDailyAvailableHours] = useState(settings.dailyAvailableHours);
-  const [workDays, setWorkDays] = useState<number[]>(settings.workDays || [0, 1, 2, 3, 4, 5, 6]);
-  const [bufferDays, setBufferDays] = useState(settings.bufferDays);
-  const [minSessionLength, setMinSessionLength] = useState(settings.minSessionLength || 15);
-  const [bufferTimeBetweenSessions, setBufferTimeBetweenSessions] = useState(settings.bufferTimeBetweenSessions ?? 0);
-  const [studyWindowStartHour, setStudyWindowStartHour] = useState(settings.studyWindowStartHour || 6);
-  const [studyWindowEndHour, setStudyWindowEndHour] = useState(settings.studyWindowEndHour || 23);
-  const [studyPlanMode, setStudyPlanMode] = useState(settings.studyPlanMode || 'even');
-  const [dateSpecificStudyWindows, setDateSpecificStudyWindows] = useState<DateSpecificStudyWindow[]>(settings.dateSpecificStudyWindows || []);
-  const [daySpecificStudyWindows, setDaySpecificStudyWindows] = useState<DaySpecificStudyWindow[]>(settings.daySpecificStudyWindows || []);
-  const [daySpecificStudyHours, setDaySpecificStudyHours] = useState<DaySpecificStudyHours[]>(settings.daySpecificStudyHours || []);
+  const [dailyAvailableHours, setDailyAvailableHours] = useState(settings?.dailyAvailableHours ?? 6);
+  const [workDays, setWorkDays] = useState<number[]>(settings?.workDays || [0, 1, 2, 3, 4, 5, 6]);
+  const [bufferDays, setBufferDays] = useState(settings?.bufferDays ?? 0);
+  const [minSessionLength, setMinSessionLength] = useState(settings?.minSessionLength || 15);
+  const [bufferTimeBetweenSessions, setBufferTimeBetweenSessions] = useState(settings?.bufferTimeBetweenSessions ?? 0);
+  const [studyWindowStartHour, setStudyWindowStartHour] = useState(settings?.studyWindowStartHour || 6);
+  const [studyWindowEndHour, setStudyWindowEndHour] = useState(settings?.studyWindowEndHour || 23);
+  const [studyPlanMode, setStudyPlanMode] = useState(settings?.studyPlanMode || 'even');
+  const [dateSpecificStudyWindows, setDateSpecificStudyWindows] = useState<DateSpecificStudyWindow[]>(settings?.dateSpecificStudyWindows || []);
+  const [daySpecificStudyWindows, setDaySpecificStudyWindows] = useState<DaySpecificStudyWindow[]>(settings?.daySpecificStudyWindows || []);
+  const [daySpecificStudyHours, setDaySpecificStudyHours] = useState<DaySpecificStudyHours[]>(settings?.daySpecificStudyHours || []);
 
   // State for date-specific override form
   const [showDateSpecificForm, setShowDateSpecificForm] = useState(false);
@@ -60,15 +60,17 @@ const Settings: React.FC<SettingsProps> = ({
 
   // State for toggling day-specific hours section visibility
   const [showDaySpecificHoursSection, setShowDaySpecificHoursSection] = useState(
-    settings.showDaySpecificHoursSection ??
-    ((settings.daySpecificStudyHours && settings.daySpecificStudyHours.length > 0) || false)
+    settings?.showDaySpecificHoursSection ??
+    ((settings?.daySpecificStudyHours && settings.daySpecificStudyHours.length > 0) || false)
   );
 
   // Update local state when settings prop changes (e.g., on initial load or external update)
   useEffect(() => {
-    setDailyAvailableHours(settings.dailyAvailableHours);
+    if (!settings) return; // Guard against null settings
+
+    setDailyAvailableHours(settings.dailyAvailableHours ?? 6);
     setWorkDays(settings.workDays || [0, 1, 2, 3, 4, 5, 6]);
-    setBufferDays(settings.bufferDays);
+    setBufferDays(settings.bufferDays ?? 0);
     setMinSessionLength(settings.minSessionLength || 15);
     setBufferTimeBetweenSessions(settings.bufferTimeBetweenSessions ?? 0);
     setStudyWindowStartHour(settings.studyWindowStartHour || 6);
