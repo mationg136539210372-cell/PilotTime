@@ -1498,6 +1498,15 @@ function App() {
     };
 
     const handleSelectTask = (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => {
+        // First, ensure any running timer is stopped to prevent race conditions
+        setGlobalTimer(prev => ({
+            ...prev,
+            isRunning: false,
+            startTime: undefined,
+            pausedTime: undefined,
+            lastUpdateTime: undefined
+        }));
+
         setCurrentTask(task);
         setCurrentCommitment(null); // Clear commitment state when selecting a regular task
         setCurrentSession(session || null);
@@ -1510,16 +1519,19 @@ function App() {
         const timeToUse = session?.allocatedHours || task.estimatedHours;
         const timeInSeconds = Math.floor(timeToUse * 3600);
 
-        // Force reset timer state for new session
-        setGlobalTimer({
-            isRunning: false,
-            currentTime: timeInSeconds,
-            totalTime: timeInSeconds,
-            currentTaskId: task.id,
-            startTime: undefined,
-            pausedTime: undefined,
-            lastUpdateTime: undefined
-        });
+        // Use setTimeout to ensure the timer state is reset after the current execution cycle
+        // This prevents race conditions with the useRobustTimer hook
+        setTimeout(() => {
+            setGlobalTimer({
+                isRunning: false,
+                currentTime: timeInSeconds,
+                totalTime: timeInSeconds,
+                currentTaskId: task.id,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
+            });
+        }, 0);
     };
 
     // Update handleTimerComplete to set readyToMarkDone for the last-timed session
