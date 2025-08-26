@@ -1466,16 +1466,17 @@ function App() {
         // Only allow timer for commitments that count toward daily hours
         if (!commitment.countsTowardDailyHours) return;
 
-        const durationSeconds = duration * 3600; // Convert hours to seconds
-        setGlobalTimer({
+        // First, ensure any running timer is stopped to prevent race conditions
+        setGlobalTimer(prev => ({
+            ...prev,
             isRunning: false,
-            currentTime: durationSeconds,
-            totalTime: durationSeconds,
-            currentTaskId: commitment.id,
             startTime: undefined,
             pausedTime: undefined,
             lastUpdateTime: undefined
-        });
+        }));
+
+        const durationSeconds = duration * 3600; // Convert hours to seconds
+
         // Set the current commitment to distinguish from tasks
         setCurrentCommitment(commitment);
         setCurrentTask({
@@ -1495,6 +1496,20 @@ function App() {
             sessionNumber: 1
         });
         setActiveTab('timer');
+
+        // Use setTimeout to ensure the timer state is reset after the current execution cycle
+        // This prevents race conditions with the useRobustTimer hook
+        setTimeout(() => {
+            setGlobalTimer({
+                isRunning: false,
+                currentTime: durationSeconds,
+                totalTime: durationSeconds,
+                currentTaskId: commitment.id,
+                startTime: undefined,
+                pausedTime: undefined,
+                lastUpdateTime: undefined
+            });
+        }, 0);
     };
 
     const handleSelectTask = (task: Task, session?: { allocatedHours: number; planDate?: string; sessionNumber?: number }) => {
