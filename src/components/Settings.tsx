@@ -582,6 +582,17 @@ const Settings: React.FC<SettingsProps> = ({
     setNewDayOverrideEndHour(23);
   };
 
+  // Show loading state if settings is null
+  if (!settings) {
+    return (
+      <div className="backdrop-blur-md bg-white/80 dark:bg-black/40 rounded-3xl shadow-2xl shadow-purple-500/10 p-6 border border-white/20 dark:border-white/10">
+        <div className="flex items-center justify-center py-8">
+          <div className="text-gray-600 dark:text-gray-400">Loading settings...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="backdrop-blur-md bg-white/80 dark:bg-black/40 rounded-3xl shadow-2xl shadow-purple-500/10 p-6 border border-white/20 dark:border-white/10">
       <h2 className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent mb-6 flex items-center space-x-3">
