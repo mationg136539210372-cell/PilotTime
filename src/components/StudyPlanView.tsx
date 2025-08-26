@@ -26,6 +26,12 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Helper function to convert decimal hours to minutes
+const formatHoursToMinutes = (hours: number): string => {
+  const totalMinutes = Math.round(hours * 60);
+  return `${totalMinutes}m`;
+};
+
 // Helper function to get commitments that count toward daily hours for a specific date
 const getCommitmentsForDate = (date: string, fixedCommitments: FixedCommitment[]): Array<{
   id: string;
