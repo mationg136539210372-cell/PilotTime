@@ -1435,7 +1435,11 @@ function App() {
 
             // Show achievement notification if any unlocked
             if (unlockedAchievements.length > 0) {
-                setAchievementNotification(unlockedAchievements[0]);
+                const firstUnlockedId = unlockedAchievements[0];
+                const achievementObj = ACHIEVEMENTS.find(a => a.id === firstUnlockedId);
+                if (achievementObj) {
+                    setAchievementNotification(achievementObj);
+                }
             }
 
             return {
