@@ -1092,7 +1092,7 @@ const StudyPlanView: React.FC<StudyPlanViewProps> = ({ studyPlans, tasks, fixedC
                                 </span>
                                 <span className="flex items-center space-x-1 flex-shrink-0">
                                   <BookOpen size={14} />
-                                  <span>{commitment.duration.toFixed(1)}h</span>
+                                  <span>{formatHoursToMinutes(commitment.duration)}</span>
                                 </span>
                               </div>
                             </div>
