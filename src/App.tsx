@@ -1394,13 +1394,38 @@ function App() {
                 lastActiveDate: new Date().toISOString()
             };
 
-            const updatedStats = updateUserStats(currentStats, {
-                totalStudyTime: currentStats.totalStudyHours + (hoursSpent * 60), // Convert to minutes
-                sessionsCompleted: currentStats.totalSessions + 1,
-                tasksCompleted: currentStats.totalTasksCompleted, // Don't increment for commitments
-                streakDays: updateStudyStreak(prevData.streak || { current: 0, longest: 0, lastStudyDate: '', streakDates: [] }, new Date()),
-                level: calculateLevel(currentStats.totalStudyHours + (hoursSpent * 60))
-            });
+            // Create a simulated study plan for the commitment completion to update stats correctly
+            const today = new Date().toISOString().split('T')[0];
+            const commitmentSession = {
+                taskId: commitment.id,
+                sessionNumber: 1,
+                allocatedHours: hoursSpent,
+                actualHours: hoursSpent,
+                status: 'completed' as const,
+                done: true,
+                startTime: '00:00',
+                endTime: '00:00',
+                completedAt: new Date().toISOString()
+            };
+
+            // Create or update today's plan with the commitment session
+            const existingTodayPlan = studyPlans.find(plan => plan.date === today);
+            const updatedStudyPlans = existingTodayPlan
+                ? studyPlans.map(plan =>
+                    plan.date === today
+                        ? { ...plan, plannedTasks: [...plan.plannedTasks, commitmentSession] }
+                        : plan
+                  )
+                : [...studyPlans, {
+                    id: `${today}-commitment`,
+                    date: today,
+                    plannedTasks: [commitmentSession],
+                    totalStudyHours: hoursSpent,
+                    availableHours: hoursSpent
+                  }];
+
+            const updatedStats = updateUserStats(currentStats, updatedStudyPlans, tasks);
+            const updatedStreak = updateStudyStreak(prevData.streak || { current: 0, longest: 0, lastStudyDate: '', streakDates: [] }, updatedStudyPlans);
 
             const unlockedAchievements = checkAchievementUnlocks(updatedStats, prevData.achievements || []);
 
