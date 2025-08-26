@@ -1376,15 +1376,33 @@ function App() {
     const handleCommitmentTimerComplete = (commitment: FixedCommitment, hoursSpent: number) => {
         // Update gamification stats for commitment completion
         setGamificationData(prevData => {
-            const updatedStats = updateUserStats(prevData.userStats, {
-                totalStudyTime: prevData.userStats.totalStudyTime + (hoursSpent * 60), // Convert to minutes
-                sessionsCompleted: prevData.userStats.sessionsCompleted + 1,
-                tasksCompleted: prevData.userStats.tasksCompleted, // Don't increment for commitments
-                streakDays: updateStudyStreak(prevData.userStats.streakDays, new Date()),
-                level: calculateLevel(prevData.userStats.totalStudyTime + (hoursSpent * 60))
+            // Ensure prevData.stats exists with defaults
+            const currentStats = prevData.stats || {
+                totalStudyHours: 0,
+                totalTasksCompleted: 0,
+                currentStreak: 0,
+                longestStreak: 0,
+                perfectWeeks: 0,
+                earlyFinishes: 0,
+                totalSessions: 0,
+                averageSessionLength: 0,
+                favoriteStudyTime: 'morning' as const,
+                efficiencyScore: 100,
+                level: 1,
+                totalPoints: 0,
+                joinedDate: new Date().toISOString(),
+                lastActiveDate: new Date().toISOString()
+            };
+
+            const updatedStats = updateUserStats(currentStats, {
+                totalStudyTime: currentStats.totalStudyHours + (hoursSpent * 60), // Convert to minutes
+                sessionsCompleted: currentStats.totalSessions + 1,
+                tasksCompleted: currentStats.totalTasksCompleted, // Don't increment for commitments
+                streakDays: updateStudyStreak(prevData.streak || { current: 0, longest: 0, lastStudyDate: '', streakDates: [] }, new Date()),
+                level: calculateLevel(currentStats.totalStudyHours + (hoursSpent * 60))
             });
 
-            const unlockedAchievements = checkAchievementUnlocks(updatedStats, prevData.achievements);
+            const unlockedAchievements = checkAchievementUnlocks(updatedStats, prevData.achievements || []);
 
             // Show achievement notification if any unlocked
             if (unlockedAchievements.length > 0) {
@@ -1393,8 +1411,8 @@ function App() {
 
             return {
                 ...prevData,
-                userStats: updatedStats,
-                achievements: prevData.achievements.map(achievement => {
+                stats: updatedStats,
+                achievements: (prevData.achievements || []).map(achievement => {
                     const unlocked = unlockedAchievements.find(a => a.id === achievement.id);
                     return unlocked ? { ...achievement, unlockedAt: unlocked.unlockedAt } : achievement;
                 })
