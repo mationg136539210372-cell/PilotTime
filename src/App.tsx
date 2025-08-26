@@ -3,7 +3,7 @@ import { Calendar, CheckSquare, Clock, Settings as SettingsIcon, BarChart3, Cale
 import { Task, StudyPlan, UserSettings, FixedCommitment, Commitment, StudySession, TimerState } from './types';
 import { GamificationData, Achievement, DailyChallenge, MotivationalMessage } from './types-gamification';
 import { useRobustTimer, startTimer, pauseTimer, resumeTimer, resetTimer, updateTimerTime } from './hooks/useRobustTimer';
-import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped } from './utils/scheduling';
+import { getUnscheduledMinutesForTasks, getLocalDateString, checkCommitmentConflicts, generateNewStudyPlan, generateNewStudyPlanWithPreservation, reshuffleStudyPlan, markPastSessionsAsSkipped, formatTime } from './utils/scheduling';
 import { getAccurateUnscheduledTasks, shouldShowNotifications, getNotificationPriority } from './utils/enhanced-notifications';
 import { enhancedEstimationTracker } from './utils/enhanced-estimation-tracker';
 import {
