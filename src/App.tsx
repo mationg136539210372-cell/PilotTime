@@ -1427,7 +1427,11 @@ function App() {
             const updatedStats = updateUserStats(currentStats, updatedStudyPlans, tasks);
             const updatedStreak = updateStudyStreak(prevData.streak || { current: 0, longest: 0, lastStudyDate: '', streakDates: [] }, updatedStudyPlans);
 
-            const unlockedAchievements = checkAchievementUnlocks(updatedStats, prevData.achievements || []);
+            const unlockedAchievements = checkAchievementUnlocks(
+                prevData.unlockedAchievements || [],
+                updatedStats,
+                updatedStreak
+            );
 
             // Show achievement notification if any unlocked
             if (unlockedAchievements.length > 0) {
