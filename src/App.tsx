@@ -2717,30 +2717,46 @@ function App() {
                             onSelectTask={handleSelectTask}
                             onSelectCommitment={handleSelectCommitment}
                             onStartManualSession={(commitment, durationSeconds) => {
-                                setGlobalTimer({
+                                // First, ensure any running timer is stopped to prevent race conditions
+                                setGlobalTimer(prev => ({
+                                    ...prev,
                                     isRunning: false,
-                                    currentTime: durationSeconds,
-                                    totalTime: durationSeconds,
-                                    currentTaskId: commitment.id,
                                     startTime: undefined,
                                     pausedTime: undefined,
                                     lastUpdateTime: undefined
-                                });
+                                }));
+
+                                // Set the current commitment to distinguish from tasks
+                                setCurrentCommitment(commitment);
                                 setCurrentTask({
                                     id: commitment.id,
                                     title: commitment.title,
-                                    subject: 'Manual Session',
                                     estimatedHours: durationSeconds / 3600,
                                     status: 'pending',
                                     importance: false,
                                     deadline: '',
                                     createdAt: commitment.createdAt,
-                                    description: '',
+                                    description: commitment.description || '',
+                                    category: commitment.category,
                                 });
                                 setCurrentSession({
                                     allocatedHours: Number(durationSeconds) / 3600
+                                    // Don't set planDate and sessionNumber for commitments
                                 });
                                 setActiveTab('timer');
+
+                                // Use setTimeout to ensure the timer state is reset after the current execution cycle
+                                setTimeout(() => {
+                                    setGlobalTimer({
+                                        isRunning: false,
+                                        currentTime: durationSeconds,
+                                        totalTime: durationSeconds,
+                                        currentTaskId: commitment.id,
+                                        startTime: undefined,
+                                        pausedTime: undefined,
+                                        lastUpdateTime: undefined
+                                    });
+                                }, 0);
                             }}
                             onDeleteFixedCommitment={handleDeleteCommitment}
                             onUpdateCommitment={handleUpdateFixedCommitment}
