@@ -1437,6 +1437,7 @@ function App() {
             return {
                 ...prevData,
                 stats: updatedStats,
+                streak: updatedStreak,
                 achievements: (prevData.achievements || []).map(achievement => {
                     const unlocked = unlockedAchievements.find(a => a.id === achievement.id);
                     return unlocked ? { ...achievement, unlockedAt: unlocked.unlockedAt } : achievement;
