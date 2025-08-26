@@ -1520,9 +1520,9 @@ function App() {
             category: commitment.category,
         });
         setCurrentSession({
-            allocatedHours: duration,
-            planDate: new Date().toISOString().split('T')[0],
-            sessionNumber: 1
+            allocatedHours: duration
+            // Don't set planDate and sessionNumber for commitments
+            // This ensures StudyTimer calls onTimerComplete instead of onMarkSessionDone
         });
         setActiveTab('timer');
 
